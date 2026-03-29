@@ -147,6 +147,26 @@ export function createBaileysStore(): BaileysStore {
     lidToPn.set(lid, pn)
   }
 
+  const toLidMappingPair = (lid?: string | null, pn?: string | null): LIDMapping | null => {
+    if (!lid || !pn) return null
+    if (lid === pn) return null
+    return { lid, pn }
+  }
+
+  const upsertGroupLidMappings = (group: Partial<GroupMetadata>) => {
+    const pairs = [
+      toLidMappingPair(group.owner, group.ownerPn),
+      toLidMappingPair(group.subjectOwner, group.subjectOwnerPn),
+      toLidMappingPair(group.descOwner, group.descOwnerPn),
+      toLidMappingPair(group.author, group.authorPn),
+    ].filter((pair): pair is LIDMapping => Boolean(pair))
+
+    if (!pairs.length) return
+    for (const pair of pairs) {
+      upsertLidMapping(pair)
+    }
+  }
+
   const bind = (ev: BaileysEventEmitter) => {
     ev.on('messaging-history.set', ({ chats: chatList, contacts: contactList, messages: messageList, lidPnMappings }) => {
       for (const chat of chatList) {
@@ -204,6 +224,7 @@ export function createBaileysStore(): BaileysStore {
     ev.on('groups.upsert', (groupList) => {
       for (const group of groupList) {
         mergeById(groups, group)
+        upsertGroupLidMappings(group)
       }
     })
 
@@ -214,12 +235,19 @@ export function createBaileysStore(): BaileysStore {
         const existing = groups.get(id)
         if (!existing) continue
         groups.set(id, mergeDefined(existing, update))
+        upsertGroupLidMappings(update)
       }
     })
 
     ev.on('group-participants.update', ({ id, participants, action }) => {
       const group = groups.get(id)
       if (!group) return
+      const baseSize =
+        typeof group.size === 'number'
+          ? group.size
+          : Array.isArray(group.participants)
+            ? group.participants.length
+            : undefined
       let nextParticipants = group.participants ?? []
 
       if (action === 'add') {
@@ -231,7 +259,20 @@ export function createBaileysStore(): BaileysStore {
         nextParticipants = upsertParticipants(nextParticipants, participants)
       }
 
-      groups.set(id, { ...group, participants: nextParticipants })
+      let nextSize = baseSize
+      if (typeof baseSize === 'number') {
+        if (action === 'add') {
+          nextSize = baseSize + participants.length
+        } else if (action === 'remove') {
+          nextSize = Math.max(0, baseSize - participants.length)
+        }
+      }
+
+      groups.set(id, {
+        ...group,
+        participants: nextParticipants,
+        size: typeof nextSize === 'number' ? nextSize : group.size,
+      })
     })
 
     ev.on('messages.upsert', ({ messages: messageList }) => {
