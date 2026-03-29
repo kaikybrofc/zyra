@@ -26,21 +26,21 @@ async function resolveBaileysVersion(logger: AppLogger) {
   try {
     const latest = await fetchLatestBaileysVersion()
     if ('error' in latest && latest.error) {
-      logger.warn('failed to fetch latest Baileys version, using default', {
+      logger.warn('falha ao buscar a última versão do Baileys, usando a versão padrão', {
         err: latest.error,
       })
       return DEFAULT_CONNECTION_CONFIG.version
     }
 
     if (!latest.isLatest) {
-      logger.warn('Baileys version is not the latest, using fetched version', {
+      logger.warn('versão do Baileys não é a mais recente, usando a versão obtida', {
         version: latest.version,
       })
     }
 
     return latest.version
   } catch (error) {
-    logger.warn('failed to fetch latest Baileys version, using default', {
+    logger.warn('falha ao buscar a última versão do Baileys, usando a versão padrão', {
       err: error,
     })
     return DEFAULT_CONNECTION_CONFIG.version

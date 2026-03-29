@@ -7,5 +7,5 @@ const logger = createLogger()
 export async function start(): Promise<void> {
   const sock = await createSocket(logger)
   registerEvents({ sock, logger, reconnect: start })
-  logger.info('bot started')
+  logger.info('Bot sendo iniciado com sucesso.')
 }

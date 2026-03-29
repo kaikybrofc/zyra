@@ -4,6 +4,6 @@ import { start } from './bootstrap/start.js'
 loadEnv()
 
 start().catch((error) => {
-  console.error('failed to start bot', error)
+  console.error('falha ao iniciar o bot', error)
   process.exitCode = 1
 })

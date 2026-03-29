@@ -87,7 +87,7 @@ const processIncomingMessage = async (
   const text =
     rawText && rawText.length > 200 ? `${rawText.slice(0, 200)}...` : rawText ?? null
 
-  logger.info('incoming message', {
+  logger.info('mensagem recebida', {
     chatId: context.chatId,
     messageId: messageKey?.id ?? null,
     fromMe: messageKey?.fromMe ?? null,
@@ -118,7 +118,7 @@ const handleCommand = async (context: IncomingMessageContext, logger: AppLogger)
       args: context.commandArgs,
     })
   } catch (error) {
-    logger.error('command failed', { err: error, command: context.commandName })
+    logger.error('comando falhou', { err: error, command: context.commandName })
   }
 }
 

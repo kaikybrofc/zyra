@@ -56,7 +56,7 @@ type EventHandler<K extends keyof BaileysEventMap> = (
 
 export function registerEvents({ sock, logger, reconnect }: RegisterOptions): void {
   const logEvent = (event: keyof BaileysEventMap, meta: Record<string, unknown>) => {
-    logger.debug('baileys event received', { event, ...meta })
+    logger.debug('evento do Baileys recebido', { event, ...meta })
   }
 
   const handlers: Partial<{ [K in keyof BaileysEventMap]: EventHandler<K> }> = {
@@ -64,7 +64,7 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
       const { connection, lastDisconnect, qr, receivedPendingNotifications, isNewLogin } = update
 
       if (qr && config.printQRInTerminal) {
-        logger.info('qr code received, scan it with your WhatsApp app')
+        logger.info('QR code recebido, escaneie com seu WhatsApp')
         qrcode.generate(qr, { small: true })
       }
 
@@ -79,13 +79,13 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
         const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut
 
-        logger.warn('connection closed', { statusCode })
+        logger.warn('conexão encerrada', { statusCode })
 
         if (shouldReconnect) {
           void reconnect()
         }
       } else if (connection === 'open') {
-        logger.info('connection opened')
+        logger.info('conexão aberta')
       }
     },
     'creds.update': () => {
