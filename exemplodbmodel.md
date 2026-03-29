@@ -40,9 +40,20 @@ connections
        +-- contacts (user_id)
        +-- group_participants
        +-- messages (sender_user_id)
+       +-- message_users
+       +-- chat_users
        +-- lid_mappings (user_id)
-       +-- blocklist (user_id)
+       +-- blocklist (user_id/actor_user_id)
+       +-- labels (actor_user_id)
+       +-- label_associations (actor_user_id)
+       +-- events_log (actor/target)
+       +-- message_events (actor/target)
+       +-- message_failures (actor)
+       +-- commands_log (actor)
+       +-- group_events (actor/target)
+       +-- group_join_requests (actor)
        +-- newsletter_participants
+       +-- newsletter_events (actor/target)
 
 groups
   |
@@ -53,7 +64,6 @@ messages
   +-- message_media
   +-- message_text_index
   +-- message_users
-  +-- chat_users
 
 chats
   |
@@ -203,10 +213,19 @@ CREATE TABLE message_events (
   chat_jid VARCHAR(128) NOT NULL,
   message_id VARCHAR(128) NOT NULL,
   event_type VARCHAR(64) NOT NULL,
+  actor_user_id CHAR(36) NULL,
+  target_user_id CHAR(36) NULL,
+  message_db_id BIGINT NULL,
   data_json JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_events_msg (connection_id, chat_jid, message_id),
-  CONSTRAINT fk_events_conn FOREIGN KEY (connection_id) REFERENCES connections(id)
+  INDEX idx_message_events_actor (connection_id, actor_user_id, created_at),
+  INDEX idx_message_events_target (connection_id, target_user_id, created_at),
+  INDEX idx_message_events_msg (connection_id, message_db_id),
+  CONSTRAINT fk_events_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
+  CONSTRAINT fk_message_events_actor FOREIGN KEY (actor_user_id) REFERENCES users(id),
+  CONSTRAINT fk_message_events_target FOREIGN KEY (target_user_id) REFERENCES users(id),
+  CONSTRAINT fk_message_events_msg FOREIGN KEY (message_db_id) REFERENCES messages(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE user_aliases (
@@ -280,17 +299,21 @@ CREATE TABLE chat_users (
 CREATE TABLE labels (
   connection_id VARCHAR(64) NOT NULL,
   label_id VARCHAR(64) NOT NULL,
+  actor_user_id CHAR(36) NULL,
   name VARCHAR(255) NULL,
   color VARCHAR(16) NULL,
   data_json JSON NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (connection_id, label_id),
-  CONSTRAINT fk_labels_conn FOREIGN KEY (connection_id) REFERENCES connections(id)
+  INDEX idx_labels_actor (connection_id, actor_user_id),
+  CONSTRAINT fk_labels_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
+  CONSTRAINT fk_labels_actor FOREIGN KEY (actor_user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE label_associations (
   connection_id VARCHAR(64) NOT NULL,
   label_id VARCHAR(64) NOT NULL,
+  actor_user_id CHAR(36) NULL,
   association_type ENUM('chat','message','contact','group') NOT NULL,
   chat_jid VARCHAR(128) NULL,
   message_db_id BIGINT NULL,
@@ -299,7 +322,9 @@ CREATE TABLE label_associations (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_label_assoc (connection_id, label_id),
   INDEX idx_label_message (connection_id, message_db_id),
+  INDEX idx_label_actor (connection_id, actor_user_id),
   CONSTRAINT fk_label_assoc_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
+  CONSTRAINT fk_label_assoc_actor FOREIGN KEY (actor_user_id) REFERENCES users(id),
   CONSTRAINT fk_label_assoc_label FOREIGN KEY (connection_id, label_id)
     REFERENCES labels(connection_id, label_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -307,24 +332,38 @@ CREATE TABLE label_associations (
 CREATE TABLE blocklist (
   connection_id VARCHAR(64) NOT NULL,
   user_id CHAR(36) NULL,
+  actor_user_id CHAR(36) NULL,
   jid VARCHAR(128) NOT NULL,
   is_blocked TINYINT(1) NOT NULL,
   reason VARCHAR(255) NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (connection_id, jid),
   INDEX idx_block_user (connection_id, user_id),
+  INDEX idx_block_actor (connection_id, actor_user_id),
   CONSTRAINT fk_block_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
-  CONSTRAINT fk_block_user FOREIGN KEY (user_id) REFERENCES users(id)
+  CONSTRAINT fk_block_user FOREIGN KEY (user_id) REFERENCES users(id),
+  CONSTRAINT fk_block_actor FOREIGN KEY (actor_user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE events_log (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   connection_id VARCHAR(64) NOT NULL,
   event_type VARCHAR(128) NOT NULL,
+  actor_user_id CHAR(36) NULL,
+  target_user_id CHAR(36) NULL,
+  chat_jid VARCHAR(128) NULL,
+  group_jid VARCHAR(128) NULL,
+  message_db_id BIGINT NULL,
   data_json JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_events_type (connection_id, event_type),
-  CONSTRAINT fk_events_conn FOREIGN KEY (connection_id) REFERENCES connections(id)
+  INDEX idx_events_actor (connection_id, actor_user_id, created_at),
+  INDEX idx_events_target (connection_id, target_user_id, created_at),
+  INDEX idx_events_message (connection_id, message_db_id),
+  CONSTRAINT fk_events_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
+  CONSTRAINT fk_events_actor FOREIGN KEY (actor_user_id) REFERENCES users(id),
+  CONSTRAINT fk_events_target FOREIGN KEY (target_user_id) REFERENCES users(id),
+  CONSTRAINT fk_events_message FOREIGN KEY (message_db_id) REFERENCES messages(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE group_events (
@@ -348,12 +387,14 @@ CREATE TABLE message_failures (
   chat_jid VARCHAR(128) NOT NULL,
   message_id VARCHAR(128) NULL,
   sender_user_id CHAR(36) NULL,
+  actor_user_id CHAR(36) NULL,
   failure_reason VARCHAR(255) NULL,
   data_json JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_message_failures (connection_id, chat_jid, created_at),
   CONSTRAINT fk_message_failures_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
-  CONSTRAINT fk_message_failures_sender FOREIGN KEY (sender_user_id) REFERENCES users(id)
+  CONSTRAINT fk_message_failures_sender FOREIGN KEY (sender_user_id) REFERENCES users(id),
+  CONSTRAINT fk_message_failures_actor FOREIGN KEY (actor_user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE bot_sessions (
@@ -372,7 +413,7 @@ CREATE TABLE bot_sessions (
 CREATE TABLE commands_log (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   connection_id VARCHAR(64) NOT NULL,
-  user_id CHAR(36) NULL,
+  actor_user_id CHAR(36) NULL,
   chat_jid VARCHAR(128) NOT NULL,
   command_name VARCHAR(64) NOT NULL,
   args_text TEXT NULL,
@@ -381,9 +422,9 @@ CREATE TABLE commands_log (
   data_json JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_commands_log (connection_id, command_name, created_at),
-  INDEX idx_commands_user (connection_id, user_id, created_at),
+  INDEX idx_commands_user (connection_id, actor_user_id, created_at),
   CONSTRAINT fk_commands_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
-  CONSTRAINT fk_commands_user FOREIGN KEY (user_id) REFERENCES users(id)
+  CONSTRAINT fk_commands_user FOREIGN KEY (actor_user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE newsletters (
@@ -413,10 +454,16 @@ CREATE TABLE newsletter_events (
   connection_id VARCHAR(64) NOT NULL,
   newsletter_id VARCHAR(128) NOT NULL,
   event_type VARCHAR(64) NOT NULL,
+  actor_user_id CHAR(36) NULL,
+  target_user_id CHAR(36) NULL,
   data_json JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_news_events (connection_id, newsletter_id, event_type),
-  CONSTRAINT fk_news_events_conn FOREIGN KEY (connection_id) REFERENCES connections(id)
+  INDEX idx_news_events_actor (connection_id, actor_user_id, created_at),
+  INDEX idx_news_events_target (connection_id, target_user_id, created_at),
+  CONSTRAINT fk_news_events_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
+  CONSTRAINT fk_news_events_actor FOREIGN KEY (actor_user_id) REFERENCES users(id),
+  CONSTRAINT fk_news_events_target FOREIGN KEY (target_user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE group_join_requests (
@@ -424,13 +471,16 @@ CREATE TABLE group_join_requests (
   connection_id VARCHAR(64) NOT NULL,
   group_jid VARCHAR(128) NOT NULL,
   user_id CHAR(36) NOT NULL,
+  actor_user_id CHAR(36) NULL,
   action VARCHAR(32) NOT NULL,
   method VARCHAR(64) NULL,
   data_json JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_join_req_group (connection_id, group_jid),
+  INDEX idx_join_req_actor (connection_id, actor_user_id),
   CONSTRAINT fk_join_req_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
-  CONSTRAINT fk_join_req_user FOREIGN KEY (user_id) REFERENCES users(id)
+  CONSTRAINT fk_join_req_user FOREIGN KEY (user_id) REFERENCES users(id),
+  CONSTRAINT fk_join_req_actor FOREIGN KEY (actor_user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE user_devices (
@@ -452,6 +502,7 @@ Este modelo foi desenhado para equilibrar compatibilidade com o Baileys, consult
 - `connection_id` em todas as tabelas permite multi-instancias e isolamento de dados sem criar schemas separados.
 - `users` + `user_identifiers` centraliza identidade. PN, LID, JID e username viram caminhos para o mesmo `user_id`, evitando duplicidade e melhorando joins.
 - O `user_id` e um UUID (CHAR(36)) gerado pelo sistema, o que reduz previsibilidade e facilita integracao entre fontes externas.
+- Colunas padronizadas de autoria (`actor_user_id` e `target_user_id`) ligam usuarios a eventos e acoes, facilitando auditoria e rankings.
 - Colunas derivadas (`display_name`, `content_type`, `text_preview`, `timestamp`) aceleram consultas sem precisar abrir JSON em toda leitura.
 - JSON (`data_json`) preserva estrutura original do Baileys e garante compatibilidade com mudancas futuras sem migracoes frequentes.
 - Tabelas ponte (`message_users`, `chat_users`, `group_participants`) deixam rankings, mencoes e relatorios simples e performaticos.
