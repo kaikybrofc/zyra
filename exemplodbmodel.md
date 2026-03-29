@@ -444,6 +444,21 @@ CREATE TABLE user_devices (
   CONSTRAINT fk_user_devices_user FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
+
+## Explicacao tecnica do modelo
+
+Este modelo foi desenhado para equilibrar compatibilidade com o Baileys, consultas rapidas e integridade de dados. Os pontos abaixo explicam por que ele facilita a vida na operacao diaria e na evolucao do sistema.
+
+- `connection_id` em todas as tabelas permite multi-instancias e isolamento de dados sem criar schemas separados.
+- `users` + `user_identifiers` centraliza identidade. PN, LID, JID e username viram caminhos para o mesmo `user_id`, evitando duplicidade e melhorando joins.
+- Colunas derivadas (`display_name`, `content_type`, `text_preview`, `timestamp`) aceleram consultas sem precisar abrir JSON em toda leitura.
+- JSON (`data_json`) preserva estrutura original do Baileys e garante compatibilidade com mudancas futuras sem migracoes frequentes.
+- Tabelas ponte (`message_users`, `chat_users`, `group_participants`) deixam rankings, mencoes e relatorios simples e performaticos.
+- Indices compostos (`connection_id + chat_jid + timestamp`, `connection_id + user_id`) suportam feeds, historicos e buscas por usuario com baixa latencia.
+- Tabelas de eventos (`message_events`, `group_events`, `events_log`) guardam historico operacional para auditoria e debug.
+- `message_media` e `message_text_index` viabilizam reuso de midia e busca textual sem varrer o payload completo.
+- `auth_creds` e `signal_keys` separados permitem persistencia correta do estado criptografico sem misturar com dados de negocio.
+- A estrutura e preparada para cache quente em Redis e persistencia fria em MySQL, mantendo consistencia e performance.
 chats
   |
   +-- chat_users
