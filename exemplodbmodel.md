@@ -15,7 +15,7 @@ connections
   |
   +-- auth_creds
   +-- signal_keys
-  +-- chats -----------+
+  +-- chats -----------+------ chat_users
   +-- contacts         |
   +-- groups -----+    |
   +-- messages ---+----+------ message_events
@@ -31,6 +31,7 @@ connections
   +-- bot_sessions
   +-- commands_log
   +-- message_users
+  +-- chat_users
   |
   +-- users
        |
@@ -52,6 +53,11 @@ messages
   +-- message_media
   +-- message_text_index
   +-- message_users
+  +-- chat_users
+
+chats
+  |
+  +-- chat_users
 ```
 
 ```sql
@@ -104,6 +110,9 @@ CREATE TABLE signal_keys (
 CREATE TABLE chats (
   connection_id VARCHAR(64) NOT NULL,
   jid VARCHAR(128) NOT NULL,
+  display_name VARCHAR(255) NULL,
+  last_message_ts BIGINT NULL,
+  unread_count INT NULL,
   data_json JSON NOT NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (connection_id, jid),
@@ -114,6 +123,7 @@ CREATE TABLE contacts (
   connection_id VARCHAR(64) NOT NULL,
   jid VARCHAR(128) NOT NULL,
   user_id BIGINT NULL,
+  display_name VARCHAR(255) NULL,
   data_json JSON NOT NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (connection_id, jid),
@@ -253,6 +263,18 @@ CREATE TABLE message_users (
   CONSTRAINT fk_message_users_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
   CONSTRAINT fk_message_users_msg FOREIGN KEY (message_db_id) REFERENCES messages(id),
   CONSTRAINT fk_message_users_user FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE chat_users (
+  connection_id VARCHAR(64) NOT NULL,
+  chat_jid VARCHAR(128) NOT NULL,
+  user_id BIGINT NOT NULL,
+  role VARCHAR(32) NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (connection_id, chat_jid, user_id),
+  INDEX idx_chat_users_user (connection_id, user_id, created_at),
+  CONSTRAINT fk_chat_users_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
+  CONSTRAINT fk_chat_users_user FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE labels (
@@ -422,3 +444,6 @@ CREATE TABLE user_devices (
   CONSTRAINT fk_user_devices_user FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
+chats
+  |
+  +-- chat_users
