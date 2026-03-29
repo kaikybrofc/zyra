@@ -10,6 +10,15 @@ import { commands } from '../commands/index.js'
 import { getMessageText } from '../utils/message.js'
 
 const COMMAND_PREFIX = '!'
+const ANSI_RESET = '\x1b[0m'
+const ANSI_BOLD = '\x1b[1m'
+const ANSI_CYAN = '\x1b[36m'
+const ANSI_GREEN = '\x1b[32m'
+const ANSI_MAGENTA = '\x1b[35m'
+const ANSI_GRAY = '\x1b[90m'
+
+const colorize = (value: string, color: string): string =>
+  process.stdout.isTTY ? `${color}${value}${ANSI_RESET}` : value
 
 export type IncomingMessageContext = {
   sock: WASocket
@@ -86,21 +95,24 @@ const processIncomingMessage = async (
   const rawText = context.text?.trim()
   const text =
     rawText && rawText.length > 200 ? `${rawText.slice(0, 200)}...` : rawText ?? null
-
-  logger.info('mensagem recebida', {
-    chatId: context.chatId,
-    messageId: messageKey?.id ?? null,
-    fromMe: messageKey?.fromMe ?? null,
-    sender,
-    pushName: context.message.pushName ?? null,
-    isGroup: context.chatId.endsWith('@g.us'),
-    messageType,
-    hasMedia: messageType ? mediaTypes.has(messageType) : false,
-    text,
-    isCommand: context.isCommand,
-    commandName: context.commandName,
-    timestamp: timestampIso,
-  })
+  const compactText = text ? text.replace(/\s+/g, ' ').trim() : null
+  const hasMedia = messageType ? mediaTypes.has(messageType) : false
+  const logParts = [
+    `chatId=${context.chatId}`,
+    `messageId=${messageKey?.id ?? ''}`,
+    `fromMe=${messageKey?.fromMe ?? ''}`,
+    `sender=${sender ?? ''}`,
+    `pushName=${context.message.pushName ?? ''}`,
+    `isGroup=${context.chatId.endsWith('@g.us')}`,
+    `messageType=${messageType ? colorize(messageType, ANSI_MAGENTA) : ''}`,
+    `hasMedia=${hasMedia}`,
+    `text=${compactText ? JSON.stringify(compactText) : ''}`,
+    `isCommand=${colorize(String(context.isCommand), context.isCommand ? ANSI_GREEN : ANSI_GRAY)}`,
+    `commandName=${context.commandName ? colorize(context.commandName, ANSI_CYAN) : ''}`,
+    `timestamp=${timestampIso ?? ''}`,
+  ]
+  const title = colorize('mensagem recebida', `${ANSI_BOLD}${ANSI_CYAN}`)
+  logger.info(`\n\n${title} | ${logParts.join(' ')}`)
 }
 
 const handleCommand = async (context: IncomingMessageContext, logger: AppLogger) => {
