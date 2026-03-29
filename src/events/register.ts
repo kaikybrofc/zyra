@@ -59,6 +59,22 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
     logger.debug('evento do Baileys recebido', { event, ...meta })
   }
 
+  const syncGroupsOnConnect = async () => {
+    try {
+      logger.info('sincronizando grupos da conta')
+      const groupMap = await sock.groupFetchAllParticipating()
+      const groups = Object.values(groupMap)
+      if (groups.length) {
+        sock.ev.emit('groups.upsert', groups)
+        logger.info('grupos sincronizados', { count: groups.length })
+      } else {
+        logger.info('nenhum grupo encontrado para sincronizar')
+      }
+    } catch (error) {
+      logger.warn('falha ao sincronizar grupos', { err: error })
+    }
+  }
+
   const handlers: Partial<{ [K in keyof BaileysEventMap]: EventHandler<K> }> = {
     'connection.update': (update) => {
       const { connection, lastDisconnect, qr, receivedPendingNotifications, isNewLogin } = update
@@ -86,6 +102,7 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
         }
       } else if (connection === 'open') {
         logger.info('conexão aberta')
+        void syncGroupsOnConnect()
       }
     },
     'creds.update': () => {
