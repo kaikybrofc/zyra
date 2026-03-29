@@ -10,16 +10,14 @@ import {
 } from '@whiskeysockets/baileys'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { createClient, type RedisClientType } from 'redis'
 import { config } from '../../config/index.js'
+import { getRedisClient } from '../redis/client.js'
 
 type RedisAuthState = {
   state: AuthenticationState
   saveCreds: () => Promise<void>
 }
 
-let redisClient: RedisClientType | null = null
-let redisReady: Promise<void> | null = null
 let authFolderReady: Promise<void> | null = null
 
 const ensureAuthFolder = async (folder: string) => {
@@ -47,26 +45,6 @@ const readData = async <T>(folder: string, file: string): Promise<T | null> => {
 const writeData = async (folder: string, file: string, data: unknown): Promise<void> => {
   const filePath = join(folder, fixFileName(file))
   await writeFile(filePath, serialize(data))
-}
-
-const getRedisClient = async (): Promise<RedisClientType> => {
-  if (!config.redisUrl) {
-    throw new Error('WA_REDIS_URL nao configurada')
-  }
-
-  if (!redisClient) {
-    redisClient = createClient({ url: config.redisUrl })
-    redisClient.on('error', (error) => {
-      console.error('falha ao conectar no Redis', error)
-    })
-    redisReady = redisClient.connect().then(() => undefined)
-  }
-
-  if (redisReady) {
-    await redisReady
-  }
-
-  return redisClient
 }
 
 const redisKeyPrefix = config.redisPrefix ?? 'zyra:conexao'

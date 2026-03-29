@@ -1,4 +1,3 @@
-import NodeCache from '@cacheable/node-cache'
 import {
   DEFAULT_CACHE_TTLS,
   type BaileysEventEmitter,
@@ -13,6 +12,8 @@ import {
   type WAMessage,
   type WAMessageKey,
 } from '@whiskeysockets/baileys'
+import { createCacheStore, createExtendedCacheStore } from './cache-store.js'
+import { createRedisStore } from './redis-store.js'
 
 type MessageContent = Exclude<WAMessage['message'], null | undefined>
 
@@ -39,41 +40,6 @@ const mergeDefined = <T extends object>(base: T, patch: Partial<T>): T => {
     }
   }
   return next
-}
-
-const createCacheStore = (ttl: number): CacheStore => {
-  const cache = new NodeCache<unknown>({
-    stdTTL: ttl,
-    useClones: false,
-  })
-
-  return {
-    get: <T>(key: string) => cache.get(key) as T | undefined,
-    set: <T>(key: string, value: T) => cache.set(key, value),
-    del: (key: string) => cache.del(key),
-    flushAll: () => cache.flushAll(),
-  }
-}
-
-const createUserDevicesCache = (ttl: number): PossiblyExtendedCacheStore => {
-  const cache = new NodeCache<unknown>({
-    stdTTL: ttl,
-    useClones: false,
-  })
-
-  return {
-    get: <T>(key: string) => cache.get(key) as T | undefined,
-    set: <T>(key: string, value: T) => cache.set(key, value),
-    del: (key: string) => cache.del(key),
-    flushAll: () => cache.flushAll(),
-    mget: async (keys) => cache.mget(keys),
-    mset: async (entries) => {
-      cache.mset(entries)
-    },
-    mdel: async (keys) => {
-      cache.mdel(keys)
-    },
-  }
 }
 
 const upsertParticipants = (
@@ -123,6 +89,7 @@ type LidMappingFacade = {
 }
 
 export function createBaileysStore(): BaileysStore {
+  const redisStore = createRedisStore()
   const chats = new Map<string, Chat>()
   const contacts = new Map<string, Contact>()
   const groups = new Map<string, GroupMetadata>()
@@ -130,21 +97,34 @@ export function createBaileysStore(): BaileysStore {
   const pnToLid = new Map<string, string>()
   const lidToPn = new Map<string, string>()
   let externalLidMapping: LidMappingStore | undefined
-  const msgRetryCounterCache = createCacheStore(DEFAULT_CACHE_TTLS.MSG_RETRY)
-  const callOfferCache = createCacheStore(DEFAULT_CACHE_TTLS.CALL_OFFER)
-  const placeholderResendCache = createCacheStore(DEFAULT_CACHE_TTLS.MSG_RETRY)
-  const userDevicesCache = createUserDevicesCache(DEFAULT_CACHE_TTLS.USER_DEVICES)
-  const mediaCache = createCacheStore(DEFAULT_CACHE_TTLS.MSG_RETRY)
+  const msgRetryCounterCache = createCacheStore('msg-retry', DEFAULT_CACHE_TTLS.MSG_RETRY)
+  const callOfferCache = createCacheStore('call-offer', DEFAULT_CACHE_TTLS.CALL_OFFER)
+  const placeholderResendCache = createCacheStore(
+    'placeholder-resend',
+    DEFAULT_CACHE_TTLS.MSG_RETRY
+  )
+  const userDevicesCache = createExtendedCacheStore(
+    'user-devices',
+    DEFAULT_CACHE_TTLS.USER_DEVICES
+  )
+  const mediaCache = createCacheStore('media', DEFAULT_CACHE_TTLS.MSG_RETRY)
 
   const upsertMessage = (message: WAMessage) => {
     if (!message.key?.remoteJid || !message.key?.id) return
-    messages.set(toMessageKey(message.key), message)
+    const key = toMessageKey(message.key)
+    messages.set(key, message)
+    if (redisStore.enabled) {
+      void redisStore.setMessage(key, message)
+    }
   }
 
   const upsertLidMapping = ({ lid, pn }: LIDMapping) => {
     if (!lid || !pn) return
     pnToLid.set(pn, lid)
     lidToPn.set(lid, pn)
+    if (redisStore.enabled) {
+      void redisStore.setLidMapping({ lid, pn })
+    }
   }
 
   const toLidMappingPair = (lid?: string | null, pn?: string | null): LIDMapping | null => {
@@ -171,9 +151,15 @@ export function createBaileysStore(): BaileysStore {
     ev.on('messaging-history.set', ({ chats: chatList, contacts: contactList, messages: messageList, lidPnMappings }) => {
       for (const chat of chatList) {
         mergeById(chats, chat)
+        if (chat.id && redisStore.enabled) {
+          void redisStore.setChat(chat.id, chat)
+        }
       }
       for (const contact of contactList) {
         mergeById(contacts, contact)
+        if (contact.id && redisStore.enabled) {
+          void redisStore.setContact(contact.id, contact)
+        }
       }
       for (const message of messageList) {
         upsertMessage(message)
@@ -188,6 +174,9 @@ export function createBaileysStore(): BaileysStore {
     ev.on('chats.upsert', (chatList) => {
       for (const chat of chatList) {
         mergeById(chats, chat)
+        if (chat.id && redisStore.enabled) {
+          void redisStore.setChat(chat.id, chat)
+        }
       }
     })
 
@@ -196,19 +185,29 @@ export function createBaileysStore(): BaileysStore {
         const { id, ...rest } = update as ChatUpdate & { id?: string | null }
         if (!id) continue
         const existing = chats.get(id)
-        chats.set(id, { ...existing, ...rest })
+        const next = { ...existing, ...rest }
+        chats.set(id, next)
+        if (redisStore.enabled) {
+          void redisStore.setChat(id, next)
+        }
       }
     })
 
     ev.on('chats.delete', (ids) => {
       for (const id of ids) {
         chats.delete(id)
+        if (redisStore.enabled) {
+          void redisStore.deleteChat(id)
+        }
       }
     })
 
     ev.on('contacts.upsert', (contactList) => {
       for (const contact of contactList) {
         mergeById(contacts, contact)
+        if (contact.id && redisStore.enabled) {
+          void redisStore.setContact(contact.id, contact)
+        }
       }
     })
 
@@ -217,13 +216,20 @@ export function createBaileysStore(): BaileysStore {
         const id = update.id
         if (!id) continue
         const existing = contacts.get(id)
-        contacts.set(id, { ...existing, ...update, id })
+        const next = { ...existing, ...update, id }
+        contacts.set(id, next)
+        if (redisStore.enabled) {
+          void redisStore.setContact(id, next)
+        }
       }
     })
 
     ev.on('groups.upsert', (groupList) => {
       for (const group of groupList) {
         mergeById(groups, group)
+        if (group.id && redisStore.enabled) {
+          void redisStore.setGroup(group.id, group)
+        }
         upsertGroupLidMappings(group)
       }
     })
@@ -234,7 +240,11 @@ export function createBaileysStore(): BaileysStore {
         if (!id) continue
         const existing = groups.get(id)
         if (!existing) continue
-        groups.set(id, mergeDefined(existing, update))
+        const next = mergeDefined(existing, update)
+        groups.set(id, next)
+        if (redisStore.enabled) {
+          void redisStore.setGroup(id, next)
+        }
         upsertGroupLidMappings(update)
       }
     })
@@ -268,11 +278,15 @@ export function createBaileysStore(): BaileysStore {
         }
       }
 
-      groups.set(id, {
+      const nextGroup = {
         ...group,
         participants: nextParticipants,
         size: typeof nextSize === 'number' ? nextSize : group.size,
-      })
+      }
+      groups.set(id, nextGroup)
+      if (redisStore.enabled) {
+        void redisStore.setGroup(id, nextGroup)
+      }
     })
 
     ev.on('messages.upsert', ({ messages: messageList }) => {
@@ -287,6 +301,9 @@ export function createBaileysStore(): BaileysStore {
         const existing = messages.get(messageKey)
         const merged = existing ? { ...existing, ...update, key } : ({ ...update, key } as WAMessage)
         messages.set(messageKey, merged)
+        if (redisStore.enabled) {
+          void redisStore.setMessage(messageKey, merged)
+        }
       }
     })
 
@@ -297,11 +314,18 @@ export function createBaileysStore(): BaileysStore {
             messages.delete(key)
           }
         }
+        if (redisStore.enabled) {
+          void redisStore.deleteMessagesByJid(item.jid)
+        }
         return
       }
       if ('keys' in item) {
         for (const key of item.keys) {
-          messages.delete(toMessageKey(key))
+          const messageKey = toMessageKey(key)
+          messages.delete(messageKey)
+          if (redisStore.enabled) {
+            void redisStore.deleteMessage(messageKey)
+          }
         }
       }
     })
@@ -312,13 +336,29 @@ export function createBaileysStore(): BaileysStore {
   }
 
   const getMessage = async (key: WAMessageKey): Promise<MessageContent | undefined> => {
-    const message = messages.get(toMessageKey(key))
+    const messageKey = toMessageKey(key)
+    let message = messages.get(messageKey)
+    if (!message && redisStore.enabled) {
+      const stored = await redisStore.getMessage(messageKey)
+      if (stored) {
+        message = stored
+        messages.set(messageKey, stored)
+      }
+    }
     const content = message?.message
     return content === null ? undefined : content
   }
 
   const getGroupMetadata = async (jid: string): Promise<GroupMetadata | undefined> => {
-    return groups.get(jid)
+    let group = groups.get(jid)
+    if (!group && redisStore.enabled) {
+      const stored = await redisStore.getGroup(jid)
+      if (stored) {
+        group = stored
+        groups.set(jid, stored)
+      }
+    }
+    return group
   }
 
   const bindLidMappingStore = (store: LidMappingStore | undefined) => {
@@ -338,36 +378,74 @@ export function createBaileysStore(): BaileysStore {
       if (externalLidMapping) {
         return externalLidMapping.getLIDForPN(pn)
       }
-      return pnToLid.get(pn) ?? null
+      const cached = pnToLid.get(pn)
+      if (cached) return cached
+      if (redisStore.enabled) {
+        const stored = await redisStore.getLidForPn(pn)
+        if (stored) {
+          pnToLid.set(pn, stored)
+          lidToPn.set(stored, pn)
+          return stored
+        }
+      }
+      return null
     },
     getLidsForPns: async (pns) => {
       if (externalLidMapping) {
         return externalLidMapping.getLIDsForPNs(pns)
       }
-      const results = pns
-        .map((pn) => {
-          const lid = pnToLid.get(pn)
-          return lid ? { pn, lid } : null
-        })
-        .filter((pair): pair is LIDMapping => Boolean(pair))
+      const results: LIDMapping[] = []
+      for (const pn of pns) {
+        let lid = pnToLid.get(pn)
+        if (!lid && redisStore.enabled) {
+          const stored = await redisStore.getLidForPn(pn)
+          if (stored) {
+            lid = stored
+            pnToLid.set(pn, stored)
+            lidToPn.set(stored, pn)
+          }
+        }
+        if (lid) {
+          results.push({ pn, lid })
+        }
+      }
       return results.length ? results : null
     },
     getPnForLid: async (lid) => {
       if (externalLidMapping) {
         return externalLidMapping.getPNForLID(lid)
       }
-      return lidToPn.get(lid) ?? null
+      const cached = lidToPn.get(lid)
+      if (cached) return cached
+      if (redisStore.enabled) {
+        const stored = await redisStore.getPnForLid(lid)
+        if (stored) {
+          lidToPn.set(lid, stored)
+          pnToLid.set(stored, lid)
+          return stored
+        }
+      }
+      return null
     },
     getPnsForLids: async (lids) => {
       if (externalLidMapping) {
         return externalLidMapping.getPNsForLIDs(lids)
       }
-      const results = lids
-        .map((lid) => {
-          const pn = lidToPn.get(lid)
-          return pn ? { pn, lid } : null
-        })
-        .filter((pair): pair is LIDMapping => Boolean(pair))
+      const results: LIDMapping[] = []
+      for (const lid of lids) {
+        let pn = lidToPn.get(lid)
+        if (!pn && redisStore.enabled) {
+          const stored = await redisStore.getPnForLid(lid)
+          if (stored) {
+            pn = stored
+            lidToPn.set(lid, stored)
+            pnToLid.set(stored, lid)
+          }
+        }
+        if (pn) {
+          results.push({ pn, lid })
+        }
+      }
       return results.length ? results : null
     },
   }

@@ -29,7 +29,7 @@ cp .env.example .env
 
 `LOG_LEVEL`: nível de log (`trace|debug|info|warn|error|fatal`).
 
-`WA_REDIS_URL`: URL do Redis para cache quente da sessão (opcional).
+`WA_REDIS_URL`: URL do Redis para cache quente da sessão e da store (opcional).
 
 `WA_REDIS_PREFIX`: prefixo das chaves no Redis (padrão: `zyra:conexao`).
 
