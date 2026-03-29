@@ -8,6 +8,8 @@ import { createBaileysLogger } from '../../observability/baileys-logger.js'
 import { createBaileysStore } from '../../store/baileys-store.js'
 import { getAuthState } from '../auth/state.js'
 
+const store = createBaileysStore()
+
 async function resolveBaileysVersion(logger: AppLogger) {
   try {
     const latest = await fetchLatestBaileysVersion()
@@ -36,7 +38,6 @@ async function resolveBaileysVersion(logger: AppLogger) {
 export async function createSocket(logger: AppLogger) {
   const { state, saveCreds } = await getAuthState()
   const version = await resolveBaileysVersion(logger)
-  const store = createBaileysStore()
 
   const sock = makeWASocket({
     auth: state,
@@ -45,6 +46,11 @@ export async function createSocket(logger: AppLogger) {
     logger: createBaileysLogger(logger),
     getMessage: store.getMessage,
     cachedGroupMetadata: store.getGroupMetadata,
+    msgRetryCounterCache: store.caches.msgRetryCounterCache,
+    callOfferCache: store.caches.callOfferCache,
+    placeholderResendCache: store.caches.placeholderResendCache,
+    userDevicesCache: store.caches.userDevicesCache,
+    mediaCache: store.caches.mediaCache,
   })
 
   store.bind(sock.ev)

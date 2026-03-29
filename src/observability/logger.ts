@@ -17,7 +17,7 @@ function ensureTrace(logger: LoggerInstancia): AppLogger {
   if (typedLogger.child) {
     const originalChild = typedLogger.child.bind(typedLogger)
     typedLogger.child = ((meta?: object) =>
-      ensureTrace(originalChild((meta ?? {}) as Object))) as LoggerInstancia['child']
+      ensureTrace(originalChild((meta ?? {}) as object))) as LoggerInstancia['child']
   }
 
   return typedLogger as AppLogger

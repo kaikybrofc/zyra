@@ -1,12 +1,16 @@
-import type {
-  BaileysEventEmitter,
-  Chat,
-  ChatUpdate,
-  Contact,
-  GroupMetadata,
-  GroupParticipant,
-  WAMessage,
-  WAMessageKey,
+import NodeCache from '@cacheable/node-cache'
+import {
+  DEFAULT_CACHE_TTLS,
+  type BaileysEventEmitter,
+  type CacheStore,
+  type Chat,
+  type ChatUpdate,
+  type Contact,
+  type GroupMetadata,
+  type GroupParticipant,
+  type PossiblyExtendedCacheStore,
+  type WAMessage,
+  type WAMessageKey,
 } from '@whiskeysockets/baileys'
 
 type MessageContent = Exclude<WAMessage['message'], null | undefined>
@@ -36,6 +40,41 @@ const mergeDefined = <T extends object>(base: T, patch: Partial<T>): T => {
   return next
 }
 
+const createCacheStore = (ttl: number): CacheStore => {
+  const cache = new NodeCache<unknown>({
+    stdTTL: ttl,
+    useClones: false,
+  })
+
+  return {
+    get: <T>(key: string) => cache.get(key) as T | undefined,
+    set: <T>(key: string, value: T) => cache.set(key, value),
+    del: (key: string) => cache.del(key),
+    flushAll: () => cache.flushAll(),
+  }
+}
+
+const createUserDevicesCache = (ttl: number): PossiblyExtendedCacheStore => {
+  const cache = new NodeCache<unknown>({
+    stdTTL: ttl,
+    useClones: false,
+  })
+
+  return {
+    get: <T>(key: string) => cache.get(key) as T | undefined,
+    set: <T>(key: string, value: T) => cache.set(key, value),
+    del: (key: string) => cache.del(key),
+    flushAll: () => cache.flushAll(),
+    mget: async (keys) => cache.mget(keys),
+    mset: async (entries) => {
+      cache.mset(entries)
+    },
+    mdel: async (keys) => {
+      cache.mdel(keys)
+    },
+  }
+}
+
 const upsertParticipants = (
   existing: GroupParticipant[] | undefined,
   updates: GroupParticipant[]
@@ -55,6 +94,13 @@ export type BaileysStore = {
   bind: (ev: BaileysEventEmitter) => void
   getMessage: (key: WAMessageKey) => Promise<MessageContent | undefined>
   getGroupMetadata: (jid: string) => Promise<GroupMetadata | undefined>
+  caches: {
+    msgRetryCounterCache: CacheStore
+    callOfferCache: CacheStore
+    placeholderResendCache: CacheStore
+    userDevicesCache: PossiblyExtendedCacheStore
+    mediaCache: CacheStore
+  }
 }
 
 export function createBaileysStore(): BaileysStore {
@@ -62,6 +108,11 @@ export function createBaileysStore(): BaileysStore {
   const contacts = new Map<string, Contact>()
   const groups = new Map<string, GroupMetadata>()
   const messages = new Map<string, WAMessage>()
+  const msgRetryCounterCache = createCacheStore(DEFAULT_CACHE_TTLS.MSG_RETRY)
+  const callOfferCache = createCacheStore(DEFAULT_CACHE_TTLS.CALL_OFFER)
+  const placeholderResendCache = createCacheStore(DEFAULT_CACHE_TTLS.MSG_RETRY)
+  const userDevicesCache = createUserDevicesCache(DEFAULT_CACHE_TTLS.USER_DEVICES)
+  const mediaCache = createCacheStore(DEFAULT_CACHE_TTLS.MSG_RETRY)
 
   const upsertMessage = (message: WAMessage) => {
     if (!message.key?.remoteJid || !message.key?.id) return
@@ -89,10 +140,7 @@ export function createBaileysStore(): BaileysStore {
 
     ev.on('chats.update', (updates) => {
       for (const update of updates) {
-        const { id, conditional, timestamp, ...rest } = update as ChatUpdate & {
-          conditional?: unknown
-          timestamp?: number
-        }
+        const { id, ...rest } = update as ChatUpdate & { id?: string | null }
         if (!id) continue
         const existing = chats.get(id)
         chats.set(id, { ...existing, ...rest })
@@ -199,5 +247,12 @@ export function createBaileysStore(): BaileysStore {
     bind,
     getMessage,
     getGroupMetadata,
+    caches: {
+      msgRetryCounterCache,
+      callOfferCache,
+      placeholderResendCache,
+      userDevicesCache,
+      mediaCache,
+    },
   }
 }
