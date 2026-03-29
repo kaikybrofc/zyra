@@ -8,6 +8,7 @@ import {
   type Contact,
   type GroupMetadata,
   type GroupParticipant,
+  type LIDMapping,
   type PossiblyExtendedCacheStore,
   type WAMessage,
   type WAMessageKey,
@@ -94,6 +95,8 @@ export type BaileysStore = {
   bind: (ev: BaileysEventEmitter) => void
   getMessage: (key: WAMessageKey) => Promise<MessageContent | undefined>
   getGroupMetadata: (jid: string) => Promise<GroupMetadata | undefined>
+  bindLidMappingStore: (store: LidMappingStore | undefined) => void
+  lidMapping: LidMappingFacade
   caches: {
     msgRetryCounterCache: CacheStore
     callOfferCache: CacheStore
@@ -103,11 +106,30 @@ export type BaileysStore = {
   }
 }
 
+type LidMappingStore = {
+  storeLIDPNMappings: (pairs: LIDMapping[]) => Promise<void>
+  getLIDForPN: (pn: string) => Promise<string | null>
+  getLIDsForPNs: (pns: string[]) => Promise<LIDMapping[] | null>
+  getPNForLID: (lid: string) => Promise<string | null>
+  getPNsForLIDs: (lids: string[]) => Promise<LIDMapping[] | null>
+}
+
+type LidMappingFacade = {
+  storeMappings: (pairs: LIDMapping[]) => Promise<void>
+  getLidForPn: (pn: string) => Promise<string | null>
+  getLidsForPns: (pns: string[]) => Promise<LIDMapping[] | null>
+  getPnForLid: (lid: string) => Promise<string | null>
+  getPnsForLids: (lids: string[]) => Promise<LIDMapping[] | null>
+}
+
 export function createBaileysStore(): BaileysStore {
   const chats = new Map<string, Chat>()
   const contacts = new Map<string, Contact>()
   const groups = new Map<string, GroupMetadata>()
   const messages = new Map<string, WAMessage>()
+  const pnToLid = new Map<string, string>()
+  const lidToPn = new Map<string, string>()
+  let externalLidMapping: LidMappingStore | undefined
   const msgRetryCounterCache = createCacheStore(DEFAULT_CACHE_TTLS.MSG_RETRY)
   const callOfferCache = createCacheStore(DEFAULT_CACHE_TTLS.CALL_OFFER)
   const placeholderResendCache = createCacheStore(DEFAULT_CACHE_TTLS.MSG_RETRY)
@@ -119,8 +141,14 @@ export function createBaileysStore(): BaileysStore {
     messages.set(toMessageKey(message.key), message)
   }
 
+  const upsertLidMapping = ({ lid, pn }: LIDMapping) => {
+    if (!lid || !pn) return
+    pnToLid.set(pn, lid)
+    lidToPn.set(lid, pn)
+  }
+
   const bind = (ev: BaileysEventEmitter) => {
-    ev.on('messaging-history.set', ({ chats: chatList, contacts: contactList, messages: messageList }) => {
+    ev.on('messaging-history.set', ({ chats: chatList, contacts: contactList, messages: messageList, lidPnMappings }) => {
       for (const chat of chatList) {
         mergeById(chats, chat)
       }
@@ -129,6 +157,11 @@ export function createBaileysStore(): BaileysStore {
       }
       for (const message of messageList) {
         upsertMessage(message)
+      }
+      if (lidPnMappings?.length) {
+        for (const mapping of lidPnMappings) {
+          upsertLidMapping(mapping)
+        }
       }
     })
 
@@ -231,6 +264,10 @@ export function createBaileysStore(): BaileysStore {
         }
       }
     })
+
+    ev.on('lid-mapping.update', (mapping) => {
+      upsertLidMapping(mapping)
+    })
   }
 
   const getMessage = async (key: WAMessageKey): Promise<MessageContent | undefined> => {
@@ -243,10 +280,63 @@ export function createBaileysStore(): BaileysStore {
     return groups.get(jid)
   }
 
+  const bindLidMappingStore = (store: LidMappingStore | undefined) => {
+    externalLidMapping = store
+  }
+
+  const lidMapping: LidMappingFacade = {
+    storeMappings: async (pairs) => {
+      if (externalLidMapping) {
+        await externalLidMapping.storeLIDPNMappings(pairs)
+      }
+      for (const pair of pairs) {
+        upsertLidMapping(pair)
+      }
+    },
+    getLidForPn: async (pn) => {
+      if (externalLidMapping) {
+        return externalLidMapping.getLIDForPN(pn)
+      }
+      return pnToLid.get(pn) ?? null
+    },
+    getLidsForPns: async (pns) => {
+      if (externalLidMapping) {
+        return externalLidMapping.getLIDsForPNs(pns)
+      }
+      const results = pns
+        .map((pn) => {
+          const lid = pnToLid.get(pn)
+          return lid ? { pn, lid } : null
+        })
+        .filter((pair): pair is LIDMapping => Boolean(pair))
+      return results.length ? results : null
+    },
+    getPnForLid: async (lid) => {
+      if (externalLidMapping) {
+        return externalLidMapping.getPNForLID(lid)
+      }
+      return lidToPn.get(lid) ?? null
+    },
+    getPnsForLids: async (lids) => {
+      if (externalLidMapping) {
+        return externalLidMapping.getPNsForLIDs(lids)
+      }
+      const results = lids
+        .map((lid) => {
+          const pn = lidToPn.get(lid)
+          return pn ? { pn, lid } : null
+        })
+        .filter((pair): pair is LIDMapping => Boolean(pair))
+      return results.length ? results : null
+    },
+  }
+
   return {
     bind,
     getMessage,
     getGroupMetadata,
+    bindLidMappingStore,
+    lidMapping,
     caches: {
       msgRetryCounterCache,
       callOfferCache,

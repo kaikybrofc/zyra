@@ -10,6 +10,18 @@ import { getAuthState } from '../auth/state.js'
 
 const store = createBaileysStore()
 
+type SocketWithSignalRepository = {
+  signalRepository?: {
+    lidMapping?: {
+      storeLIDPNMappings: (pairs: { lid: string; pn: string }[]) => Promise<void>
+      getLIDForPN: (pn: string) => Promise<string | null>
+      getLIDsForPNs: (pns: string[]) => Promise<{ lid: string; pn: string }[] | null>
+      getPNForLID: (lid: string) => Promise<string | null>
+      getPNsForLIDs: (lids: string[]) => Promise<{ lid: string; pn: string }[] | null>
+    }
+  }
+}
+
 async function resolveBaileysVersion(logger: AppLogger) {
   try {
     const latest = await fetchLatestBaileysVersion()
@@ -53,6 +65,8 @@ export async function createSocket(logger: AppLogger) {
     mediaCache: store.caches.mediaCache,
   })
 
+  const lidMappingStore = (sock as SocketWithSignalRepository).signalRepository?.lidMapping
+  store.bindLidMappingStore(lidMappingStore)
   store.bind(sock.ev)
   sock.ev.on('creds.update', saveCreds)
 
