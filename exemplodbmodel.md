@@ -69,7 +69,7 @@ CREATE TABLE connections (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE users (
-  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  id CHAR(36) PRIMARY KEY,
   connection_id VARCHAR(64) NOT NULL,
   display_name VARCHAR(255) NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -80,7 +80,7 @@ CREATE TABLE users (
 
 CREATE TABLE user_identifiers (
   connection_id VARCHAR(64) NOT NULL,
-  user_id BIGINT NOT NULL,
+  user_id CHAR(36) NOT NULL,
   id_type ENUM('pn','lid','jid','username') NOT NULL,
   id_value VARCHAR(255) NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -122,7 +122,7 @@ CREATE TABLE chats (
 CREATE TABLE contacts (
   connection_id VARCHAR(64) NOT NULL,
   jid VARCHAR(128) NOT NULL,
-  user_id BIGINT NULL,
+  user_id CHAR(36) NULL,
   display_name VARCHAR(255) NULL,
   data_json JSON NOT NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -136,7 +136,7 @@ CREATE TABLE groups (
   connection_id VARCHAR(64) NOT NULL,
   jid VARCHAR(128) NOT NULL,
   subject VARCHAR(255) NULL,
-  owner_user_id BIGINT NULL,
+  owner_user_id CHAR(36) NULL,
   announce TINYINT(1) NULL,
   restrict TINYINT(1) NULL,
   size INT NULL,
@@ -151,7 +151,7 @@ CREATE TABLE groups (
 CREATE TABLE group_participants (
   connection_id VARCHAR(64) NOT NULL,
   group_jid VARCHAR(128) NOT NULL,
-  user_id BIGINT NOT NULL,
+  user_id CHAR(36) NOT NULL,
   participant_jid VARCHAR(128) NULL,
   role VARCHAR(16) NULL,
   is_admin TINYINT(1) NULL,
@@ -170,7 +170,7 @@ CREATE TABLE messages (
   chat_jid VARCHAR(128) NOT NULL,
   message_id VARCHAR(128) NOT NULL,
   from_me TINYINT(1) NOT NULL,
-  sender_user_id BIGINT NULL,
+  sender_user_id CHAR(36) NULL,
   participant_jid VARCHAR(128) NULL,
   timestamp BIGINT NULL,
   content_type VARCHAR(64) NULL,
@@ -188,7 +188,7 @@ CREATE TABLE lid_mappings (
   connection_id VARCHAR(64) NOT NULL,
   pn VARCHAR(64) NOT NULL,
   lid VARCHAR(64) NOT NULL,
-  user_id BIGINT NULL,
+  user_id CHAR(36) NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (connection_id, pn),
   UNIQUE KEY uq_lid (connection_id, lid),
@@ -211,7 +211,7 @@ CREATE TABLE message_events (
 
 CREATE TABLE user_aliases (
   connection_id VARCHAR(64) NOT NULL,
-  user_id BIGINT NOT NULL,
+  user_id CHAR(36) NOT NULL,
   alias_type ENUM('pushName','notify','username','display_name') NOT NULL,
   alias_value VARCHAR(255) NOT NULL,
   first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -255,7 +255,7 @@ CREATE TABLE message_text_index (
 CREATE TABLE message_users (
   connection_id VARCHAR(64) NOT NULL,
   message_db_id BIGINT NOT NULL,
-  user_id BIGINT NOT NULL,
+  user_id CHAR(36) NOT NULL,
   relation_type ENUM('sender','mentioned','participant','quoted') NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (connection_id, message_db_id, user_id, relation_type),
@@ -268,7 +268,7 @@ CREATE TABLE message_users (
 CREATE TABLE chat_users (
   connection_id VARCHAR(64) NOT NULL,
   chat_jid VARCHAR(128) NOT NULL,
-  user_id BIGINT NOT NULL,
+  user_id CHAR(36) NOT NULL,
   role VARCHAR(32) NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (connection_id, chat_jid, user_id),
@@ -306,7 +306,7 @@ CREATE TABLE label_associations (
 
 CREATE TABLE blocklist (
   connection_id VARCHAR(64) NOT NULL,
-  user_id BIGINT NULL,
+  user_id CHAR(36) NULL,
   jid VARCHAR(128) NOT NULL,
   is_blocked TINYINT(1) NOT NULL,
   reason VARCHAR(255) NULL,
@@ -332,8 +332,8 @@ CREATE TABLE group_events (
   connection_id VARCHAR(64) NOT NULL,
   group_jid VARCHAR(128) NOT NULL,
   event_type VARCHAR(64) NOT NULL,
-  actor_user_id BIGINT NULL,
-  target_user_id BIGINT NULL,
+  actor_user_id CHAR(36) NULL,
+  target_user_id CHAR(36) NULL,
   data_json JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_group_events (connection_id, group_jid, created_at),
@@ -347,7 +347,7 @@ CREATE TABLE message_failures (
   connection_id VARCHAR(64) NOT NULL,
   chat_jid VARCHAR(128) NOT NULL,
   message_id VARCHAR(128) NULL,
-  sender_user_id BIGINT NULL,
+  sender_user_id CHAR(36) NULL,
   failure_reason VARCHAR(255) NULL,
   data_json JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -372,7 +372,7 @@ CREATE TABLE bot_sessions (
 CREATE TABLE commands_log (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   connection_id VARCHAR(64) NOT NULL,
-  user_id BIGINT NULL,
+  user_id CHAR(36) NULL,
   chat_jid VARCHAR(128) NOT NULL,
   command_name VARCHAR(64) NOT NULL,
   args_text TEXT NULL,
@@ -398,7 +398,7 @@ CREATE TABLE newsletters (
 CREATE TABLE newsletter_participants (
   connection_id VARCHAR(64) NOT NULL,
   newsletter_id VARCHAR(128) NOT NULL,
-  user_id BIGINT NOT NULL,
+  user_id CHAR(36) NOT NULL,
   role VARCHAR(32) NULL,
   status VARCHAR(32) NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -423,7 +423,7 @@ CREATE TABLE group_join_requests (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   connection_id VARCHAR(64) NOT NULL,
   group_jid VARCHAR(128) NOT NULL,
-  user_id BIGINT NOT NULL,
+  user_id CHAR(36) NOT NULL,
   action VARCHAR(32) NOT NULL,
   method VARCHAR(64) NULL,
   data_json JSON NULL,
@@ -435,7 +435,7 @@ CREATE TABLE group_join_requests (
 
 CREATE TABLE user_devices (
   connection_id VARCHAR(64) NOT NULL,
-  user_id BIGINT NOT NULL,
+  user_id CHAR(36) NOT NULL,
   device_id VARCHAR(64) NOT NULL,
   data_json JSON NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -451,6 +451,7 @@ Este modelo foi desenhado para equilibrar compatibilidade com o Baileys, consult
 
 - `connection_id` em todas as tabelas permite multi-instancias e isolamento de dados sem criar schemas separados.
 - `users` + `user_identifiers` centraliza identidade. PN, LID, JID e username viram caminhos para o mesmo `user_id`, evitando duplicidade e melhorando joins.
+- O `user_id` e um UUID (CHAR(36)) gerado pelo sistema, o que reduz previsibilidade e facilita integracao entre fontes externas.
 - Colunas derivadas (`display_name`, `content_type`, `text_preview`, `timestamp`) aceleram consultas sem precisar abrir JSON em toda leitura.
 - JSON (`data_json`) preserva estrutura original do Baileys e garante compatibilidade com mudancas futuras sem migracoes frequentes.
 - Tabelas ponte (`message_users`, `chat_users`, `group_participants`) deixam rankings, mencoes e relatorios simples e performaticos.
@@ -459,6 +460,3 @@ Este modelo foi desenhado para equilibrar compatibilidade com o Baileys, consult
 - `message_media` e `message_text_index` viabilizam reuso de midia e busca textual sem varrer o payload completo.
 - `auth_creds` e `signal_keys` separados permitem persistencia correta do estado criptografico sem misturar com dados de negocio.
 - A estrutura e preparada para cache quente em Redis e persistencia fria em MySQL, mantendo consistencia e performance.
-chats
-  |
-  +-- chat_users
