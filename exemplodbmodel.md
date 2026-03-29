@@ -16,13 +16,14 @@ connections
   +-- auth_creds
   +-- signal_keys
   +-- chats -----------+------ chat_users
-  +-- contacts         |
+  +-- wa_contacts_cache|
   +-- groups -----+    |
   +-- messages ---+----+------ message_events
   +-- lid_mappings
   +-- labels ---------- label_associations
   +-- blocklist
   +-- events_log
+  +-- events_log_archive
   +-- newsletters ----- newsletter_events
   +-- group_events
   +-- group_join_requests
@@ -37,7 +38,7 @@ connections
        |
        +-- user_identifiers
        +-- user_aliases
-       +-- contacts (user_id)
+       +-- wa_contacts_cache (user_id)
        +-- group_participants
        +-- messages (sender_user_id)
        +-- message_users
@@ -47,6 +48,7 @@ connections
        +-- labels (actor_user_id)
        +-- label_associations (actor_user_id)
        +-- events_log (actor/target)
+       +-- events_log_archive (actor/target)
        +-- message_events (actor/target)
        +-- message_failures (actor)
        +-- commands_log (actor)
@@ -83,12 +85,13 @@ CREATE TABLE users (
   connection_id VARCHAR(64) NOT NULL,
   display_name VARCHAR(255) NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  deleted_at TIMESTAMP NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_users_conn (connection_id),
   CONSTRAINT fk_users_conn FOREIGN KEY (connection_id) REFERENCES connections(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Sugestao: gerar id com UUID_TO_BIN(UUID()) no MySQL
+-- Sugestao: gerar id com UUID_TO_BIN(UUID(), 1) para ordenacao melhor em indice
 
 CREATE TABLE user_identifiers (
   connection_id VARCHAR(64) NOT NULL,
@@ -126,12 +129,14 @@ CREATE TABLE chats (
   last_message_ts BIGINT NULL,
   unread_count INT NULL,
   data_json JSON NOT NULL,
+  deleted_at TIMESTAMP NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (connection_id, jid),
   CONSTRAINT fk_chats_conn FOREIGN KEY (connection_id) REFERENCES connections(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE contacts (
+-- Cache de contatos do WhatsApp (nao e fonte da verdade)
+CREATE TABLE wa_contacts_cache (
   connection_id VARCHAR(64) NOT NULL,
   jid VARCHAR(128) NOT NULL,
   user_id BINARY(16) NULL,
@@ -139,9 +144,9 @@ CREATE TABLE contacts (
   data_json JSON NOT NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (connection_id, jid),
-  INDEX idx_contacts_user (connection_id, user_id),
-  CONSTRAINT fk_contacts_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
-  CONSTRAINT fk_contacts_user FOREIGN KEY (user_id) REFERENCES users(id)
+  INDEX idx_contacts_cache_user (connection_id, user_id),
+  CONSTRAINT fk_contacts_cache_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
+  CONSTRAINT fk_contacts_cache_user FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE groups (
@@ -183,20 +188,26 @@ CREATE TABLE messages (
   message_id VARCHAR(128) NOT NULL,
   from_me TINYINT(1) NOT NULL,
   sender_user_id BINARY(16) NULL,
-  participant_jid VARCHAR(128) NULL,
   timestamp BIGINT NULL,
   content_type VARCHAR(64) NULL,
+  message_type VARCHAR(64) NULL,
+  status VARCHAR(32) NULL,
+  is_forwarded TINYINT(1) NULL,
+  is_ephemeral TINYINT(1) NULL,
   text_preview VARCHAR(512) NULL,
   data_json JSON NOT NULL,
+  deleted_at TIMESTAMP NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_message (connection_id, chat_jid, message_id, participant_jid, from_me),
+  UNIQUE KEY uq_message (connection_id, chat_jid, message_id, from_me),
   INDEX idx_messages_chat_time (connection_id, chat_jid, timestamp),
+  INDEX idx_messages_feed (connection_id, chat_jid, id DESC),
+  INDEX idx_messages_lookup (connection_id, message_id),
   INDEX idx_messages_sender (connection_id, sender_user_id, timestamp),
   CONSTRAINT fk_messages_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
   CONSTRAINT fk_messages_sender FOREIGN KEY (sender_user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Sugestao: particionar por data ou por connection_id para reduzir custo de consulta
+-- Sugestao: particionar por data (RANGE timestamp) e/ou shard por connection_id para reduzir custo
 
 CREATE TABLE lid_mappings (
   connection_id VARCHAR(64) NOT NULL,
@@ -360,6 +371,23 @@ CREATE TABLE events_log (
   CONSTRAINT fk_events_conn FOREIGN KEY (connection_id) REFERENCES connections(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Sugestao: aplicar politica de retencao (ex: 30 dias) e arquivar eventos antigos
+
+CREATE TABLE events_log_archive (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  connection_id VARCHAR(64) NOT NULL,
+  event_type VARCHAR(128) NOT NULL,
+  actor_user_id BINARY(16) NULL,
+  target_user_id BINARY(16) NULL,
+  chat_jid VARCHAR(128) NULL,
+  group_jid VARCHAR(128) NULL,
+  message_db_id BIGINT NULL,
+  data_json JSON NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_events_archive_type (connection_id, event_type),
+  CONSTRAINT fk_events_archive_conn FOREIGN KEY (connection_id) REFERENCES connections(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE group_events (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   connection_id VARCHAR(64) NOT NULL,
@@ -486,14 +514,19 @@ Este modelo foi desenhado para equilibrar compatibilidade com o Baileys, consult
 
 - `connection_id` em todas as tabelas permite multi-instancias e isolamento de dados sem criar schemas separados.
 - `users` + `user_identifiers` centraliza identidade. PN, LID, JID e username viram caminhos para o mesmo `user_id`, evitando duplicidade e melhorando joins.
-- O `user_id` e um UUID em `BINARY(16)` gerado pelo sistema, reduzindo tamanho de indice e custo de IO (use `UUID_TO_BIN` e `BIN_TO_UUID`).
+- O `user_id` e um UUID em `BINARY(16)` gerado pelo sistema, reduzindo tamanho de indice e custo de IO (use `UUID_TO_BIN(UUID(), 1)` e `BIN_TO_UUID`).
 - Colunas padronizadas de autoria (`actor_user_id` e `target_user_id`) ligam usuarios a eventos e acoes, facilitando auditoria e rankings.
 - Colunas derivadas (`display_name`, `content_type`, `text_preview`, `timestamp`) aceleram consultas sem precisar abrir JSON em toda leitura.
-- JSON (`data_json`) preserva estrutura original do Baileys e garante compatibilidade com mudancas futuras sem migracoes frequentes.
+- JSON (`data_json`) preserva estrutura original do Baileys e garante compatibilidade com mudancas futuras; em escala, prefira salvar so campos necessarios ou comprimir payloads.
+- `wa_contacts_cache` e um cache do Baileys; `users` e a fonte de verdade para identidade.
+- `participant_jid` foi removido de `messages` para evitar dualidade com `sender_user_id` e `message_users`.
 - Tabelas ponte (`message_users`, `chat_users`, `group_participants`) deixam rankings, mencoes e relatorios simples e performaticos.
 - Indices compostos (`connection_id + chat_jid + timestamp`, `connection_id + user_id`) suportam feeds, historicos e buscas por usuario com baixa latencia.
 - Tabelas de eventos (`message_events`, `group_events`, `events_log`) guardam historico operacional para auditoria e debug.
+- `events_log_archive` permite arquivamento barato sem perder historico.
 - `message_media` e `message_text_index` viabilizam reuso de midia e busca textual sem varrer o payload completo.
 - `auth_creds` e `signal_keys` separados permitem persistencia correta do estado criptografico sem misturar com dados de negocio.
 - A estrutura e preparada para cache quente em Redis e persistencia fria em MySQL, mantendo consistencia e performance.
-- Para alta escala, as tabelas de eventos podem ficar sem FKs de usuario/mensagem (consistencia eventual) e o volume de `messages` pode ser particionado por data ou por `connection_id`.
+- Para alta escala, as tabelas de eventos ficam sem FKs de usuario/mensagem (consistencia eventual) e o volume de `messages` pode ser particionado por data ou por `connection_id`.
+- Para buscas pesadas, o `message_text_index` pode ser substituido futuramente por um motor dedicado (Meilisearch/Elastic).
+- `deleted_at` permite soft delete sem perder historico, facilitando auditoria e recuperacao.
