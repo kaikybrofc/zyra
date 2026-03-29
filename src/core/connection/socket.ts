@@ -8,7 +8,7 @@ export async function createSocket(logger: AppLogger) {
 
   const sock = makeWASocket({
     auth: state,
-    browser: Browsers.ubuntu('Baileys Bot'),
+    browser: Browsers.ubuntu('Zyra System'),
     logger: createBaileysLogger(logger),
   })
 
