@@ -3,7 +3,7 @@ import { Boom } from '@hapi/boom'
 import qrcode from 'qrcode-terminal'
 import type { AppLogger } from '../observability/logger.js'
 import { config } from '../config/index.js'
-import { handleMessagesUpsert } from '../router/index.js'
+import { handleIncomingMessages } from '../router/index.js'
 
 type RegisterOptions = {
   sock: WASocket
@@ -123,7 +123,7 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
     'messages.update': (updates) => logEvent('messages.update', { count: updates.length }),
     'messages.media-update': (updates) => logEvent('messages.media-update', { count: updates.length }),
     'messages.upsert': async (event) => {
-      await handleMessagesUpsert(sock, event.messages, logger)
+      await handleIncomingMessages(sock, event.messages, logger)
       logEvent('messages.upsert', { count: event.messages.length, type: event.type })
     },
     'messages.reaction': (reactions) =>
