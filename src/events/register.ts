@@ -114,7 +114,11 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
         logEvent('messages.delete', { jid: data.jid, all: true })
         return
       }
-      logEvent('messages.delete', { count: data.keys.length })
+      if ('keys' in data) {
+        logEvent('messages.delete', { count: data.keys.length })
+      } else {
+        logEvent('messages.delete', { count: 0 })
+      }
     },
     'messages.update': (updates) => logEvent('messages.update', { count: updates.length }),
     'messages.media-update': (updates) => logEvent('messages.media-update', { count: updates.length }),
