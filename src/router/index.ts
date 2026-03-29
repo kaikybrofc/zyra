@@ -10,9 +10,11 @@ export async function handleMessagesUpsert(
 ): Promise<void> {
   for (const message of messages) {
     if (!message.message) continue
-    if (message.key.fromMe) continue
+    const messageKey = message.key
+    if (!messageKey) continue
+    if (messageKey.fromMe) continue
 
-    const chatId = message.key.remoteJid
+    const chatId = messageKey.remoteJid
     if (!chatId) continue
 
     const text = getMessageText(message)
@@ -29,7 +31,7 @@ export async function handleMessagesUpsert(
     try {
       await command.execute({ sock, message, chatId, text: trimmed, args })
     } catch (error) {
-      logger.error({ err: error, command: name }, 'command failed')
+      logger.error('command failed', { err: error, command: name })
     }
   }
 }

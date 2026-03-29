@@ -17,7 +17,7 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
       const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut
 
-      logger.warn({ statusCode }, 'connection closed')
+      logger.warn('connection closed', { statusCode })
 
       if (shouldReconnect) {
         void reconnect()

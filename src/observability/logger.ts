@@ -8,7 +8,6 @@ export type AppLogger = LoggerInstancia & {
 function ensureTrace(logger: LoggerInstancia): AppLogger {
   const typedLogger = logger as LoggerInstancia & {
     trace?: (...args: unknown[]) => void
-    child?: (meta?: Record<string, unknown>) => LoggerInstancia
   }
 
   if (!typedLogger.trace) {
@@ -17,7 +16,8 @@ function ensureTrace(logger: LoggerInstancia): AppLogger {
 
   if (typedLogger.child) {
     const originalChild = typedLogger.child.bind(typedLogger)
-    typedLogger.child = (meta?: Record<string, unknown>) => ensureTrace(originalChild(meta))
+    typedLogger.child = ((meta?: object) =>
+      ensureTrace(originalChild((meta ?? {}) as Object))) as LoggerInstancia['child']
   }
 
   return typedLogger as AppLogger
