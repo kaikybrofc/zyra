@@ -79,7 +79,7 @@ CREATE TABLE connections (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE users (
-  id CHAR(36) PRIMARY KEY,
+  id BINARY(16) PRIMARY KEY,
   connection_id VARCHAR(64) NOT NULL,
   display_name VARCHAR(255) NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -88,9 +88,11 @@ CREATE TABLE users (
   CONSTRAINT fk_users_conn FOREIGN KEY (connection_id) REFERENCES connections(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Sugestao: gerar id com UUID_TO_BIN(UUID()) no MySQL
+
 CREATE TABLE user_identifiers (
   connection_id VARCHAR(64) NOT NULL,
-  user_id CHAR(36) NOT NULL,
+  user_id BINARY(16) NOT NULL,
   id_type ENUM('pn','lid','jid','username') NOT NULL,
   id_value VARCHAR(255) NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -132,7 +134,7 @@ CREATE TABLE chats (
 CREATE TABLE contacts (
   connection_id VARCHAR(64) NOT NULL,
   jid VARCHAR(128) NOT NULL,
-  user_id CHAR(36) NULL,
+  user_id BINARY(16) NULL,
   display_name VARCHAR(255) NULL,
   data_json JSON NOT NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -146,7 +148,7 @@ CREATE TABLE groups (
   connection_id VARCHAR(64) NOT NULL,
   jid VARCHAR(128) NOT NULL,
   subject VARCHAR(255) NULL,
-  owner_user_id CHAR(36) NULL,
+  owner_user_id BINARY(16) NULL,
   announce TINYINT(1) NULL,
   restrict TINYINT(1) NULL,
   size INT NULL,
@@ -161,7 +163,7 @@ CREATE TABLE groups (
 CREATE TABLE group_participants (
   connection_id VARCHAR(64) NOT NULL,
   group_jid VARCHAR(128) NOT NULL,
-  user_id CHAR(36) NOT NULL,
+  user_id BINARY(16) NOT NULL,
   participant_jid VARCHAR(128) NULL,
   role VARCHAR(16) NULL,
   is_admin TINYINT(1) NULL,
@@ -180,7 +182,7 @@ CREATE TABLE messages (
   chat_jid VARCHAR(128) NOT NULL,
   message_id VARCHAR(128) NOT NULL,
   from_me TINYINT(1) NOT NULL,
-  sender_user_id CHAR(36) NULL,
+  sender_user_id BINARY(16) NULL,
   participant_jid VARCHAR(128) NULL,
   timestamp BIGINT NULL,
   content_type VARCHAR(64) NULL,
@@ -194,11 +196,13 @@ CREATE TABLE messages (
   CONSTRAINT fk_messages_sender FOREIGN KEY (sender_user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Sugestao: particionar por data ou por connection_id para reduzir custo de consulta
+
 CREATE TABLE lid_mappings (
   connection_id VARCHAR(64) NOT NULL,
   pn VARCHAR(64) NOT NULL,
   lid VARCHAR(64) NOT NULL,
-  user_id CHAR(36) NULL,
+  user_id BINARY(16) NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (connection_id, pn),
   UNIQUE KEY uq_lid (connection_id, lid),
@@ -213,24 +217,19 @@ CREATE TABLE message_events (
   chat_jid VARCHAR(128) NOT NULL,
   message_id VARCHAR(128) NOT NULL,
   event_type VARCHAR(64) NOT NULL,
-  actor_user_id CHAR(36) NULL,
-  target_user_id CHAR(36) NULL,
+  actor_user_id BINARY(16) NULL,
+  target_user_id BINARY(16) NULL,
   message_db_id BIGINT NULL,
   data_json JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_events_msg (connection_id, chat_jid, message_id),
   INDEX idx_message_events_actor (connection_id, actor_user_id, created_at),
-  INDEX idx_message_events_target (connection_id, target_user_id, created_at),
-  INDEX idx_message_events_msg (connection_id, message_db_id),
-  CONSTRAINT fk_events_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
-  CONSTRAINT fk_message_events_actor FOREIGN KEY (actor_user_id) REFERENCES users(id),
-  CONSTRAINT fk_message_events_target FOREIGN KEY (target_user_id) REFERENCES users(id),
-  CONSTRAINT fk_message_events_msg FOREIGN KEY (message_db_id) REFERENCES messages(id)
+  CONSTRAINT fk_events_conn FOREIGN KEY (connection_id) REFERENCES connections(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE user_aliases (
   connection_id VARCHAR(64) NOT NULL,
-  user_id CHAR(36) NOT NULL,
+  user_id BINARY(16) NOT NULL,
   alias_type ENUM('pushName','notify','username','display_name') NOT NULL,
   alias_value VARCHAR(255) NOT NULL,
   first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -274,7 +273,7 @@ CREATE TABLE message_text_index (
 CREATE TABLE message_users (
   connection_id VARCHAR(64) NOT NULL,
   message_db_id BIGINT NOT NULL,
-  user_id CHAR(36) NOT NULL,
+  user_id BINARY(16) NOT NULL,
   relation_type ENUM('sender','mentioned','participant','quoted') NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (connection_id, message_db_id, user_id, relation_type),
@@ -287,7 +286,7 @@ CREATE TABLE message_users (
 CREATE TABLE chat_users (
   connection_id VARCHAR(64) NOT NULL,
   chat_jid VARCHAR(128) NOT NULL,
-  user_id CHAR(36) NOT NULL,
+  user_id BINARY(16) NOT NULL,
   role VARCHAR(32) NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (connection_id, chat_jid, user_id),
@@ -299,7 +298,7 @@ CREATE TABLE chat_users (
 CREATE TABLE labels (
   connection_id VARCHAR(64) NOT NULL,
   label_id VARCHAR(64) NOT NULL,
-  actor_user_id CHAR(36) NULL,
+  actor_user_id BINARY(16) NULL,
   name VARCHAR(255) NULL,
   color VARCHAR(16) NULL,
   data_json JSON NULL,
@@ -313,7 +312,7 @@ CREATE TABLE labels (
 CREATE TABLE label_associations (
   connection_id VARCHAR(64) NOT NULL,
   label_id VARCHAR(64) NOT NULL,
-  actor_user_id CHAR(36) NULL,
+  actor_user_id BINARY(16) NULL,
   association_type ENUM('chat','message','contact','group') NOT NULL,
   chat_jid VARCHAR(128) NULL,
   message_db_id BIGINT NULL,
@@ -331,8 +330,8 @@ CREATE TABLE label_associations (
 
 CREATE TABLE blocklist (
   connection_id VARCHAR(64) NOT NULL,
-  user_id CHAR(36) NULL,
-  actor_user_id CHAR(36) NULL,
+  user_id BINARY(16) NULL,
+  actor_user_id BINARY(16) NULL,
   jid VARCHAR(128) NOT NULL,
   is_blocked TINYINT(1) NOT NULL,
   reason VARCHAR(255) NULL,
@@ -349,8 +348,8 @@ CREATE TABLE events_log (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   connection_id VARCHAR(64) NOT NULL,
   event_type VARCHAR(128) NOT NULL,
-  actor_user_id CHAR(36) NULL,
-  target_user_id CHAR(36) NULL,
+  actor_user_id BINARY(16) NULL,
+  target_user_id BINARY(16) NULL,
   chat_jid VARCHAR(128) NULL,
   group_jid VARCHAR(128) NULL,
   message_db_id BIGINT NULL,
@@ -358,12 +357,7 @@ CREATE TABLE events_log (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_events_type (connection_id, event_type),
   INDEX idx_events_actor (connection_id, actor_user_id, created_at),
-  INDEX idx_events_target (connection_id, target_user_id, created_at),
-  INDEX idx_events_message (connection_id, message_db_id),
-  CONSTRAINT fk_events_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
-  CONSTRAINT fk_events_actor FOREIGN KEY (actor_user_id) REFERENCES users(id),
-  CONSTRAINT fk_events_target FOREIGN KEY (target_user_id) REFERENCES users(id),
-  CONSTRAINT fk_events_message FOREIGN KEY (message_db_id) REFERENCES messages(id)
+  CONSTRAINT fk_events_conn FOREIGN KEY (connection_id) REFERENCES connections(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE group_events (
@@ -371,14 +365,12 @@ CREATE TABLE group_events (
   connection_id VARCHAR(64) NOT NULL,
   group_jid VARCHAR(128) NOT NULL,
   event_type VARCHAR(64) NOT NULL,
-  actor_user_id CHAR(36) NULL,
-  target_user_id CHAR(36) NULL,
+  actor_user_id BINARY(16) NULL,
+  target_user_id BINARY(16) NULL,
   data_json JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_group_events (connection_id, group_jid, created_at),
-  CONSTRAINT fk_group_events_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
-  CONSTRAINT fk_group_events_actor FOREIGN KEY (actor_user_id) REFERENCES users(id),
-  CONSTRAINT fk_group_events_target FOREIGN KEY (target_user_id) REFERENCES users(id)
+  CONSTRAINT fk_group_events_conn FOREIGN KEY (connection_id) REFERENCES connections(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE message_failures (
@@ -386,15 +378,13 @@ CREATE TABLE message_failures (
   connection_id VARCHAR(64) NOT NULL,
   chat_jid VARCHAR(128) NOT NULL,
   message_id VARCHAR(128) NULL,
-  sender_user_id CHAR(36) NULL,
-  actor_user_id CHAR(36) NULL,
+  sender_user_id BINARY(16) NULL,
+  actor_user_id BINARY(16) NULL,
   failure_reason VARCHAR(255) NULL,
   data_json JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_message_failures (connection_id, chat_jid, created_at),
-  CONSTRAINT fk_message_failures_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
-  CONSTRAINT fk_message_failures_sender FOREIGN KEY (sender_user_id) REFERENCES users(id),
-  CONSTRAINT fk_message_failures_actor FOREIGN KEY (actor_user_id) REFERENCES users(id)
+  CONSTRAINT fk_message_failures_conn FOREIGN KEY (connection_id) REFERENCES connections(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE bot_sessions (
@@ -413,7 +403,7 @@ CREATE TABLE bot_sessions (
 CREATE TABLE commands_log (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   connection_id VARCHAR(64) NOT NULL,
-  actor_user_id CHAR(36) NULL,
+  actor_user_id BINARY(16) NULL,
   chat_jid VARCHAR(128) NOT NULL,
   command_name VARCHAR(64) NOT NULL,
   args_text TEXT NULL,
@@ -423,8 +413,7 @@ CREATE TABLE commands_log (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_commands_log (connection_id, command_name, created_at),
   INDEX idx_commands_user (connection_id, actor_user_id, created_at),
-  CONSTRAINT fk_commands_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
-  CONSTRAINT fk_commands_user FOREIGN KEY (actor_user_id) REFERENCES users(id)
+  CONSTRAINT fk_commands_conn FOREIGN KEY (connection_id) REFERENCES connections(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE newsletters (
@@ -439,7 +428,7 @@ CREATE TABLE newsletters (
 CREATE TABLE newsletter_participants (
   connection_id VARCHAR(64) NOT NULL,
   newsletter_id VARCHAR(128) NOT NULL,
-  user_id CHAR(36) NOT NULL,
+  user_id BINARY(16) NOT NULL,
   role VARCHAR(32) NULL,
   status VARCHAR(32) NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -454,24 +443,20 @@ CREATE TABLE newsletter_events (
   connection_id VARCHAR(64) NOT NULL,
   newsletter_id VARCHAR(128) NOT NULL,
   event_type VARCHAR(64) NOT NULL,
-  actor_user_id CHAR(36) NULL,
-  target_user_id CHAR(36) NULL,
+  actor_user_id BINARY(16) NULL,
+  target_user_id BINARY(16) NULL,
   data_json JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_news_events (connection_id, newsletter_id, event_type),
-  INDEX idx_news_events_actor (connection_id, actor_user_id, created_at),
-  INDEX idx_news_events_target (connection_id, target_user_id, created_at),
-  CONSTRAINT fk_news_events_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
-  CONSTRAINT fk_news_events_actor FOREIGN KEY (actor_user_id) REFERENCES users(id),
-  CONSTRAINT fk_news_events_target FOREIGN KEY (target_user_id) REFERENCES users(id)
+  CONSTRAINT fk_news_events_conn FOREIGN KEY (connection_id) REFERENCES connections(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE group_join_requests (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   connection_id VARCHAR(64) NOT NULL,
   group_jid VARCHAR(128) NOT NULL,
-  user_id CHAR(36) NOT NULL,
-  actor_user_id CHAR(36) NULL,
+  user_id BINARY(16) NOT NULL,
+  actor_user_id BINARY(16) NULL,
   action VARCHAR(32) NOT NULL,
   method VARCHAR(64) NULL,
   data_json JSON NULL,
@@ -485,7 +470,7 @@ CREATE TABLE group_join_requests (
 
 CREATE TABLE user_devices (
   connection_id VARCHAR(64) NOT NULL,
-  user_id CHAR(36) NOT NULL,
+  user_id BINARY(16) NOT NULL,
   device_id VARCHAR(64) NOT NULL,
   data_json JSON NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -501,7 +486,7 @@ Este modelo foi desenhado para equilibrar compatibilidade com o Baileys, consult
 
 - `connection_id` em todas as tabelas permite multi-instancias e isolamento de dados sem criar schemas separados.
 - `users` + `user_identifiers` centraliza identidade. PN, LID, JID e username viram caminhos para o mesmo `user_id`, evitando duplicidade e melhorando joins.
-- O `user_id` e um UUID (CHAR(36)) gerado pelo sistema, o que reduz previsibilidade e facilita integracao entre fontes externas.
+- O `user_id` e um UUID em `BINARY(16)` gerado pelo sistema, reduzindo tamanho de indice e custo de IO (use `UUID_TO_BIN` e `BIN_TO_UUID`).
 - Colunas padronizadas de autoria (`actor_user_id` e `target_user_id`) ligam usuarios a eventos e acoes, facilitando auditoria e rankings.
 - Colunas derivadas (`display_name`, `content_type`, `text_preview`, `timestamp`) aceleram consultas sem precisar abrir JSON em toda leitura.
 - JSON (`data_json`) preserva estrutura original do Baileys e garante compatibilidade com mudancas futuras sem migracoes frequentes.
@@ -511,3 +496,4 @@ Este modelo foi desenhado para equilibrar compatibilidade com o Baileys, consult
 - `message_media` e `message_text_index` viabilizam reuso de midia e busca textual sem varrer o payload completo.
 - `auth_creds` e `signal_keys` separados permitem persistencia correta do estado criptografico sem misturar com dados de negocio.
 - A estrutura e preparada para cache quente em Redis e persistencia fria em MySQL, mantendo consistencia e performance.
+- Para alta escala, as tabelas de eventos podem ficar sem FKs de usuario/mensagem (consistencia eventual) e o volume de `messages` pode ser particionado por data ou por `connection_id`.
