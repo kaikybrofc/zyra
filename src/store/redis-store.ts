@@ -8,11 +8,12 @@ import {
 } from '@whiskeysockets/baileys'
 import { config } from '../config/index.js'
 import { getRedisClient } from '../core/redis/client.js'
+import { getRedisNamespace } from '../core/redis/prefix.js'
 
 const serialize = (value: unknown) => JSON.stringify(value, BufferJSON.replacer)
 const deserialize = <T>(value: string) => JSON.parse(value, BufferJSON.reviver) as T
 
-const storePrefix = `${config.redisPrefix ?? 'zyra:conexao'}:store`
+const storePrefix = `${getRedisNamespace()}:store`
 const storeKeys = {
   messages: `${storePrefix}:messages`,
   groups: `${storePrefix}:groups`,

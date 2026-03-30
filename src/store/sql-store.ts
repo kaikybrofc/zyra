@@ -7,12 +7,20 @@ import {
   type WAMessage,
   type proto,
 } from '@whiskeysockets/baileys'
+import type { RowDataPacket } from 'mysql2/promise'
 import { config } from '../config/index.js'
+import { ensureMysqlConnection } from '../core/db/connection.js'
 import { getMysqlPool } from '../core/db/mysql.js'
 import { getMessageText, getNormalizedMessage } from '../utils/message.js'
 
 const serialize = (value: unknown) => JSON.stringify(value, BufferJSON.replacer)
-const deserialize = <T>(value: string) => JSON.parse(value, BufferJSON.reviver) as T
+const deserialize = <T>(value: unknown) => {
+  if (value === null || value === undefined) return null as T
+  if (typeof value === 'string') {
+    return JSON.parse(value, BufferJSON.reviver) as T
+  }
+  return JSON.parse(JSON.stringify(value), BufferJSON.reviver) as T
+}
 
 const toNumber = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -40,7 +48,9 @@ const extractForwardedFlag = (
   if (!content || !type) return null
   const inner = content[type]
   if (!inner || typeof inner !== 'object') return null
-  const contextInfo = (inner as { contextInfo?: proto.Message.IContextInfo }).contextInfo
+  const contextInfo = (
+    inner as { contextInfo?: { isForwarded?: boolean; forwardingScore?: number } }
+  ).contextInfo
   if (!contextInfo) return null
   if (typeof contextInfo.isForwarded === 'boolean') return contextInfo.isForwarded
   if (typeof contextInfo.forwardingScore === 'number') {
@@ -115,18 +125,22 @@ export function createSqlStore(): SqlStore {
 
   const safe = async <T>(
     fn: (pool: NonNullable<ReturnType<typeof getMysqlPool>>) => Promise<T>,
-    fallback: T
+    fallback: T,
+    options?: { ensureConnection?: boolean }
   ): Promise<T> => {
     try {
       const pool = getMysqlPool()
       if (!pool) return fallback
+      if (options?.ensureConnection) {
+        await ensureMysqlConnection(pool)
+      }
       return await fn(pool)
     } catch {
       return fallback
     }
   }
 
-  const connectionId = config.connectionId
+  const connectionId = config.connectionId ?? 'default'
 
   return {
     enabled: true,
@@ -134,9 +148,8 @@ export function createSqlStore(): SqlStore {
       safe(async (pool) => {
         const parsed = parseMessageKey(key)
         if (!parsed) return undefined
-        const [rows] = await pool.execute<
-          Array<{ data_json: string }>
-        >(
+        type MessageRow = RowDataPacket & { data_json: unknown }
+        const [rows] = await pool.execute<MessageRow[]>(
           `SELECT data_json
            FROM messages
            WHERE connection_id = ?
@@ -211,7 +224,7 @@ export function createSqlStore(): SqlStore {
             payload,
           ]
         )
-      }, undefined),
+      }, undefined, { ensureConnection: true }),
     deleteMessage: async (chatJid, messageId, fromMe) =>
       safe(async (pool) => {
         await pool.execute(
@@ -223,7 +236,7 @@ export function createSqlStore(): SqlStore {
              AND from_me = ?`,
           [connectionId, chatJid, messageId, fromMe ? 1 : 0]
         )
-      }, undefined),
+      }, undefined, { ensureConnection: true }),
     deleteMessagesByJid: async (jid) =>
       safe(async (pool) => {
         await pool.execute(
@@ -233,10 +246,11 @@ export function createSqlStore(): SqlStore {
              AND chat_jid = ?`,
           [connectionId, jid]
         )
-      }, undefined),
+      }, undefined, { ensureConnection: true }),
     getGroup: async (id) =>
       safe(async (pool) => {
-        const [rows] = await pool.execute<Array<{ data_json: string }>>(
+        type GroupRow = RowDataPacket & { data_json: unknown }
+        const [rows] = await pool.execute<GroupRow[]>(
           `SELECT data_json
            FROM groups
            WHERE connection_id = ?
@@ -279,23 +293,33 @@ export function createSqlStore(): SqlStore {
             payload,
           ]
         )
-      }, undefined),
+      }, undefined, { ensureConnection: true }),
     deleteGroup: async (id) =>
       safe(async (pool) => {
         await pool.execute(
           `DELETE FROM groups WHERE connection_id = ? AND jid = ?`,
           [connectionId, id]
         )
-      }, undefined),
+      }, undefined, { ensureConnection: true }),
     setChat: async (id, chat) =>
       safe(async (pool) => {
         const payload = serialize(chat)
-        const displayName = chat.name ?? (chat as { subject?: string }).subject ?? null
-        const lastMessageTs = toNumber((chat as { conversationTimestamp?: unknown }).conversationTimestamp)
-        const unreadCount =
-          typeof (chat as { unreadCount?: number }).unreadCount === 'number'
-            ? (chat as { unreadCount?: number }).unreadCount
-            : null
+        const displayName: string | null =
+          chat.name ?? (chat as { subject?: string | null }).subject ?? null
+        const lastMessageTs: number | null = toNumber(
+          (chat as { conversationTimestamp?: unknown }).conversationTimestamp
+        )
+        const rawUnreadCount = (chat as { unreadCount?: number }).unreadCount
+        const unreadCount: number | null =
+          typeof rawUnreadCount === 'number' ? rawUnreadCount : null
+        const values: Array<string | number | null> = [
+          connectionId,
+          id,
+          displayName,
+          lastMessageTs,
+          unreadCount,
+          payload,
+        ]
         await pool.execute(
           `INSERT INTO chats (
              connection_id,
@@ -312,9 +336,9 @@ export function createSqlStore(): SqlStore {
              unread_count = VALUES(unread_count),
              data_json = VALUES(data_json),
              deleted_at = NULL`,
-          [connectionId, id, displayName, lastMessageTs, unreadCount, payload]
+          values
         )
-      }, undefined),
+      }, undefined, { ensureConnection: true }),
     deleteChat: async (id) =>
       safe(async (pool) => {
         await pool.execute(
@@ -324,7 +348,7 @@ export function createSqlStore(): SqlStore {
              AND jid = ?`,
           [connectionId, id]
         )
-      }, undefined),
+      }, undefined, { ensureConnection: true }),
     setContact: async (id, contact) =>
       safe(async (pool) => {
         const payload = serialize(contact)
@@ -343,7 +367,7 @@ export function createSqlStore(): SqlStore {
              data_json = VALUES(data_json)`,
           [connectionId, id, displayName, payload]
         )
-      }, undefined),
+      }, undefined, { ensureConnection: true }),
     setLidMapping: async ({ lid, pn }) =>
       safe(async (pool) => {
         await pool.execute(
@@ -358,10 +382,11 @@ export function createSqlStore(): SqlStore {
              lid = VALUES(lid)`,
           [connectionId, pn, lid]
         )
-      }, undefined),
+      }, undefined, { ensureConnection: true }),
     getLidForPn: async (pn) =>
       safe(async (pool) => {
-        const [rows] = await pool.execute<Array<{ lid: string }>>(
+        type LidRow = RowDataPacket & { lid: string }
+        const [rows] = await pool.execute<LidRow[]>(
           `SELECT lid
            FROM lid_mappings
            WHERE connection_id = ?
@@ -374,7 +399,8 @@ export function createSqlStore(): SqlStore {
       }, null),
     getPnForLid: async (lid) =>
       safe(async (pool) => {
-        const [rows] = await pool.execute<Array<{ pn: string }>>(
+        type PnRow = RowDataPacket & { pn: string }
+        const [rows] = await pool.execute<PnRow[]>(
           `SELECT pn
            FROM lid_mappings
            WHERE connection_id = ?

@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { loadEnv } from '../../bootstrap/env.js'
 import { config } from '../../config/index.js'
+import { ensureMysqlConnection } from './connection.js'
 import { createLogger } from '../../observability/logger.js'
 import type { AppLogger } from '../../observability/logger.js'
 
@@ -90,6 +91,7 @@ export async function initMysqlSchema(logger?: AppLogger): Promise<void> {
     for (const statement of statements) {
       await pool.query(statement)
     }
+    await ensureMysqlConnection(pool)
     logger?.info('schema mysql verificado/criado', { tables: statements.length, database: dbName })
   } finally {
     await pool.end()

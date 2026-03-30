@@ -12,6 +12,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { config } from '../../config/index.js'
 import { getRedisClient } from '../redis/client.js'
+import { getLegacyRedisNamespace, getRedisNamespace } from '../redis/prefix.js'
 
 type RedisAuthState = {
   state: AuthenticationState
@@ -47,9 +48,13 @@ const writeData = async (folder: string, file: string, data: unknown): Promise<v
   await writeFile(filePath, serialize(data))
 }
 
-const redisKeyPrefix = config.redisPrefix ?? 'zyra:conexao'
+const redisKeyPrefix = getRedisNamespace()
+const legacyRedisKeyPrefix = getLegacyRedisNamespace()
 const redisCredsKey = `${redisKeyPrefix}:creds`
+const legacyRedisCredsKey = legacyRedisKeyPrefix ? `${legacyRedisKeyPrefix}:creds` : null
 const redisKeysKey = (type: string) => `${redisKeyPrefix}:keys:${type}`
+const legacyRedisKeysKey = (type: string) =>
+  legacyRedisKeyPrefix ? `${legacyRedisKeyPrefix}:keys:${type}` : null
 
 const normalizeKeyValue = <T extends keyof SignalDataTypeMap>(
   type: T,
@@ -71,9 +76,12 @@ export async function useRedisAuthState(): Promise<RedisAuthState> {
 
   const credsFromDisk = await readData<AuthenticationCreds>(config.authDir, 'creds.json')
   const credsFromRedisRaw = await client.get(redisCredsKey)
+  const credsFromLegacyRaw = legacyRedisCredsKey ? await client.get(legacyRedisCredsKey) : null
   const credsFromRedis = credsFromRedisRaw
     ? deserialize<AuthenticationCreds>(credsFromRedisRaw)
-    : null
+    : credsFromLegacyRaw
+      ? deserialize<AuthenticationCreds>(credsFromLegacyRaw)
+      : null
   const creds = credsFromDisk ?? credsFromRedis ?? initAuthCreds()
 
   if (credsFromDisk && !credsFromRedisRaw) {
@@ -87,6 +95,7 @@ export async function useRedisAuthState(): Promise<RedisAuthState> {
 
       const redisKey = redisKeysKey(type)
       const values = await client.hmGet(redisKey, ids)
+      const legacyRedisKey = legacyRedisKeysKey(type)
       const toWarm: Record<string, string> = {}
 
       await Promise.all(
@@ -99,6 +108,16 @@ export async function useRedisAuthState(): Promise<RedisAuthState> {
           if (raw) {
             value = deserialize<SignalDataTypeMap[typeof type]>(raw)
           } else {
+            if (legacyRedisKey) {
+              const legacyRaw = await client.hGet(legacyRedisKey, id)
+              if (legacyRaw) {
+                value = deserialize<SignalDataTypeMap[typeof type]>(legacyRaw)
+                toWarm[id] = legacyRaw
+              }
+            }
+          }
+
+          if (!value) {
             const diskValue = await readData<SignalDataTypeMap[typeof type]>(
               config.authDir,
               `${type}-${id}.json`
