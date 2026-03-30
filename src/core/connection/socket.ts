@@ -2,6 +2,7 @@ import makeWASocket, {
   Browsers,
   DEFAULT_CONNECTION_CONFIG,
   fetchLatestBaileysVersion,
+  type SignalRepositoryWithLIDStore,
 } from '@whiskeysockets/baileys'
 import type { AppLogger } from '../../observability/logger.js'
 import { createBaileysLogger } from '../../observability/baileys-logger.js'
@@ -11,15 +12,7 @@ import { getAuthState } from '../auth/state.js'
 const store = createBaileysStore()
 
 type SocketWithSignalRepository = {
-  signalRepository?: {
-    lidMapping?: {
-      storeLIDPNMappings: (pairs: { lid: string; pn: string }[]) => Promise<void>
-      getLIDForPN: (pn: string) => Promise<string | null>
-      getLIDsForPNs: (pns: string[]) => Promise<{ lid: string; pn: string }[] | null>
-      getPNForLID: (lid: string) => Promise<string | null>
-      getPNsForLIDs: (lids: string[]) => Promise<{ lid: string; pn: string }[] | null>
-    }
-  }
+  signalRepository?: SignalRepositoryWithLIDStore
 }
 
 async function resolveBaileysVersion(logger: AppLogger) {
