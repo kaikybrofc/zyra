@@ -1,4 +1,7 @@
 import process from 'node:process'
+import { config as loadDotEnv } from 'dotenv'
+
+loadDotEnv()
 
 function readBoolean(value: string | undefined, fallback: boolean): boolean {
   if (value === undefined) return fallback
@@ -11,4 +14,6 @@ export const config = {
   logLevel: process.env.LOG_LEVEL ?? 'info',
   redisUrl: process.env.WA_REDIS_URL,
   redisPrefix: process.env.WA_REDIS_PREFIX ?? 'zyra:conexao',
+  mysqlUrl: process.env.MYSQL_URL ?? process.env.WA_DB_URL,
+  connectionId: process.env.WA_CONNECTION_ID ?? 'default',
 }

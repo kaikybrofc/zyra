@@ -14,6 +14,7 @@ import {
 } from '@whiskeysockets/baileys'
 import { createCacheStore, createExtendedCacheStore } from './cache-store.js'
 import { createRedisStore } from './redis-store.js'
+import { createSqlStore } from './sql-store.js'
 
 type MessageContent = Exclude<WAMessage['message'], null | undefined>
 
@@ -90,6 +91,7 @@ type LidMappingFacade = {
 
 export function createBaileysStore(): BaileysStore {
   const redisStore = createRedisStore()
+  const sqlStore = createSqlStore()
   const chats = new Map<string, Chat>()
   const contacts = new Map<string, Contact>()
   const groups = new Map<string, GroupMetadata>()
@@ -116,6 +118,9 @@ export function createBaileysStore(): BaileysStore {
     if (redisStore.enabled) {
       void redisStore.setMessage(key, message)
     }
+    if (sqlStore.enabled) {
+      void sqlStore.setMessage(message)
+    }
   }
 
   const upsertLidMapping = ({ lid, pn }: LIDMapping) => {
@@ -124,6 +129,9 @@ export function createBaileysStore(): BaileysStore {
     lidToPn.set(lid, pn)
     if (redisStore.enabled) {
       void redisStore.setLidMapping({ lid, pn })
+    }
+    if (sqlStore.enabled) {
+      void sqlStore.setLidMapping({ lid, pn })
     }
   }
 
@@ -154,11 +162,17 @@ export function createBaileysStore(): BaileysStore {
         if (chat.id && redisStore.enabled) {
           void redisStore.setChat(chat.id, chat)
         }
+        if (chat.id && sqlStore.enabled) {
+          void sqlStore.setChat(chat.id, chat)
+        }
       }
       for (const contact of contactList) {
         mergeById(contacts, contact)
         if (contact.id && redisStore.enabled) {
           void redisStore.setContact(contact.id, contact)
+        }
+        if (contact.id && sqlStore.enabled) {
+          void sqlStore.setContact(contact.id, contact)
         }
       }
       for (const message of messageList) {
@@ -177,6 +191,9 @@ export function createBaileysStore(): BaileysStore {
         if (chat.id && redisStore.enabled) {
           void redisStore.setChat(chat.id, chat)
         }
+        if (chat.id && sqlStore.enabled) {
+          void sqlStore.setChat(chat.id, chat)
+        }
       }
     })
 
@@ -190,6 +207,9 @@ export function createBaileysStore(): BaileysStore {
         if (redisStore.enabled) {
           void redisStore.setChat(id, next)
         }
+        if (sqlStore.enabled) {
+          void sqlStore.setChat(id, next)
+        }
       }
     })
 
@@ -199,6 +219,9 @@ export function createBaileysStore(): BaileysStore {
         if (redisStore.enabled) {
           void redisStore.deleteChat(id)
         }
+        if (sqlStore.enabled) {
+          void sqlStore.deleteChat(id)
+        }
       }
     })
 
@@ -207,6 +230,9 @@ export function createBaileysStore(): BaileysStore {
         mergeById(contacts, contact)
         if (contact.id && redisStore.enabled) {
           void redisStore.setContact(contact.id, contact)
+        }
+        if (contact.id && sqlStore.enabled) {
+          void sqlStore.setContact(contact.id, contact)
         }
       }
     })
@@ -221,6 +247,9 @@ export function createBaileysStore(): BaileysStore {
         if (redisStore.enabled) {
           void redisStore.setContact(id, next)
         }
+        if (sqlStore.enabled) {
+          void sqlStore.setContact(id, next)
+        }
       }
     })
 
@@ -229,6 +258,9 @@ export function createBaileysStore(): BaileysStore {
         mergeById(groups, group)
         if (group.id && redisStore.enabled) {
           void redisStore.setGroup(group.id, group)
+        }
+        if (group.id && sqlStore.enabled) {
+          void sqlStore.setGroup(group.id, group)
         }
         upsertGroupLidMappings(group)
       }
@@ -244,6 +276,9 @@ export function createBaileysStore(): BaileysStore {
         groups.set(id, next)
         if (redisStore.enabled) {
           void redisStore.setGroup(id, next)
+        }
+        if (sqlStore.enabled) {
+          void sqlStore.setGroup(id, next)
         }
         upsertGroupLidMappings(update)
       }
@@ -287,6 +322,9 @@ export function createBaileysStore(): BaileysStore {
       if (redisStore.enabled) {
         void redisStore.setGroup(id, nextGroup)
       }
+      if (sqlStore.enabled) {
+        void sqlStore.setGroup(id, nextGroup)
+      }
     })
 
     ev.on('messages.upsert', ({ messages: messageList }) => {
@@ -304,6 +342,9 @@ export function createBaileysStore(): BaileysStore {
         if (redisStore.enabled) {
           void redisStore.setMessage(messageKey, merged)
         }
+        if (sqlStore.enabled) {
+          void sqlStore.setMessage(merged)
+        }
       }
     })
 
@@ -317,6 +358,9 @@ export function createBaileysStore(): BaileysStore {
         if (redisStore.enabled) {
           void redisStore.deleteMessagesByJid(item.jid)
         }
+        if (sqlStore.enabled) {
+          void sqlStore.deleteMessagesByJid(item.jid)
+        }
         return
       }
       if ('keys' in item) {
@@ -325,6 +369,11 @@ export function createBaileysStore(): BaileysStore {
           messages.delete(messageKey)
           if (redisStore.enabled) {
             void redisStore.deleteMessage(messageKey)
+          }
+          if (sqlStore.enabled) {
+            if (key.remoteJid && key.id) {
+              void sqlStore.deleteMessage(key.remoteJid, key.id, Boolean(key.fromMe))
+            }
           }
         }
       }
@@ -345,6 +394,13 @@ export function createBaileysStore(): BaileysStore {
         messages.set(messageKey, stored)
       }
     }
+    if (!message && sqlStore.enabled) {
+      const stored = await sqlStore.getMessage(messageKey)
+      if (stored) {
+        message = stored
+        messages.set(messageKey, stored)
+      }
+    }
     const content = message?.message
     return content === null ? undefined : content
   }
@@ -353,6 +409,13 @@ export function createBaileysStore(): BaileysStore {
     let group = groups.get(jid)
     if (!group && redisStore.enabled) {
       const stored = await redisStore.getGroup(jid)
+      if (stored) {
+        group = stored
+        groups.set(jid, stored)
+      }
+    }
+    if (!group && sqlStore.enabled) {
+      const stored = await sqlStore.getGroup(jid)
       if (stored) {
         group = stored
         groups.set(jid, stored)
@@ -388,6 +451,14 @@ export function createBaileysStore(): BaileysStore {
           return stored
         }
       }
+      if (sqlStore.enabled) {
+        const stored = await sqlStore.getLidForPn(pn)
+        if (stored) {
+          pnToLid.set(pn, stored)
+          lidToPn.set(stored, pn)
+          return stored
+        }
+      }
       return null
     },
     getLidsForPns: async (pns) => {
@@ -399,6 +470,14 @@ export function createBaileysStore(): BaileysStore {
         let lid = pnToLid.get(pn)
         if (!lid && redisStore.enabled) {
           const stored = await redisStore.getLidForPn(pn)
+          if (stored) {
+            lid = stored
+            pnToLid.set(pn, stored)
+            lidToPn.set(stored, pn)
+          }
+        }
+        if (!lid && sqlStore.enabled) {
+          const stored = await sqlStore.getLidForPn(pn)
           if (stored) {
             lid = stored
             pnToLid.set(pn, stored)
@@ -425,6 +504,14 @@ export function createBaileysStore(): BaileysStore {
           return stored
         }
       }
+      if (sqlStore.enabled) {
+        const stored = await sqlStore.getPnForLid(lid)
+        if (stored) {
+          lidToPn.set(lid, stored)
+          pnToLid.set(stored, lid)
+          return stored
+        }
+      }
       return null
     },
     getPnsForLids: async (lids) => {
@@ -436,6 +523,14 @@ export function createBaileysStore(): BaileysStore {
         let pn = lidToPn.get(lid)
         if (!pn && redisStore.enabled) {
           const stored = await redisStore.getPnForLid(lid)
+          if (stored) {
+            pn = stored
+            lidToPn.set(lid, stored)
+            pnToLid.set(stored, lid)
+          }
+        }
+        if (!pn && sqlStore.enabled) {
+          const stored = await sqlStore.getPnForLid(lid)
           if (stored) {
             pn = stored
             lidToPn.set(lid, stored)

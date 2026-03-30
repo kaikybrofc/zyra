@@ -7,6 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "db:init": "tsx src/core/db/init.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
@@ -16,6 +17,7 @@
     "@kaikybrofc/logger-module": "^1.0.4",
     "@whiskeysockets/baileys": "github:WhiskeySockets/Baileys",
     "dotenv": "^16.4.5",
+    "mysql2": "^3.20.0",
     "qrcode-terminal": "^0.12.0",
     "redis": "^4.6.13"
   },
