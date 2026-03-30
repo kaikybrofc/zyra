@@ -1,4 +1,4 @@
-import { DisconnectReason, type BaileysEventMap, type WASocket } from '@whiskeysockets/baileys'
+import { DisconnectReason, type BaileysEventMap, type GroupMetadata, type WASocket } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import qrcode from 'qrcode-terminal'
 import type { AppLogger } from '../observability/logger.js'
@@ -59,7 +59,7 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
     logger.debug('evento do Baileys recebido', { event, ...meta })
   }
 
-  const syncGroupsOnConnect = async () => {
+  const syncGroupsOnConnect = async (): Promise<GroupMetadata[]> => {
     try {
       logger.info('sincronizando grupos da conta')
       const groupMap = await sock.groupFetchAllParticipating()
@@ -70,8 +70,38 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
       } else {
         logger.info('nenhum grupo encontrado para sincronizar')
       }
+      return groups
     } catch (error) {
       logger.warn('falha ao sincronizar grupos', { err: error })
+      return []
+    }
+  }
+
+  const syncCommunitiesOnConnect = async (groupsSnapshot: GroupMetadata[]) => {
+    try {
+      logger.info('sincronizando comunidades da conta')
+      const communityMap = await sock.communityFetchAllParticipating()
+      const communities = Object.values(communityMap)
+      if (communities.length) {
+        logger.info('comunidades sincronizadas', { count: communities.length })
+      } else {
+        const communityGroups = groupsSnapshot.filter((group) => group.isCommunity)
+        const linkedParents = new Set(
+          groupsSnapshot
+            .map((group) => group.linkedParent)
+            .filter((jid): jid is string => Boolean(jid))
+        )
+        if (communityGroups.length || linkedParents.size) {
+          logger.info('comunidades detectadas via grupos', {
+            communities: communityGroups.length,
+            linkedParents: linkedParents.size,
+          })
+        } else {
+          logger.info('nenhuma comunidade encontrada para sincronizar')
+        }
+      }
+    } catch (error) {
+      logger.warn('falha ao sincronizar comunidades', { err: error })
     }
   }
 
@@ -102,7 +132,10 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
         }
       } else if (connection === 'open') {
         logger.info('conexão aberta')
-        void syncGroupsOnConnect()
+        void (async () => {
+          const groupsSnapshot = await syncGroupsOnConnect()
+          await syncCommunitiesOnConnect(groupsSnapshot)
+        })()
       }
     },
     'creds.update': () => {
