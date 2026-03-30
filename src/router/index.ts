@@ -1,13 +1,7 @@
-import {
-  extractMessageContent,
-  getContentType,
-  normalizeMessageContent,
-  type WASocket,
-  type proto,
-} from '@whiskeysockets/baileys'
+import { type WASocket, type proto } from '@whiskeysockets/baileys'
 import type { AppLogger } from '../observability/logger.js'
 import { commands } from '../commands/index.js'
-import { getMessageText } from '../utils/message.js'
+import { getMessageText, getNormalizedMessage } from '../utils/message.js'
 
 const COMMAND_PREFIX = '!'
 const ANSI_RESET = '\x1b[0m'
@@ -64,8 +58,7 @@ const processIncomingMessage = async (
   context: IncomingMessageContext,
   logger: AppLogger
 ): Promise<void> => {
-  const normalized = extractMessageContent(normalizeMessageContent(context.message.message))
-  const messageType = normalized ? getContentType(normalized) : null
+  const { type: messageType } = getNormalizedMessage(context.message)
   const mediaTypes = new Set([
     'imageMessage',
     'videoMessage',

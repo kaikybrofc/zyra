@@ -1,11 +1,19 @@
 import { extractMessageContent, getContentType, normalizeMessageContent, proto } from '@whiskeysockets/baileys'
 
-export function getMessageText(message: proto.IWebMessageInfo): string | null {
-  const normalized = extractMessageContent(normalizeMessageContent(message.message))
-  if (!normalized) return null
+type NormalizedMessage = {
+  content: proto.IMessage | undefined
+  type: keyof proto.IMessage | null
+}
 
-  const contentType = getContentType(normalized)
-  if (!contentType) return null
+export const getNormalizedMessage = (message: proto.IWebMessageInfo): NormalizedMessage => {
+  const content = extractMessageContent(normalizeMessageContent(message.message))
+  const type = content ? getContentType(content) ?? null : null
+  return { content, type }
+}
+
+export function getMessageText(message: proto.IWebMessageInfo): string | null {
+  const { content: normalized, type: contentType } = getNormalizedMessage(message)
+  if (!normalized || !contentType) return null
 
   const pickText = (...values: Array<unknown>): string | null => {
     for (const value of values) {
