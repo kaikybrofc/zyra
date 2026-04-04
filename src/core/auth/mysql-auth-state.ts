@@ -83,6 +83,9 @@ const buildRedisKeys = () => {
   }
 }
 
+/**
+ * Cria estado de autenticacao persistido no MySQL.
+ */
 export async function useMysqlAuthState(): Promise<MysqlAuthState> {
   const pool = getMysqlPool()
   if (!pool) {

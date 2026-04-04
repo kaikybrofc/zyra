@@ -4,6 +4,9 @@ import { config } from '../../config/index.js'
 let redisClient: RedisClientType | null = null
 let redisReady: Promise<void> | null = null
 
+/**
+ * Retorna um cliente Redis singleton pronto para uso.
+ */
 export async function getRedisClient(): Promise<RedisClientType> {
   if (!config.redisUrl) {
     throw new Error('WA_REDIS_URL nao configurada')

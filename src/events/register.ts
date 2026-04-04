@@ -57,6 +57,9 @@ type EventHandler<K extends keyof BaileysEventMap> = (
 
 let restartedAfterNewLogin = false
 
+/**
+ * Registra os listeners de eventos do Baileys e integra persistencia/logs.
+ */
 export function registerEvents({ sock, logger, reconnect }: RegisterOptions): void {
   const sqlStore = createSqlStore()
   type EventContext = {

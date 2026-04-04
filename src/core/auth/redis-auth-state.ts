@@ -70,6 +70,9 @@ const normalizeKeyValue = <T extends keyof SignalDataTypeMap>(
   return value
 }
 
+/**
+ * Cria estado de autenticacao persistido no Redis.
+ */
 export async function useRedisAuthState(): Promise<RedisAuthState> {
   await ensureAuthFolder(config.authDir)
   const client = await getRedisClient()

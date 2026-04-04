@@ -26,6 +26,9 @@ function ensureTrace(logger: LoggerInstancia): AppLogger {
   return typedLogger as AppLogger
 }
 
+/**
+ * Cria a instancia de logger padrao da aplicacao.
+ */
 export function createLogger(): AppLogger {
   const logDir = path.resolve(process.cwd(), 'logs')
   mkdirSync(logDir, { recursive: true })

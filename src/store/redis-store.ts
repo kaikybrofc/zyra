@@ -40,6 +40,9 @@ export type RedisStore = {
   getPnForLid: (lid: string) => Promise<string | null>
 }
 
+/**
+ * Cria a store Redis para chats, grupos, contatos e mensagens.
+ */
 export function createRedisStore(): RedisStore {
   if (!config.redisUrl) {
     return {

@@ -60,6 +60,9 @@ const buildServerConfig = (urlValue: string) => {
   }
 }
 
+/**
+ * Cria o schema do MySQL (se necessario) usando o modelo em docs/exemplodbmodel.md.
+ */
 export async function initMysqlSchema(logger?: AppLogger): Promise<void> {
   if (!config.mysqlUrl) return
 

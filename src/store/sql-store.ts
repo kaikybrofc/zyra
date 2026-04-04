@@ -207,6 +207,9 @@ export type SqlStore = {
   }) => Promise<void>
 }
 
+/**
+ * Cria a store SQL usada para persistir eventos, mensagens e metadados.
+ */
 export function createSqlStore(): SqlStore {
   let selfJid: string | null = null
   if (!config.mysqlUrl) {

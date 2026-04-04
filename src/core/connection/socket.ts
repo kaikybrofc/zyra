@@ -41,6 +41,9 @@ async function resolveBaileysVersion(logger: AppLogger) {
   }
 }
 
+/**
+ * Cria o socket do Baileys com stores, logger e politicas de sync.
+ */
 export async function createSocket(logger: AppLogger) {
   const { state, saveCreds } = await getAuthState()
   const version = await resolveBaileysVersion(logger)

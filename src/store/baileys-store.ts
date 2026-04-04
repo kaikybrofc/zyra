@@ -90,6 +90,9 @@ type LidMappingFacade = {
   getPnsForLids: (lids: string[]) => Promise<LIDMapping[] | null>
 }
 
+/**
+ * Cria a store do Baileys com caches e persistencia opcional.
+ */
 export function createBaileysStore(): BaileysStore {
   const redisStore = createRedisStore()
   const sqlStore = createSqlStore()

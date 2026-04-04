@@ -8,6 +8,9 @@ function readBoolean(value: string | undefined, fallback: boolean): boolean {
   return value.toLowerCase() !== 'false'
 }
 
+/**
+ * Configuracoes da aplicacao derivadas das variaveis de ambiente.
+ */
 export const config = {
   authDir: process.env.WA_AUTH_DIR ?? 'data/auth',
   printQRInTerminal: readBoolean(process.env.WA_PRINT_QR, true),

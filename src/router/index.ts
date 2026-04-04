@@ -151,6 +151,9 @@ const handleCommand = async (context: IncomingMessageContext, logger: AppLogger)
   }
 }
 
+/**
+ * Processa mensagens recebidas e executa comandos quando aplicavel.
+ */
 export async function handleIncomingMessages(
   sock: WASocket,
   messages: proto.IWebMessageInfo[],

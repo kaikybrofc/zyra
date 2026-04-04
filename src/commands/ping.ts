@@ -1,5 +1,8 @@
 import type { Command } from './types.js'
 
+/**
+ * Comando simples para validar se o bot esta respondendo.
+ */
 export const pingCommand: Command = {
   name: 'ping',
   description: 'Responde pong para verificar se o bot está ativo',

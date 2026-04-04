@@ -4,6 +4,9 @@ import { config } from '../../config/index.js'
 let ensuring: Promise<void> | null = null
 let ensured = false
 
+/**
+ * Garante o registro da conexao na tabela `connections` do MySQL.
+ */
 export async function ensureMysqlConnection(pool: Pool): Promise<void> {
   if (ensured) return
   if (!ensuring) {

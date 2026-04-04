@@ -126,6 +126,9 @@ const createRedisExtendedCacheStore = (
   }
 }
 
+/**
+ * Cria um cache simples (Redis ou memoria) com TTL.
+ */
 export const createCacheStore = (name: string, ttlSeconds: number): CacheStore => {
   const prefix = `${config.redisPrefix ?? 'zyra:conexao'}:cache:${name}`
   if (config.redisUrl) {
@@ -134,6 +137,9 @@ export const createCacheStore = (name: string, ttlSeconds: number): CacheStore =
   return createMemoryCacheStore(ttlSeconds)
 }
 
+/**
+ * Cria um cache estendido (Redis ou memoria) com TTL e operacoes em lote.
+ */
 export const createExtendedCacheStore = (
   name: string,
   ttlSeconds: number

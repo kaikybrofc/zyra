@@ -1,5 +1,8 @@
 import { config } from '../../config/index.js'
 
+/**
+ * Monta o namespace Redis baseado no prefixo e connection_id.
+ */
 export const getRedisNamespace = (): string => {
   const base = config.redisPrefix ?? 'zyra:conexao'
   const connectionId = config.connectionId
@@ -9,6 +12,9 @@ export const getRedisNamespace = (): string => {
   return base
 }
 
+/**
+ * Retorna o namespace legado (sem connection_id) quando aplicavel.
+ */
 export const getLegacyRedisNamespace = (): string | null => {
   const base = config.redisPrefix ?? 'zyra:conexao'
   const namespaced = getRedisNamespace()

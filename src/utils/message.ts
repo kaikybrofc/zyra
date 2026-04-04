@@ -5,12 +5,18 @@ type NormalizedMessage = {
   type: keyof proto.IMessage | null
 }
 
+/**
+ * Normaliza o payload da mensagem e identifica o tipo principal.
+ */
 export const getNormalizedMessage = (message: proto.IWebMessageInfo): NormalizedMessage => {
   const content = extractMessageContent(normalizeMessageContent(message.message))
   const type = content ? getContentType(content) ?? null : null
   return { content, type }
 }
 
+/**
+ * Extrai o texto mais relevante de uma mensagem do WhatsApp.
+ */
 export function getMessageText(message: proto.IWebMessageInfo): string | null {
   const { content: normalized, type: contentType } = getNormalizedMessage(message)
   if (!normalized || !contentType) return null
