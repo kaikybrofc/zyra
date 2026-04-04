@@ -19,6 +19,10 @@ Novidades incluídas nesta release:
 - `.codex` adicionado ao `.gitignore`.
 - Dependências atualizadas via `npm update`.
 
+## Modelo do banco
+
+Veja o modelo completo em [`docs/exemplodbmodel.md`](docs/exemplodbmodel.md).
+
 ## Requisitos
 
 - Node.js LTS (>=20)
