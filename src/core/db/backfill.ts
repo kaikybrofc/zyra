@@ -19,13 +19,19 @@ loadEnv()
 const logger = createLogger()
 const LOG_SAMPLE_LIMIT = Number(process.env.WA_BACKFILL_LOG_SAMPLE ?? 20)
 
-const BATCH_SIZE = 500
+const BATCH_SIZE = Number(process.env.WA_BACKFILL_BATCH_SIZE ?? 500)
+const GROUP_LOG_EVERY = Number(process.env.WA_BACKFILL_GROUP_LOG_EVERY ?? 25)
+const PARTICIPANT_LOG_EVERY = Number(process.env.WA_BACKFILL_PARTICIPANT_LOG_EVERY ?? 200)
+const MESSAGE_LOG_EVERY = Number(process.env.WA_BACKFILL_MESSAGE_LOG_EVERY ?? 1000)
 
 const logAffected = (label: string, result: ResultSetHeader) => {
   if (result.affectedRows) {
     logger.info('backfill atualizado', { item: label, affected: result.affectedRows })
   }
 }
+
+const shouldLogProgress = (every: number, count: number) =>
+  Number.isFinite(every) && every > 0 && count % every === 0
 
 const serialize = (value: unknown) => JSON.stringify(value, BufferJSON.replacer)
 const deserialize = <T>(value: unknown) => {
@@ -108,6 +114,17 @@ const normalizeIdentifier = (value: string | null | undefined): string | null =>
   return trimmed.length ? trimmed : null
 }
 
+const userIdCache = new Map<string, string>()
+const cacheKey = (type: string, value: string) => `${type}:${value}`
+const cacheUserId = (
+  userId: string,
+  identifiers: Array<{ type: string; value: string }>
+) => {
+  for (const ident of identifiers) {
+    userIdCache.set(cacheKey(ident.type, ident.value), userId)
+  }
+}
+
 async function main() {
   if (!config.mysqlUrl) {
     logger.error('MYSQL_URL nao configurada')
@@ -162,38 +179,70 @@ async function main() {
       )
     if (!clean.length) return null
 
-    type UserRow = RowDataPacket & { user_id: string }
-    for (const entry of clean) {
-      const [rows] = await pool.execute<UserRow[]>(
-        `SELECT BIN_TO_UUID(user_id, 1) AS user_id
-         FROM user_identifiers
-         WHERE connection_id = ?
-           AND id_type = ?
-           AND id_value = ?
-         LIMIT 1`,
-        [connectionId, entry.type, entry.value]
-      )
-      const existing = rows[0]?.user_id
-      if (existing) {
-        if (displayName) {
-          await pool.execute(
-            `UPDATE users
-             SET display_name = ?
-             WHERE connection_id = ?
-               AND id = UUID_TO_BIN(?, 1)`,
-            [displayName, connectionId, existing]
-          )
-        }
-        for (const ident of clean) {
-          await pool.execute(
-            `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
-             VALUES (?, UUID_TO_BIN(?, 1), ?, ?)
-             ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
-            [connectionId, existing, ident.type, ident.value]
-          )
-        }
-        return existing
+    const cachedUserId =
+      clean
+        .map((entry) => userIdCache.get(cacheKey(entry.type, entry.value)))
+        .find((value): value is string => Boolean(value)) ?? null
+
+    if (cachedUserId) {
+      if (displayName) {
+        await pool.execute(
+          `UPDATE users
+           SET display_name = ?
+           WHERE connection_id = ?
+             AND id = UUID_TO_BIN(?, 1)`,
+          [displayName, connectionId, cachedUserId]
+        )
       }
+      for (const ident of clean) {
+        await pool.execute(
+          `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
+           VALUES (?, UUID_TO_BIN(?, 1), ?, ?)
+           ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
+          [connectionId, cachedUserId, ident.type, ident.value]
+        )
+      }
+      cacheUserId(cachedUserId, clean)
+      return cachedUserId
+    }
+
+    type UserRow = RowDataPacket & { user_id: string; id_type: string; id_value: string }
+    const whereClauses = clean.map(() => `(id_type = ? AND id_value = ?)`).join(' OR ')
+    const whereParams = clean.flatMap((entry) => [entry.type, entry.value])
+    const [rows] = await pool.execute<UserRow[]>(
+      `SELECT BIN_TO_UUID(user_id, 1) AS user_id, id_type, id_value
+       FROM user_identifiers
+       WHERE connection_id = ?
+         AND (${whereClauses})`,
+      [connectionId, ...whereParams]
+    )
+    const existing = rows[0]?.user_id
+    if (existing) {
+      if (displayName) {
+        await pool.execute(
+          `UPDATE users
+           SET display_name = ?
+           WHERE connection_id = ?
+             AND id = UUID_TO_BIN(?, 1)`,
+          [displayName, connectionId, existing]
+        )
+      }
+      for (const ident of clean) {
+        await pool.execute(
+          `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
+           VALUES (?, UUID_TO_BIN(?, 1), ?, ?)
+           ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
+          [connectionId, existing, ident.type, ident.value]
+        )
+      }
+      if (rows.length) {
+        cacheUserId(
+          existing,
+          rows.map((row) => ({ type: row.id_type, value: row.id_value }))
+        )
+      }
+      cacheUserId(existing, clean)
+      return existing
     }
 
     const userId = randomUUID()
@@ -210,6 +259,7 @@ async function main() {
         [connectionId, userId, ident.type, ident.value]
       )
     }
+    cacheUserId(userId, clean)
     return userId
   }
 
@@ -260,7 +310,10 @@ async function main() {
     `SELECT jid, data_json FROM \`groups\` WHERE connection_id = ?`,
     [connectionId]
   )
+  let groupIndex = 0
+  let participantsProcessed = 0
   for (const row of groupRows) {
+    groupIndex += 1
     const group = deserialize<GroupMetadata>(row.data_json)
     const ownerCandidates: Array<{ type: UserIdentifierType; value: string }> = []
     if (group?.owner) ownerCandidates.push({ type: 'jid', value: group.owner })
@@ -349,7 +402,17 @@ async function main() {
           ]
         )
         await setChatUser(row.jid, jid, role)
+        participantsProcessed += 1
+        if (shouldLogProgress(PARTICIPANT_LOG_EVERY, participantsProcessed)) {
+          logger.info('backfill participantes progresso', {
+            processed: participantsProcessed,
+            totalGroups: groupRows.length,
+          })
+        }
       }
+    }
+    if (shouldLogProgress(GROUP_LOG_EVERY, groupIndex)) {
+      logger.info('backfill grupos progresso', { processed: groupIndex, total: groupRows.length })
     }
   }
 
@@ -530,6 +593,7 @@ async function main() {
   let lastId = 0
   let senderUserUpdated = 0
   let senderUserLogged = 0
+  let messagesProcessed = 0
   while (true) {
     type MessageRow = RowDataPacket & {
       id: number
@@ -551,6 +615,7 @@ async function main() {
 
     for (const row of rows) {
       lastId = row.id
+      messagesProcessed += 1
       const message = deserialize<WAMessage>(row.data_json)
       if (!message?.key) continue
 
@@ -688,6 +753,13 @@ async function main() {
            VALUES (?, ?, UUID_TO_BIN(?, 1), 'participant')`,
           [connectionId, row.id, userId]
         )
+      }
+
+      if (shouldLogProgress(MESSAGE_LOG_EVERY, messagesProcessed)) {
+        logger.info('backfill mensagens progresso', {
+          processed: messagesProcessed,
+          lastId,
+        })
       }
     }
 
