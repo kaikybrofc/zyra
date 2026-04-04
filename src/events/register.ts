@@ -55,6 +55,8 @@ type EventHandler<K extends keyof BaileysEventMap> = (
   data: BaileysEventMap[K]
 ) => void | Promise<void>
 
+let restartedAfterNewLogin = false
+
 export function registerEvents({ sock, logger, reconnect }: RegisterOptions): void {
   const sqlStore = createSqlStore()
   type EventContext = {
@@ -173,14 +175,22 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
       if (connection === 'close') {
         const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut
+        const restartRequired = statusCode === DisconnectReason.restartRequired
 
-        logger.warn('conexão encerrada', { statusCode })
+        logger.warn('conexão encerrada', { statusCode, restartRequired })
 
         if (shouldReconnect) {
           void reconnect()
         }
       } else if (connection === 'open') {
         logger.info('conexão aberta')
+        if (isNewLogin && !restartedAfterNewLogin) {
+          restartedAfterNewLogin = true
+          logger.warn('novo login detectado, reiniciando conexão para estabilizar')
+          setTimeout(() => {
+            void sock.end(new Error('Restart after new login'))
+          }, 1500)
+        }
         void (async () => {
           if (sqlStore.enabled) {
             void sqlStore.recordBotSession({
