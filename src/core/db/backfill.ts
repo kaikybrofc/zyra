@@ -629,14 +629,14 @@ async function main() {
       from_me: number
       data_json: unknown
     }
-    const [rows] = await pool.execute<MessageRow[]>(
+    const [rows] = await pool.query<MessageRow[]>(
       `SELECT id, chat_jid, message_id, from_me, data_json
        FROM messages
        WHERE connection_id = ?
          AND id > ?
        ORDER BY id ASC
-       LIMIT ?`,
-      [connectionId, lastId, BATCH_SIZE]
+       LIMIT ${BATCH_SIZE}`,
+      [connectionId, lastId]
     )
     if (!rows.length) break
 
