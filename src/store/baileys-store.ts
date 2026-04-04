@@ -260,13 +260,23 @@ export function createBaileysStore(): BaileysStore {
     })
 
     ev.on('groups.upsert', (groupList) => {
+      const idsPreview = groupList
+        .slice(0, 3)
+        .map((group) => group.id ?? '')
+        .filter(Boolean)
+      console.log(
+        '[groups.upsert]',
+        { count: groupList.length, idsPreview, hasId: groupList.some((g) => Boolean(g.id)) }
+      )
       for (const group of groupList) {
         mergeById(groups, group)
         if (group.id && redisStore.enabled) {
           void redisStore.setGroup(group.id, group)
         }
         if (group.id && sqlStore.enabled) {
-          void sqlStore.setGroup(group.id, group)
+          void sqlStore.setGroup(group.id, group).catch((error) => {
+            console.error('[groups.upsert] falha ao salvar grupo no SQL', error)
+          })
           if (group.participants?.length) {
             void sqlStore.setGroupParticipants(group.id, group.participants, { replace: true })
             for (const participant of group.participants) {

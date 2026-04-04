@@ -68,7 +68,16 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
         sock.ev.emit('groups.upsert', groups)
         logger.info('grupos sincronizados', { count: groups.length })
       } else {
-        logger.info('nenhum grupo encontrado para sincronizar')
+        logger.info('nenhum grupo encontrado para sincronizar, tentando novamente em 5s')
+        await new Promise((resolve) => setTimeout(resolve, 5000))
+        const retryMap = await sock.groupFetchAllParticipating()
+        const retryGroups = Object.values(retryMap)
+        if (retryGroups.length) {
+          sock.ev.emit('groups.upsert', retryGroups)
+          logger.info('grupos sincronizados (retry)', { count: retryGroups.length })
+          return retryGroups
+        }
+        logger.info('nenhum grupo encontrado para sincronizar (retry)')
       }
       return groups
     } catch (error) {

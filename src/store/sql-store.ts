@@ -632,7 +632,7 @@ export function createSqlStore(): SqlStore {
         type GroupRow = RowDataPacket & { data_json: unknown }
         const [rows] = await pool.execute<GroupRow[]>(
           `SELECT data_json
-           FROM groups
+           FROM \`groups\`
            WHERE connection_id = ?
              AND jid = ?
            LIMIT 1`,
@@ -643,47 +643,55 @@ export function createSqlStore(): SqlStore {
       }, undefined),
     setGroup: async (id, group) =>
       safe(async (pool) => {
-        const payload = serialize(group)
-        const subject = group.subject ?? null
-        if (group.owner) {
-          const owner = normalizeIdentifier(group.owner)
-          if (owner) {
-            await ensureUserByIdentifiers(pool, [{ type: 'jid', value: owner }], null)
+        try {
+          const payload = serialize(group)
+          const subject = group.subject ?? null
+          if (group.owner) {
+            const owner = normalizeIdentifier(group.owner)
+            if (owner) {
+              await ensureUserByIdentifiers(pool, [{ type: 'jid', value: owner }], null)
+            }
           }
-        }
-        await pool.execute(
-          `INSERT INTO groups (
-             connection_id,
-             jid,
-             subject,
-             owner_user_id,
-             announce,
-             restrict,
-             size,
-             data_json
-           )
-           VALUES (?, ?, ?, NULL, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE
-             subject = VALUES(subject),
-             announce = VALUES(announce),
-             restrict = VALUES(restrict),
-             size = VALUES(size),
-             data_json = VALUES(data_json)`,
-          [
-            connectionId,
+          await pool.execute(
+            `INSERT INTO \`groups\` (
+               connection_id,
+               jid,
+               subject,
+               owner_user_id,
+               announce,
+               \`restrict\`,
+               size,
+               data_json
+             )
+             VALUES (?, ?, ?, NULL, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+               subject = VALUES(subject),
+               announce = VALUES(announce),
+               \`restrict\` = VALUES(\`restrict\`),
+               size = VALUES(size),
+               data_json = VALUES(data_json)`,
+            [
+              connectionId,
+              id,
+              subject,
+              toTinyInt(group.announce),
+              toTinyInt(group.restrict),
+              typeof group.size === 'number' ? group.size : null,
+              payload,
+            ]
+          )
+        } catch (error) {
+          console.error('[sql-store] falha ao salvar groups', {
             id,
-            subject,
-            toTinyInt(group.announce),
-            toTinyInt(group.restrict),
-            typeof group.size === 'number' ? group.size : null,
-            payload,
-          ]
-        )
+            subjectLen: group.subject ? group.subject.length : 0,
+            err: error,
+          })
+        }
       }, undefined, { ensureConnection: true }),
     deleteGroup: async (id) =>
       safe(async (pool) => {
         await pool.execute(
-          `DELETE FROM groups WHERE connection_id = ? AND jid = ?`,
+          `DELETE FROM \`groups\` WHERE connection_id = ? AND jid = ?`,
           [connectionId, id]
         )
       }, undefined, { ensureConnection: true }),

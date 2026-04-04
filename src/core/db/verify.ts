@@ -1,6 +1,6 @@
-import { loadEnv } from '../bootstrap/env.js'
-import { config } from '../config/index.js'
-import { createLogger } from '../observability/logger.js'
+import { loadEnv } from '../../bootstrap/env.js'
+import { config } from '../../config/index.js'
+import { createLogger } from '../../observability/logger.js'
 import { getMysqlPool } from './mysql.js'
 import { ensureMysqlConnection } from './connection.js'
 
@@ -50,10 +50,11 @@ async function main() {
 
   for (const table of tables) {
     try {
-      const [rows] = await pool.execute<[{ count: number }]>(
-        `SELECT COUNT(*) AS count FROM ${table} WHERE connection_id = ?`,
-        [connectionId]
-      )
+      const isConnections = table === 'connections'
+      const query = isConnections
+        ? `SELECT COUNT(*) AS count FROM \`connections\` WHERE id = ?`
+        : `SELECT COUNT(*) AS count FROM \`${table}\` WHERE connection_id = ?`
+      const [rows] = await pool.execute<[{ count: number }]>(query, [connectionId])
       const count = rows[0]?.count ?? 0
       logger.info(`tabela ${table}`, { count })
     } catch (error) {
