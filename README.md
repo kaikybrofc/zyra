@@ -2,6 +2,23 @@
 
 Zyra System — bot de WhatsApp em Node.js usando Baileys.
 
+## Release v0.1.2 — MySQL Edition
+
+```sql
+-- Zyra 0.1.2 (MySQL Edition)
+-- foco: backfill mais rápido e observável
+```
+
+Novidades incluídas nesta release:
+- Cache em memória de `user_id` no backfill para reduzir consultas repetidas.
+- Logs de progresso em grupos, participantes e mensagens durante o backfill.
+- `WA_BACKFILL_BATCH_SIZE` para ajustar o tamanho do lote de mensagens.
+- `WA_BACKFILL_GROUP_LOG_EVERY` para controlar o log de progresso de grupos.
+- `WA_BACKFILL_PARTICIPANT_LOG_EVERY` para controlar o log de participantes.
+- `WA_BACKFILL_MESSAGE_LOG_EVERY` para controlar o log de mensagens.
+- `.codex` adicionado ao `.gitignore`.
+- Dependências atualizadas via `npm update`.
+
 ## Requisitos
 
 - Node.js LTS (>=20)
