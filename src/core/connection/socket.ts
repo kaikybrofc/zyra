@@ -8,6 +8,7 @@ import type { AppLogger } from '../../observability/logger.js'
 import { createBaileysLogger } from '../../observability/baileys-logger.js'
 import { createBaileysStore } from '../../store/baileys-store.js'
 import { getAuthState } from '../auth/state.js'
+import { allowHistorySyncOnceForNewLogin, initHistorySyncPolicy, shouldSyncHistoryMessageOnce } from './history-sync.js'
 
 const store = createBaileysStore()
 
@@ -43,6 +44,7 @@ async function resolveBaileysVersion(logger: AppLogger) {
 export async function createSocket(logger: AppLogger) {
   const { state, saveCreds } = await getAuthState()
   const version = await resolveBaileysVersion(logger)
+  initHistorySyncPolicy(state.creds)
 
   const sock = makeWASocket({
     auth: state,
@@ -52,8 +54,8 @@ export async function createSocket(logger: AppLogger) {
     emitOwnEvents: true,
     fireInitQueries: false,
     syncFullHistory: false,
-    // Evita sincronizar histórico antigo (reduz erros de "old counter" em grupos)
-    shouldSyncHistoryMessage: () => false,
+    // Permite sincronizar histórico apenas no primeiro login (evita travar o buffer)
+    shouldSyncHistoryMessage: shouldSyncHistoryMessageOnce,
     getMessage: store.getMessage,
     cachedGroupMetadata: store.getGroupMetadata,
     msgRetryCounterCache: store.caches.msgRetryCounterCache,
@@ -67,6 +69,9 @@ export async function createSocket(logger: AppLogger) {
   sock.ev.on('connection.update', (update) => {
     if (update.connection === 'open') {
       store.setSelfJid(sock.user?.id ?? null)
+    }
+    if (update.isNewLogin) {
+      allowHistorySyncOnceForNewLogin()
     }
   })
 
