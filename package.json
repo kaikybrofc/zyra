@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
+    "start": "tsx src/index.ts",
+    "start:prod": "node dist/index.js",
     "db:init": "tsx src/core/db/init.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",

@@ -2,6 +2,7 @@ import { type WASocket, type proto } from '@whiskeysockets/baileys'
 import type { AppLogger } from '../observability/logger.js'
 import { commands } from '../commands/index.js'
 import { getMessageText, getNormalizedMessage } from '../utils/message.js'
+import { config } from '../config/index.js'
 
 const COMMAND_PREFIX = '!'
 const ANSI_RESET = '\x1b[0m'
@@ -31,7 +32,7 @@ const buildContext = (
   if (!message.message) return null
   const messageKey = message.key
   if (!messageKey) return null
-  if (messageKey.fromMe) return null
+  if (messageKey.fromMe && !config.allowOwnMessages) return null
 
   const chatId = messageKey.remoteJid
   if (!chatId) return null
@@ -132,9 +133,20 @@ export async function handleIncomingMessages(
   messages: proto.IWebMessageInfo[],
   logger: AppLogger
 ): Promise<void> {
+  if (!messages.length) {
+    logger.info('messages.upsert sem mensagens')
+    return
+  }
   for (const message of messages) {
     const context = buildContext(sock, message)
-    if (!context) continue
+    if (!context) {
+      logger.info('mensagem ignorada pelo buildContext', {
+        hasMessage: Boolean(message.message),
+        hasKey: Boolean(message.key),
+        fromMe: message.key?.fromMe ?? null,
+      })
+      continue
+    }
 
     await processIncomingMessage(context, logger)
     await handleCommand(context, logger)

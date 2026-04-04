@@ -16,4 +16,5 @@ export const config = {
   redisPrefix: process.env.WA_REDIS_PREFIX ?? 'zyra:conexao',
   mysqlUrl: process.env.MYSQL_URL ?? process.env.WA_DB_URL,
   connectionId: process.env.WA_CONNECTION_ID ?? 'default',
+  allowOwnMessages: readBoolean(process.env.WA_ACCEPT_OWN_MESSAGES, false),
 }

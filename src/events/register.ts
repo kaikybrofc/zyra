@@ -114,6 +114,13 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
         qrcode.generate(qr, { small: true })
       }
 
+      logger.info('connection.update', {
+        connection,
+        receivedPendingNotifications,
+        isNewLogin,
+        hasLastDisconnect: Boolean(lastDisconnect),
+      })
+
       logEvent('connection.update', {
         connection,
         hasQr: Boolean(qr),
@@ -173,8 +180,20 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
     'messages.update': (updates) => logEvent('messages.update', { count: updates.length }),
     'messages.media-update': (updates) => logEvent('messages.media-update', { count: updates.length }),
     'messages.upsert': async (event) => {
-      await handleIncomingMessages(sock, event.messages, logger)
-      logEvent('messages.upsert', { count: event.messages.length, type: event.type })
+      logger.info('messages.upsert recebido', {
+        count: event.messages.length,
+        type: event.type,
+      })
+      try {
+        await handleIncomingMessages(sock, event.messages, logger)
+        logEvent('messages.upsert', { count: event.messages.length, type: event.type })
+      } catch (error) {
+        logger.error('falha ao processar messages.upsert', {
+          err: error,
+          count: event.messages.length,
+          type: event.type,
+        })
+      }
     },
     'messages.reaction': (reactions) =>
       logEvent('messages.reaction', { count: reactions.length }),

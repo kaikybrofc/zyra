@@ -50,8 +50,10 @@ export async function createSocket(logger: AppLogger) {
     browser: Browsers.ubuntu('Zyra System'),
     logger: createBaileysLogger(logger),
     emitOwnEvents: true,
-    fireInitQueries: true,
-    syncFullHistory: true,
+    fireInitQueries: false,
+    syncFullHistory: false,
+    // Evita sincronizar histórico antigo (reduz erros de "old counter" em grupos)
+    shouldSyncHistoryMessage: () => false,
     getMessage: store.getMessage,
     cachedGroupMetadata: store.getGroupMetadata,
     msgRetryCounterCache: store.caches.msgRetryCounterCache,
