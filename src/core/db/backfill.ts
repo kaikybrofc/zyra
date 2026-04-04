@@ -17,12 +17,39 @@ import { getMessageText, getNormalizedMessage } from '../../utils/message.js'
 
 loadEnv()
 const logger = createLogger()
-const LOG_SAMPLE_LIMIT = Number(process.env.WA_BACKFILL_LOG_SAMPLE ?? 20)
 
-const BATCH_SIZE = Number(process.env.WA_BACKFILL_BATCH_SIZE ?? 500)
-const GROUP_LOG_EVERY = Number(process.env.WA_BACKFILL_GROUP_LOG_EVERY ?? 25)
-const PARTICIPANT_LOG_EVERY = Number(process.env.WA_BACKFILL_PARTICIPANT_LOG_EVERY ?? 200)
-const MESSAGE_LOG_EVERY = Number(process.env.WA_BACKFILL_MESSAGE_LOG_EVERY ?? 1000)
+type NumberEnvOptions = {
+  min?: number
+  allowZero?: boolean
+  integer?: boolean
+}
+
+const readNumberEnv = (key: string, fallback: number, options: NumberEnvOptions = {}) => {
+  const raw = process.env[key]
+  if (raw === undefined || raw === '') return fallback
+  const parsed = Number(raw)
+  const min = options.min ?? (options.allowZero ? 0 : 1)
+  if (!Number.isFinite(parsed) || parsed < min) {
+    logger.warn('env invalida, usando fallback', { key, value: raw, fallback })
+    return fallback
+  }
+  return options.integer === false ? parsed : Math.trunc(parsed)
+}
+
+const LOG_SAMPLE_LIMIT = readNumberEnv('WA_BACKFILL_LOG_SAMPLE', 20, { min: 0, allowZero: true })
+const BATCH_SIZE = readNumberEnv('WA_BACKFILL_BATCH_SIZE', 500)
+const GROUP_LOG_EVERY = readNumberEnv('WA_BACKFILL_GROUP_LOG_EVERY', 25, {
+  min: 0,
+  allowZero: true,
+})
+const PARTICIPANT_LOG_EVERY = readNumberEnv('WA_BACKFILL_PARTICIPANT_LOG_EVERY', 200, {
+  min: 0,
+  allowZero: true,
+})
+const MESSAGE_LOG_EVERY = readNumberEnv('WA_BACKFILL_MESSAGE_LOG_EVERY', 1000, {
+  min: 0,
+  allowZero: true,
+})
 
 const logAffected = (label: string, result: ResultSetHeader) => {
   if (result.affectedRows) {
