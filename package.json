@@ -11,6 +11,7 @@
     "db:init": "tsx src/core/db/init.ts",
     "db:verify": "tsx src/core/db/verify.ts",
     "db:backfill": "tsx src/core/db/backfill.ts",
+    "db:nulls": "tsx src/core/db/null-report.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
