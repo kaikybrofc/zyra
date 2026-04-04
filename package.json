@@ -10,6 +10,7 @@
     "start:prod": "node dist/index.js",
     "db:init": "tsx src/core/db/init.ts",
     "db:verify": "tsx src/core/db/verify.ts",
+    "db:delete-session": "tsx src/core/db/delete-session.ts",
     "db:backfill": "tsx src/core/db/backfill.ts",
     "db:nulls": "tsx src/core/db/null-report.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
