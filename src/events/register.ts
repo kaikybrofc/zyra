@@ -4,6 +4,7 @@ import qrcode from 'qrcode-terminal'
 import type { AppLogger } from '../observability/logger.js'
 import { config } from '../config/index.js'
 import { handleIncomingMessages } from '../router/index.js'
+import { createSqlStore } from '../store/sql-store.js'
 
 type RegisterOptions = {
   sock: WASocket
@@ -55,8 +56,12 @@ type EventHandler<K extends keyof BaileysEventMap> = (
 ) => void | Promise<void>
 
 export function registerEvents({ sock, logger, reconnect }: RegisterOptions): void {
+  const sqlStore = createSqlStore()
   const logEvent = (event: keyof BaileysEventMap, meta: Record<string, unknown>) => {
     logger.debug('evento do Baileys recebido', { event, ...meta })
+    if (sqlStore.enabled) {
+      void sqlStore.recordEvent({ type: String(event), data: meta })
+    }
   }
 
   const syncGroupsOnConnect = async (): Promise<GroupMetadata[]> => {
@@ -149,6 +154,25 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
       } else if (connection === 'open') {
         logger.info('conexão aberta')
         void (async () => {
+          if (sqlStore.enabled) {
+            void sqlStore.recordBotSession({
+              deviceLabel: sock.user?.id ?? null,
+              platform: (sock.user as { platform?: string } | undefined)?.platform ?? null,
+              appVersion: (sock.user as { appVersion?: string } | undefined)?.appVersion ?? null,
+              lastLogin: new Date(),
+              data: { user: sock.user ?? null, update },
+            })
+          }
+          if (sqlStore.enabled && typeof (sock as { fetchBlocklist?: () => Promise<string[]> }).fetchBlocklist === 'function') {
+            try {
+              const blocklist = await (sock as { fetchBlocklist: () => Promise<string[]> }).fetchBlocklist()
+              for (const jid of blocklist) {
+                void sqlStore.setBlocklist({ jid, isBlocked: true })
+              }
+            } catch (error) {
+              logger.warn('falha ao sincronizar blocklist', { err: error })
+            }
+          }
           const groupsSnapshot = await syncGroupsOnConnect()
           await syncCommunitiesOnConnect(groupsSnapshot)
         })()
@@ -202,6 +226,19 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
           count: event.messages.length,
           type: event.type,
         })
+        if (sqlStore.enabled && event.messages.length) {
+          const first = event.messages[0]
+          const key = first?.key
+          if (key?.remoteJid) {
+            void sqlStore.recordMessageFailure({
+              chatJid: key.remoteJid,
+              messageId: key.id ?? null,
+              senderJid: key.participant ?? null,
+              reason: error instanceof Error ? error.message : 'erro ao processar message.upsert',
+              data: { error, type: event.type },
+            })
+          }
+        }
       }
     },
     'messages.reaction': (reactions) =>
@@ -210,31 +247,125 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
       logEvent('message-receipt.update', { count: updates.length }),
     'groups.upsert': (groups) => logEvent('groups.upsert', { count: groups.length }),
     'groups.update': (updates) => logEvent('groups.update', { count: updates.length }),
-    'group-participants.update': ({ id, action, participants }) =>
+    'group-participants.update': ({ id, action, participants }) => {
       logEvent('group-participants.update', {
         id,
         action,
         count: participants.length,
-      }),
-    'group.join-request': ({ id, action, method, participant }) =>
-      logEvent('group.join-request', { id, action, method, participant }),
+      })
+      if (sqlStore.enabled) {
+        for (const participant of participants) {
+          void sqlStore.recordGroupEvent({
+            groupJid: id,
+            eventType: action,
+            targetJid: participant.id,
+            data: participant,
+          })
+        }
+      }
+    },
+    'group.join-request': ({ id, action, method, participant }) => {
+      logEvent('group.join-request', { id, action, method, participant })
+      if (sqlStore.enabled) {
+        void sqlStore.recordGroupJoinRequest({
+          groupJid: id,
+          userJid: participant,
+          action,
+          method,
+          data: { id, action, method, participant },
+        })
+        void sqlStore.recordGroupEvent({
+          groupJid: id,
+          eventType: 'join-request',
+          targetJid: participant,
+          data: { action, method },
+        })
+      }
+    },
     'group.member-tag.update': ({ groupId, participant, label }) =>
       logEvent('group.member-tag.update', { groupId, participant, label }),
-    'blocklist.set': ({ blocklist }) => logEvent('blocklist.set', { count: blocklist.length }),
-    'blocklist.update': ({ blocklist, type }) =>
-      logEvent('blocklist.update', { count: blocklist.length, type }),
+    'blocklist.set': ({ blocklist }) => {
+      logEvent('blocklist.set', { count: blocklist.length })
+      if (sqlStore.enabled) {
+        for (const jid of blocklist) {
+          void sqlStore.setBlocklist({ jid, isBlocked: true })
+        }
+      }
+    },
+    'blocklist.update': ({ blocklist, type }) => {
+      logEvent('blocklist.update', { count: blocklist.length, type })
+      if (sqlStore.enabled) {
+        const isBlocked = type !== 'remove'
+        for (const jid of blocklist) {
+          void sqlStore.setBlocklist({ jid, isBlocked })
+        }
+      }
+    },
     call: (calls) => logEvent('call', { count: calls.length }),
-    'labels.edit': (label) =>
-      logEvent('labels.edit', { id: label.id, deleted: label.deleted }),
-    'labels.association': ({ association, type }) =>
-      logEvent('labels.association', { type, association }),
-    'newsletter.reaction': ({ id, server_id }) =>
-      logEvent('newsletter.reaction', { id, serverId: server_id }),
-    'newsletter.view': ({ id, server_id, count }) =>
-      logEvent('newsletter.view', { id, serverId: server_id, count }),
-    'newsletter-participants.update': ({ id, author, user, new_role, action }) =>
-      logEvent('newsletter-participants.update', { id, author, user, newRole: new_role, action }),
-    'newsletter-settings.update': ({ id }) => logEvent('newsletter-settings.update', { id }),
+    'labels.edit': (label) => {
+      logEvent('labels.edit', { id: label.id, deleted: label.deleted })
+      if (sqlStore.enabled) {
+        void sqlStore.recordEvent({ type: 'labels.edit', data: label })
+      }
+    },
+    'labels.association': ({ association, type }) => {
+      logEvent('labels.association', { type, association })
+      if (sqlStore.enabled) {
+        void sqlStore.recordEvent({ type: 'labels.association', data: { association, type } })
+      }
+    },
+    'newsletter.reaction': ({ id, server_id }) => {
+      logEvent('newsletter.reaction', { id, serverId: server_id })
+      if (sqlStore.enabled) {
+        void sqlStore.recordNewsletter({ newsletterId: id, data: { id, server_id } })
+        void sqlStore.recordNewsletterEvent({
+          newsletterId: id,
+          eventType: 'reaction',
+          data: { id, server_id },
+        })
+      }
+    },
+    'newsletter.view': ({ id, server_id, count }) => {
+      logEvent('newsletter.view', { id, serverId: server_id, count })
+      if (sqlStore.enabled) {
+        void sqlStore.recordNewsletter({ newsletterId: id, data: { id, server_id, count } })
+        void sqlStore.recordNewsletterEvent({
+          newsletterId: id,
+          eventType: 'view',
+          data: { id, server_id, count },
+        })
+      }
+    },
+    'newsletter-participants.update': ({ id, author, user, new_role, action }) => {
+      logEvent('newsletter-participants.update', { id, author, user, newRole: new_role, action })
+      if (sqlStore.enabled) {
+        if (user) {
+          void sqlStore.recordNewsletterParticipant({
+            newsletterId: id,
+            userJid: user,
+            role: new_role ?? null,
+            status: action ?? null,
+          })
+        }
+        void sqlStore.recordNewsletterEvent({
+          newsletterId: id,
+          eventType: 'participants.update',
+          actorJid: author ?? null,
+          targetJid: user ?? null,
+          data: { id, author, user, new_role, action },
+        })
+      }
+    },
+    'newsletter-settings.update': ({ id }) => {
+      logEvent('newsletter-settings.update', { id })
+      if (sqlStore.enabled) {
+        void sqlStore.recordNewsletterEvent({
+          newsletterId: id,
+          eventType: 'settings.update',
+          data: { id },
+        })
+      }
+    },
     'chats.lock': ({ id, locked }) => logEvent('chats.lock', { id, locked }),
     'settings.update': (update) => logEvent('settings.update', { setting: update.setting }),
   }

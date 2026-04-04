@@ -3,6 +3,7 @@ import type { AppLogger } from '../observability/logger.js'
 import { commands } from '../commands/index.js'
 import { getMessageText, getNormalizedMessage } from '../utils/message.js'
 import { config } from '../config/index.js'
+import { createSqlStore } from '../store/sql-store.js'
 
 const COMMAND_PREFIX = '!'
 const ANSI_RESET = '\x1b[0m'
@@ -14,6 +15,8 @@ const ANSI_GRAY = '\x1b[90m'
 
 const colorize = (value: string, color: string): string =>
   process.stdout.isTTY ? `${color}${value}${ANSI_RESET}` : value
+
+const sqlStore = createSqlStore()
 
 export type IncomingMessageContext = {
   sock: WASocket
@@ -115,6 +118,9 @@ const handleCommand = async (context: IncomingMessageContext, logger: AppLogger)
   const command = commands[context.commandName.toLowerCase()]
   if (!command) return
 
+  const startedAt = Date.now()
+  let success = true
+
   try {
     await command.execute({
       sock: context.sock,
@@ -124,7 +130,23 @@ const handleCommand = async (context: IncomingMessageContext, logger: AppLogger)
       args: context.commandArgs,
     })
   } catch (error) {
+    success = false
     logger.error('comando falhou', { err: error, command: context.commandName })
+  } finally {
+    if (sqlStore.enabled) {
+      const actorJid =
+        context.message.key?.participant ?? context.message.key?.remoteJid ?? null
+      const durationMs = Date.now() - startedAt
+      void sqlStore.recordCommandLog({
+        actorJid,
+        chatJid: context.chatId,
+        commandName: context.commandName,
+        argsText: context.commandArgs.length ? context.commandArgs.join(' ') : null,
+        success,
+        durationMs,
+        data: { isGroup: context.chatId.endsWith('@g.us') },
+      })
+    }
   }
 }
 

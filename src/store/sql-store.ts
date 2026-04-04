@@ -116,6 +116,76 @@ export type SqlStore = {
     targetJid?: string | null
     data?: unknown
   }) => Promise<void>
+  recordEvent: (event: {
+    type: string
+    actorJid?: string | null
+    targetJid?: string | null
+    chatJid?: string | null
+    groupJid?: string | null
+    messageKey?: { chatJid: string; messageId: string; fromMe: boolean } | null
+    data?: unknown
+  }) => Promise<void>
+  setBlocklist: (entry: {
+    jid: string
+    isBlocked: boolean
+    actorJid?: string | null
+    reason?: string | null
+    data?: unknown
+  }) => Promise<void>
+  recordGroupEvent: (event: {
+    groupJid: string
+    eventType: string
+    actorJid?: string | null
+    targetJid?: string | null
+    data?: unknown
+  }) => Promise<void>
+  recordGroupJoinRequest: (entry: {
+    groupJid: string
+    userJid: string
+    actorJid?: string | null
+    action: string
+    method?: string | null
+    data?: unknown
+  }) => Promise<void>
+  recordNewsletter: (entry: { newsletterId: string; data?: unknown }) => Promise<void>
+  recordNewsletterParticipant: (entry: {
+    newsletterId: string
+    userJid: string
+    role?: string | null
+    status?: string | null
+  }) => Promise<void>
+  recordNewsletterEvent: (event: {
+    newsletterId: string
+    eventType: string
+    actorJid?: string | null
+    targetJid?: string | null
+    data?: unknown
+  }) => Promise<void>
+  recordMessageFailure: (entry: {
+    chatJid: string
+    messageId?: string | null
+    senderJid?: string | null
+    actorJid?: string | null
+    reason?: string | null
+    data?: unknown
+  }) => Promise<void>
+  recordBotSession: (entry: {
+    deviceLabel?: string | null
+    platform?: string | null
+    appVersion?: string | null
+    lastLogin?: Date | null
+    data?: unknown
+  }) => Promise<void>
+  recordCommandLog: (entry: {
+    actorJid?: string | null
+    chatJid: string
+    commandName: string
+    argsText?: string | null
+    success: boolean
+    durationMs?: number | null
+    data?: unknown
+  }) => Promise<void>
+  setUserDevice: (entry: { userJid: string; deviceId: string; data?: unknown }) => Promise<void>
   setChatUser: (chatJid: string, userJid: string, role?: string | null) => Promise<void>
   deleteChatUser: (chatJid: string, userJid: string) => Promise<void>
   setLabel: (label: {
@@ -156,6 +226,17 @@ export function createSqlStore(): SqlStore {
       getLidForPn: async () => null,
       getPnForLid: async () => null,
       recordMessageEvent: async () => undefined,
+      recordEvent: async () => undefined,
+      setBlocklist: async () => undefined,
+      recordGroupEvent: async () => undefined,
+      recordGroupJoinRequest: async () => undefined,
+      recordNewsletter: async () => undefined,
+      recordNewsletterParticipant: async () => undefined,
+      recordNewsletterEvent: async () => undefined,
+      recordMessageFailure: async () => undefined,
+      recordBotSession: async () => undefined,
+      recordCommandLog: async () => undefined,
+      setUserDevice: async () => undefined,
       setChatUser: async () => undefined,
       deleteChatUser: async () => undefined,
       setLabel: async () => undefined,
@@ -960,6 +1041,307 @@ export function createSqlStore(): SqlStore {
             messageDbId,
             event.data ? serialize(event.data) : null,
           ]
+        )
+      }, undefined, { ensureConnection: true }),
+    recordEvent: async (event) =>
+      safe(async (pool) => {
+        const actorId = event.actorJid
+          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: event.actorJid }], null)
+          : null
+        const targetId = event.targetJid
+          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: event.targetJid }], null)
+          : null
+        const messageDbId = event.messageKey
+          ? await getMessageDbId(pool, {
+              chatJid: event.messageKey.chatJid,
+              messageId: event.messageKey.messageId,
+              fromMe: event.messageKey.fromMe ? 1 : 0,
+            })
+          : null
+        await pool.execute(
+          `INSERT INTO events_log (
+             connection_id,
+             event_type,
+             actor_user_id,
+             target_user_id,
+             chat_jid,
+             group_jid,
+             message_db_id,
+             data_json
+           )
+           VALUES (?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?, ?, ?)`,
+          [
+            connectionId,
+            event.type,
+            actorId ? 1 : 0,
+            actorId,
+            targetId ? 1 : 0,
+            targetId,
+            event.chatJid ?? null,
+            event.groupJid ?? null,
+            messageDbId,
+            event.data ? serialize(event.data) : null,
+          ]
+        )
+      }, undefined, { ensureConnection: true }),
+    setBlocklist: async (entry) =>
+      safe(async (pool) => {
+        const jid = normalizeIdentifier(entry.jid)
+        if (!jid) return
+        const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: jid }], null)
+        const actorId = entry.actorJid
+          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: entry.actorJid }], null)
+          : null
+        await pool.execute(
+          `INSERT INTO blocklist (
+             connection_id,
+             user_id,
+             actor_user_id,
+             jid,
+             is_blocked,
+             reason
+           )
+           VALUES (?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             user_id = VALUES(user_id),
+             actor_user_id = VALUES(actor_user_id),
+             is_blocked = VALUES(is_blocked),
+             reason = VALUES(reason)`,
+          [
+            connectionId,
+            userId ? 1 : 0,
+            userId,
+            actorId ? 1 : 0,
+            actorId,
+            jid,
+            entry.isBlocked ? 1 : 0,
+            entry.reason ?? null,
+          ]
+        )
+      }, undefined, { ensureConnection: true }),
+    recordGroupEvent: async (event) =>
+      safe(async (pool) => {
+        const groupJid = normalizeIdentifier(event.groupJid)
+        if (!groupJid) return
+        const actorId = event.actorJid
+          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: event.actorJid }], null)
+          : null
+        const targetId = event.targetJid
+          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: event.targetJid }], null)
+          : null
+        await pool.execute(
+          `INSERT INTO group_events (
+             connection_id,
+             group_jid,
+             event_type,
+             actor_user_id,
+             target_user_id,
+             data_json
+           )
+           VALUES (?, ?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?)`,
+          [
+            connectionId,
+            groupJid,
+            event.eventType,
+            actorId ? 1 : 0,
+            actorId,
+            targetId ? 1 : 0,
+            targetId,
+            event.data ? serialize(event.data) : null,
+          ]
+        )
+      }, undefined, { ensureConnection: true }),
+    recordGroupJoinRequest: async (entry) =>
+      safe(async (pool) => {
+        const groupJid = normalizeIdentifier(entry.groupJid)
+        const userJid = normalizeIdentifier(entry.userJid)
+        if (!groupJid || !userJid) return
+        const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: userJid }], null)
+        const actorId = entry.actorJid
+          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: entry.actorJid }], null)
+          : null
+        await pool.execute(
+          `INSERT INTO group_join_requests (
+             connection_id,
+             group_jid,
+             user_id,
+             actor_user_id,
+             action,
+             method,
+             data_json
+           )
+           VALUES (?, ?, UUID_TO_BIN(?, 1), IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?, ?)`,
+          [
+            connectionId,
+            groupJid,
+            userId,
+            actorId ? 1 : 0,
+            actorId,
+            entry.action,
+            entry.method ?? null,
+            entry.data ? serialize(entry.data) : null,
+          ]
+        )
+      }, undefined, { ensureConnection: true }),
+    recordNewsletter: async (entry) =>
+      safe(async (pool) => {
+        await pool.execute(
+          `INSERT INTO newsletters (
+             connection_id,
+             newsletter_id,
+             data_json
+           )
+           VALUES (?, ?, ?)
+           ON DUPLICATE KEY UPDATE data_json = VALUES(data_json)`,
+          [connectionId, entry.newsletterId, serialize(entry.data ?? {})]
+        )
+      }, undefined, { ensureConnection: true }),
+    recordNewsletterParticipant: async (entry) =>
+      safe(async (pool) => {
+        const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: entry.userJid }], null)
+        await pool.execute(
+          `INSERT INTO newsletter_participants (
+             connection_id,
+             newsletter_id,
+             user_id,
+             role,
+             status
+           )
+           VALUES (?, ?, UUID_TO_BIN(?, 1), ?, ?)
+           ON DUPLICATE KEY UPDATE
+             role = VALUES(role),
+             status = VALUES(status)`,
+          [connectionId, entry.newsletterId, userId, entry.role ?? null, entry.status ?? null]
+        )
+      }, undefined, { ensureConnection: true }),
+    recordNewsletterEvent: async (event) =>
+      safe(async (pool) => {
+        const actorId = event.actorJid
+          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: event.actorJid }], null)
+          : null
+        const targetId = event.targetJid
+          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: event.targetJid }], null)
+          : null
+        await pool.execute(
+          `INSERT INTO newsletter_events (
+             connection_id,
+             newsletter_id,
+             event_type,
+             actor_user_id,
+             target_user_id,
+             data_json
+           )
+           VALUES (?, ?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?)`,
+          [
+            connectionId,
+            event.newsletterId,
+            event.eventType,
+            actorId ? 1 : 0,
+            actorId,
+            targetId ? 1 : 0,
+            targetId,
+            event.data ? serialize(event.data) : null,
+          ]
+        )
+      }, undefined, { ensureConnection: true }),
+    recordMessageFailure: async (entry) =>
+      safe(async (pool) => {
+        const senderId = entry.senderJid
+          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: entry.senderJid }], null)
+          : null
+        const actorId = entry.actorJid
+          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: entry.actorJid }], null)
+          : null
+        await pool.execute(
+          `INSERT INTO message_failures (
+             connection_id,
+             chat_jid,
+             message_id,
+             sender_user_id,
+             actor_user_id,
+             failure_reason,
+             data_json
+           )
+           VALUES (?, ?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?)`,
+          [
+            connectionId,
+            entry.chatJid,
+            entry.messageId ?? null,
+            senderId ? 1 : 0,
+            senderId,
+            actorId ? 1 : 0,
+            actorId,
+            entry.reason ?? null,
+            entry.data ? serialize(entry.data) : null,
+          ]
+        )
+      }, undefined, { ensureConnection: true }),
+    recordBotSession: async (entry) =>
+      safe(async (pool) => {
+        await pool.execute(
+          `INSERT INTO bot_sessions (
+             connection_id,
+             device_label,
+             platform,
+             app_version,
+             last_login,
+             data_json
+           )
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [
+            connectionId,
+            entry.deviceLabel ?? null,
+            entry.platform ?? null,
+            entry.appVersion ?? null,
+            entry.lastLogin ?? null,
+            entry.data ? serialize(entry.data) : null,
+          ]
+        )
+      }, undefined, { ensureConnection: true }),
+    recordCommandLog: async (entry) =>
+      safe(async (pool) => {
+        const actorId = entry.actorJid
+          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: entry.actorJid }], null)
+          : null
+        await pool.execute(
+          `INSERT INTO commands_log (
+             connection_id,
+             actor_user_id,
+             chat_jid,
+             command_name,
+             args_text,
+             success,
+             duration_ms,
+             data_json
+           )
+           VALUES (?, IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?, ?, ?, ?, ?)`,
+          [
+            connectionId,
+            actorId ? 1 : 0,
+            actorId,
+            entry.chatJid,
+            entry.commandName,
+            entry.argsText ?? null,
+            entry.success ? 1 : 0,
+            entry.durationMs ?? null,
+            entry.data ? serialize(entry.data) : null,
+          ]
+        )
+      }, undefined, { ensureConnection: true }),
+    setUserDevice: async (entry) =>
+      safe(async (pool) => {
+        const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: entry.userJid }], null)
+        await pool.execute(
+          `INSERT INTO user_devices (
+             connection_id,
+             user_id,
+             device_id,
+             data_json
+           )
+           VALUES (?, UUID_TO_BIN(?, 1), ?, ?)
+           ON DUPLICATE KEY UPDATE
+             data_json = VALUES(data_json)`,
+          [connectionId, userId, entry.deviceId, entry.data ? serialize(entry.data) : null]
         )
       }, undefined, { ensureConnection: true }),
     setChatUser: async (chatJid, userJid, role) =>
