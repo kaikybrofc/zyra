@@ -9,6 +9,7 @@
     "start": "tsx src/index.ts",
     "start:prod": "node dist/index.js",
     "db:init": "tsx src/core/db/init.ts",
+    "db:verify": "tsx src/core/db/verify.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
