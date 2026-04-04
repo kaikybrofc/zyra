@@ -10,6 +10,7 @@ type RegisterOptions = {
   sock: WASocket
   logger: AppLogger
   reconnect: () => Promise<void>
+  connectionId: string
 }
 
 const ALL_EVENTS = [
@@ -55,13 +56,12 @@ type EventHandler<K extends keyof BaileysEventMap> = (
   data: BaileysEventMap[K]
 ) => void | Promise<void>
 
-let restartedAfterNewLogin = false
-
 /**
- * Registra os listeners de eventos do Baileys e integra persistencia/logs.
+ * Registra os listeners de eventos do Baileys e integra persistencia/logs por connection_id.
  */
-export function registerEvents({ sock, logger, reconnect }: RegisterOptions): void {
-  const sqlStore = createSqlStore()
+export function registerEvents({ sock, logger, reconnect, connectionId }: RegisterOptions): void {
+  const sqlStore = createSqlStore(connectionId)
+  let restartedAfterNewLogin = false
   type EventContext = {
     actorJid?: string | null
     targetJid?: string | null
@@ -355,7 +355,7 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
         type: event.type,
       })
       try {
-        await handleIncomingMessages(sock, event.messages, logger)
+        await handleIncomingMessages(sock, event.messages, logger, sqlStore)
         logger.debug('evento do Baileys recebido', {
           event: 'messages.upsert',
           count: event.messages.length,

@@ -127,10 +127,24 @@ const createRedisExtendedCacheStore = (
 }
 
 /**
+ * Monta o prefixo do cache considerando o connection_id.
+ */
+const buildCachePrefix = (name: string, connectionId?: string): string => {
+  const base = config.redisPrefix ?? 'zyra:conexao'
+  const resolvedId = connectionId ?? config.connectionId
+  const prefix = resolvedId && !base.endsWith(`:${resolvedId}`) ? `${base}:${resolvedId}` : base
+  return `${prefix}:cache:${name}`
+}
+
+/**
  * Cria um cache simples (Redis ou memoria) com TTL.
  */
-export const createCacheStore = (name: string, ttlSeconds: number): CacheStore => {
-  const prefix = `${config.redisPrefix ?? 'zyra:conexao'}:cache:${name}`
+export const createCacheStore = (
+  name: string,
+  ttlSeconds: number,
+  connectionId?: string
+): CacheStore => {
+  const prefix = buildCachePrefix(name, connectionId)
   if (config.redisUrl) {
     return createRedisCacheStore(prefix, ttlSeconds)
   }
@@ -142,9 +156,10 @@ export const createCacheStore = (name: string, ttlSeconds: number): CacheStore =
  */
 export const createExtendedCacheStore = (
   name: string,
-  ttlSeconds: number
+  ttlSeconds: number,
+  connectionId?: string
 ): PossiblyExtendedCacheStore => {
-  const prefix = `${config.redisPrefix ?? 'zyra:conexao'}:cache:${name}`
+  const prefix = buildCachePrefix(name, connectionId)
   if (config.redisUrl) {
     return createRedisExtendedCacheStore(prefix, ttlSeconds)
   }

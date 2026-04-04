@@ -71,9 +71,9 @@ const normalizeKeyValue = <T extends keyof SignalDataTypeMap>(
   return value
 }
 
-const buildRedisKeys = () => {
-  const redisKeyPrefix = getRedisNamespace()
-  const legacyRedisKeyPrefix = getLegacyRedisNamespace()
+const buildRedisKeys = (connectionId?: string) => {
+  const redisKeyPrefix = getRedisNamespace(connectionId)
+  const legacyRedisKeyPrefix = getLegacyRedisNamespace(connectionId)
   return {
     redisCredsKey: `${redisKeyPrefix}:creds`,
     legacyRedisCredsKey: legacyRedisKeyPrefix ? `${legacyRedisKeyPrefix}:creds` : null,
@@ -86,7 +86,7 @@ const buildRedisKeys = () => {
 /**
  * Cria estado de autenticacao persistido no MySQL.
  */
-export async function useMysqlAuthState(): Promise<MysqlAuthState> {
+export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAuthState> {
   const pool = getMysqlPool()
   if (!pool) {
     throw new Error('MYSQL_URL nao configurada')
@@ -95,9 +95,9 @@ export async function useMysqlAuthState(): Promise<MysqlAuthState> {
   await ensureAuthFolder(config.authDir)
   const redisClient = config.redisUrl ? await getRedisClient() : null
   const { redisCredsKey, legacyRedisCredsKey, redisKeysKey, legacyRedisKeysKey } =
-    buildRedisKeys()
+    buildRedisKeys(connectionId)
 
-  const connectionId = config.connectionId ?? 'default'
+  const resolvedConnectionId = connectionId ?? config.connectionId ?? 'default'
 
   const fetchCredsFromMysql = async (): Promise<AuthenticationCreds | null> => {
     type CredsRow = RowDataPacket & { creds_json: unknown }
@@ -106,7 +106,7 @@ export async function useMysqlAuthState(): Promise<MysqlAuthState> {
        FROM auth_creds
        WHERE connection_id = ?
        LIMIT 1`,
-      [connectionId]
+      [resolvedConnectionId]
     )
     const row = rows[0]
     return row ? deserialize<AuthenticationCreds>(row.creds_json) : null
@@ -120,7 +120,7 @@ export async function useMysqlAuthState(): Promise<MysqlAuthState> {
        ON DUPLICATE KEY UPDATE
          creds_json = VALUES(creds_json),
          updated_at = CURRENT_TIMESTAMP`,
-      [connectionId, serialize(creds)]
+      [resolvedConnectionId, serialize(creds)]
     )
   }
 
@@ -198,7 +198,7 @@ export async function useMysqlAuthState(): Promise<MysqlAuthState> {
            WHERE connection_id = ?
              AND key_type = ?
              AND key_id IN (${placeholders})`,
-          [connectionId, type, ...idsToFetch]
+          [resolvedConnectionId, type, ...idsToFetch]
         )
 
         for (const row of rows) {
@@ -232,7 +232,7 @@ export async function useMysqlAuthState(): Promise<MysqlAuthState> {
                  ON DUPLICATE KEY UPDATE
                    value_json = VALUES(value_json),
                    updated_at = CURRENT_TIMESTAMP`,
-                [connectionId, type, id, serialize(diskValue)]
+                [resolvedConnectionId, type, id, serialize(diskValue)]
               )
             }
           })
@@ -264,7 +264,7 @@ export async function useMysqlAuthState(): Promise<MysqlAuthState> {
         if (toSet.length) {
           const values = toSet.map(() => '(?, ?, ?, ?)').join(', ')
           const params = toSet.flatMap((entry) => [
-            connectionId,
+            resolvedConnectionId,
             category,
             entry.id,
             entry.value,
@@ -296,7 +296,7 @@ export async function useMysqlAuthState(): Promise<MysqlAuthState> {
              WHERE connection_id = ?
                AND key_type = ?
                AND key_id IN (${placeholders})`,
-            [connectionId, category, ...toDelete]
+            [resolvedConnectionId, category, ...toDelete]
           )
           if (redisPipeline) {
             redisPipeline.hDel(redisKeysKey(category), toDelete)

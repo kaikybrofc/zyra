@@ -3,7 +3,7 @@ import type { AppLogger } from '../observability/logger.js'
 import { commands } from '../commands/index.js'
 import { getMessageText, getNormalizedMessage } from '../utils/message.js'
 import { config } from '../config/index.js'
-import { createSqlStore } from '../store/sql-store.js'
+import { createSqlStore, type SqlStore } from '../store/sql-store.js'
 
 const COMMAND_PREFIX = '!'
 const ANSI_RESET = '\x1b[0m'
@@ -16,7 +16,15 @@ const ANSI_GRAY = '\x1b[90m'
 const colorize = (value: string, color: string): string =>
   process.stdout.isTTY ? `${color}${value}${ANSI_RESET}` : value
 
-const sqlStore = createSqlStore()
+let defaultSqlStore: SqlStore | null = null
+
+const resolveSqlStore = (sqlStore?: SqlStore): SqlStore => {
+  if (sqlStore) return sqlStore
+  if (!defaultSqlStore) {
+    defaultSqlStore = createSqlStore()
+  }
+  return defaultSqlStore
+}
 
 export type IncomingMessageContext = {
   sock: WASocket
@@ -112,7 +120,11 @@ const processIncomingMessage = async (
   logger.info(`\n\n${title} | ${logParts.join(' ')}`)
 }
 
-const handleCommand = async (context: IncomingMessageContext, logger: AppLogger) => {
+const handleCommand = async (
+  context: IncomingMessageContext,
+  logger: AppLogger,
+  sqlStore: SqlStore
+) => {
   if (!context.isCommand || !context.commandName) return
 
   const command = commands[context.commandName.toLowerCase()]
@@ -153,12 +165,15 @@ const handleCommand = async (context: IncomingMessageContext, logger: AppLogger)
 
 /**
  * Processa mensagens recebidas e executa comandos quando aplicavel.
+ * Permite injetar a store SQL para multi-tenant.
  */
 export async function handleIncomingMessages(
   sock: WASocket,
   messages: proto.IWebMessageInfo[],
-  logger: AppLogger
+  logger: AppLogger,
+  sqlStore?: SqlStore
 ): Promise<void> {
+  const resolvedSqlStore = resolveSqlStore(sqlStore)
   if (!messages.length) {
     logger.info('messages.upsert sem mensagens')
     return
@@ -175,6 +190,6 @@ export async function handleIncomingMessages(
     }
 
     await processIncomingMessage(context, logger)
-    await handleCommand(context, logger)
+    await handleCommand(context, logger, resolvedSqlStore)
   }
 }

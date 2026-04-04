@@ -6,12 +6,12 @@ import { useRedisAuthState } from './redis-auth-state.js'
 /**
  * Seleciona a estrategia de autenticacao (MySQL, Redis ou arquivos locais).
  */
-export async function getAuthState() {
+export async function getAuthState(connectionId?: string) {
   if (config.mysqlUrl) {
-    return useMysqlAuthState()
+    return useMysqlAuthState(connectionId)
   }
   if (config.redisUrl) {
-    return useRedisAuthState()
+    return useRedisAuthState(connectionId)
   }
 
   const { state, saveCreds } = await useMultiFileAuthState(config.authDir)

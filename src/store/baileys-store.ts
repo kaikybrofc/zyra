@@ -93,9 +93,9 @@ type LidMappingFacade = {
 /**
  * Cria a store do Baileys com caches e persistencia opcional.
  */
-export function createBaileysStore(): BaileysStore {
-  const redisStore = createRedisStore()
-  const sqlStore = createSqlStore()
+export function createBaileysStore(connectionId?: string): BaileysStore {
+  const redisStore = createRedisStore(connectionId)
+  const sqlStore = createSqlStore(connectionId)
   const chats = new Map<string, Chat>()
   const contacts = new Map<string, Contact>()
   const groups = new Map<string, GroupMetadata>()
@@ -104,17 +104,27 @@ export function createBaileysStore(): BaileysStore {
   const lidToPn = new Map<string, string>()
   let externalLidMapping: LidMappingStore | undefined
   let selfJid: string | null = null
-  const msgRetryCounterCache = createCacheStore('msg-retry', DEFAULT_CACHE_TTLS.MSG_RETRY)
-  const callOfferCache = createCacheStore('call-offer', DEFAULT_CACHE_TTLS.CALL_OFFER)
+  const msgRetryCounterCache = createCacheStore(
+    'msg-retry',
+    DEFAULT_CACHE_TTLS.MSG_RETRY,
+    connectionId
+  )
+  const callOfferCache = createCacheStore(
+    'call-offer',
+    DEFAULT_CACHE_TTLS.CALL_OFFER,
+    connectionId
+  )
   const placeholderResendCache = createCacheStore(
     'placeholder-resend',
-    DEFAULT_CACHE_TTLS.MSG_RETRY
+    DEFAULT_CACHE_TTLS.MSG_RETRY,
+    connectionId
   )
   const userDevicesCache = createExtendedCacheStore(
     'user-devices',
-    DEFAULT_CACHE_TTLS.USER_DEVICES
+    DEFAULT_CACHE_TTLS.USER_DEVICES,
+    connectionId
   )
-  const mediaCache = createCacheStore('media', DEFAULT_CACHE_TTLS.MSG_RETRY)
+  const mediaCache = createCacheStore('media', DEFAULT_CACHE_TTLS.MSG_RETRY, connectionId)
 
   const upsertMessage = (message: WAMessage) => {
     if (!message.key?.remoteJid || !message.key?.id) return

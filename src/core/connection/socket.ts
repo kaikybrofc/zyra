@@ -10,8 +10,6 @@ import { createBaileysStore } from '../../store/baileys-store.js'
 import { getAuthState } from '../auth/state.js'
 import { allowHistorySyncOnceForNewLogin, initHistorySyncPolicy, shouldSyncHistoryMessageOnce } from './history-sync.js'
 
-const store = createBaileysStore()
-
 type SocketWithSignalRepository = {
   signalRepository?: SignalRepositoryWithLIDStore
 }
@@ -42,10 +40,11 @@ async function resolveBaileysVersion(logger: AppLogger) {
 }
 
 /**
- * Cria o socket do Baileys com stores, logger e politicas de sync.
+ * Cria o socket do Baileys com stores, logger e politicas de sync por connection_id.
  */
-export async function createSocket(logger: AppLogger) {
-  const { state, saveCreds } = await getAuthState()
+export async function createSocket(connectionId: string, logger: AppLogger) {
+  const store = createBaileysStore(connectionId)
+  const { state, saveCreds } = await getAuthState(connectionId)
   const version = await resolveBaileysVersion(logger)
   initHistorySyncPolicy(state.creds)
 

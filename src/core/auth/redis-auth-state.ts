@@ -48,13 +48,17 @@ const writeData = async (folder: string, file: string, data: unknown): Promise<v
   await writeFile(filePath, serialize(data))
 }
 
-const redisKeyPrefix = getRedisNamespace()
-const legacyRedisKeyPrefix = getLegacyRedisNamespace()
-const redisCredsKey = `${redisKeyPrefix}:creds`
-const legacyRedisCredsKey = legacyRedisKeyPrefix ? `${legacyRedisKeyPrefix}:creds` : null
-const redisKeysKey = (type: string) => `${redisKeyPrefix}:keys:${type}`
-const legacyRedisKeysKey = (type: string) =>
-  legacyRedisKeyPrefix ? `${legacyRedisKeyPrefix}:keys:${type}` : null
+const buildRedisKeys = (connectionId?: string) => {
+  const redisKeyPrefix = getRedisNamespace(connectionId)
+  const legacyRedisKeyPrefix = getLegacyRedisNamespace(connectionId)
+  return {
+    redisCredsKey: `${redisKeyPrefix}:creds`,
+    legacyRedisCredsKey: legacyRedisKeyPrefix ? `${legacyRedisKeyPrefix}:creds` : null,
+    redisKeysKey: (type: string) => `${redisKeyPrefix}:keys:${type}`,
+    legacyRedisKeysKey: (type: string) =>
+      legacyRedisKeyPrefix ? `${legacyRedisKeyPrefix}:keys:${type}` : null,
+  }
+}
 
 const normalizeKeyValue = <T extends keyof SignalDataTypeMap>(
   type: T,
@@ -73,9 +77,11 @@ const normalizeKeyValue = <T extends keyof SignalDataTypeMap>(
 /**
  * Cria estado de autenticacao persistido no Redis.
  */
-export async function useRedisAuthState(): Promise<RedisAuthState> {
+export async function useRedisAuthState(connectionId?: string): Promise<RedisAuthState> {
   await ensureAuthFolder(config.authDir)
   const client = await getRedisClient()
+  const { redisCredsKey, legacyRedisCredsKey, redisKeysKey, legacyRedisKeysKey } =
+    buildRedisKeys(connectionId)
 
   const credsFromDisk = await readData<AuthenticationCreds>(config.authDir, 'creds.json')
   const credsFromRedisRaw = await client.get(redisCredsKey)

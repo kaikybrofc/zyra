@@ -208,9 +208,9 @@ export type SqlStore = {
 }
 
 /**
- * Cria a store SQL usada para persistir eventos, mensagens e metadados.
+ * Cria a store SQL usada para persistir eventos, mensagens e metadados por connection_id.
  */
-export function createSqlStore(): SqlStore {
+export function createSqlStore(connectionId?: string): SqlStore {
   let selfJid: string | null = null
   if (!config.mysqlUrl) {
     return {
@@ -267,7 +267,7 @@ export function createSqlStore(): SqlStore {
     }
   }
 
-  const connectionId = config.connectionId ?? 'default'
+  const resolvedConnectionId = connectionId ?? config.connectionId ?? 'default'
 
   type UserIdentifierType = 'pn' | 'lid' | 'jid' | 'username'
 
@@ -295,7 +295,7 @@ export function createSqlStore(): SqlStore {
            AND id_type = ?
            AND id_value = ?
          LIMIT 1`,
-        [connectionId, entry.type, entry.value]
+        [resolvedConnectionId, entry.type, entry.value]
       )
       if (rows[0]?.user_id) {
         const userId = rows[0].user_id
@@ -305,7 +305,7 @@ export function createSqlStore(): SqlStore {
              SET display_name = ?
              WHERE connection_id = ?
                AND id = UUID_TO_BIN(?, 1)`,
-            [displayName, connectionId, userId]
+            [displayName, resolvedConnectionId, userId]
           )
         }
         for (const ident of cleanIdentifiers) {
@@ -313,7 +313,7 @@ export function createSqlStore(): SqlStore {
             `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
              VALUES (?, UUID_TO_BIN(?, 1), ?, ?)
              ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
-            [connectionId, userId, ident.type, ident.value]
+            [resolvedConnectionId, userId, ident.type, ident.value]
           )
         }
         if (aliases?.length) {
@@ -323,7 +323,7 @@ export function createSqlStore(): SqlStore {
               `INSERT INTO user_aliases (connection_id, user_id, alias_type, alias_value)
                VALUES (?, UUID_TO_BIN(?, 1), ?, ?)
                ON DUPLICATE KEY UPDATE last_seen = CURRENT_TIMESTAMP`,
-              [connectionId, userId, alias.type, alias.value.trim()]
+              [resolvedConnectionId, userId, alias.type, alias.value.trim()]
             )
           }
         }
@@ -335,14 +335,14 @@ export function createSqlStore(): SqlStore {
     await pool.execute(
       `INSERT INTO users (id, connection_id, display_name)
        VALUES (UUID_TO_BIN(?, 1), ?, ?)`,
-      [userId, connectionId, displayName ?? null]
+      [userId, resolvedConnectionId, displayName ?? null]
     )
     for (const ident of cleanIdentifiers) {
       await pool.execute(
         `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
          VALUES (?, UUID_TO_BIN(?, 1), ?, ?)
          ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
-        [connectionId, userId, ident.type, ident.value]
+        [resolvedConnectionId, userId, ident.type, ident.value]
       )
     }
     if (aliases?.length) {
@@ -352,7 +352,7 @@ export function createSqlStore(): SqlStore {
           `INSERT INTO user_aliases (connection_id, user_id, alias_type, alias_value)
            VALUES (?, UUID_TO_BIN(?, 1), ?, ?)
            ON DUPLICATE KEY UPDATE last_seen = CURRENT_TIMESTAMP`,
-          [connectionId, userId, alias.type, alias.value.trim()]
+          [resolvedConnectionId, userId, alias.type, alias.value.trim()]
         )
       }
     }
@@ -432,7 +432,7 @@ export function createSqlStore(): SqlStore {
          AND from_me = ?
        ORDER BY id DESC
        LIMIT 1`,
-      [connectionId, key.chatJid, key.messageId, key.fromMe]
+      [resolvedConnectionId, key.chatJid, key.messageId, key.fromMe]
     )
     return rows[0]?.id ?? null
   }
@@ -468,7 +468,7 @@ export function createSqlStore(): SqlStore {
            relation_type
          )
          VALUES (?, ?, UUID_TO_BIN(?, 1), 'sender')`,
-        [connectionId, messageDbId, senderUserId]
+        [resolvedConnectionId, messageDbId, senderUserId]
       )
     }
 
@@ -483,7 +483,7 @@ export function createSqlStore(): SqlStore {
            relation_type
          )
          VALUES (?, ?, UUID_TO_BIN(?, 1), 'participant')`,
-        [connectionId, messageDbId, userId]
+        [resolvedConnectionId, messageDbId, userId]
       )
     }
 
@@ -498,7 +498,7 @@ export function createSqlStore(): SqlStore {
            relation_type
          )
          VALUES (?, ?, UUID_TO_BIN(?, 1), 'mentioned')`,
-        [connectionId, messageDbId, userId]
+        [resolvedConnectionId, messageDbId, userId]
       )
     }
 
@@ -513,7 +513,7 @@ export function createSqlStore(): SqlStore {
              relation_type
            )
            VALUES (?, ?, UUID_TO_BIN(?, 1), 'quoted')`,
-          [connectionId, messageDbId, userId]
+          [resolvedConnectionId, messageDbId, userId]
         )
       }
     }
@@ -539,7 +539,7 @@ export function createSqlStore(): SqlStore {
              AND deleted_at IS NULL
            ORDER BY id DESC
            LIMIT 1`,
-          [connectionId, parsed.chatJid, parsed.messageId, parsed.fromMe]
+          [resolvedConnectionId, parsed.chatJid, parsed.messageId, parsed.fromMe]
         )
         const row = rows[0]
         return row ? deserialize<WAMessage>(row.data_json) : undefined
@@ -604,7 +604,7 @@ export function createSqlStore(): SqlStore {
              data_json = VALUES(data_json),
              deleted_at = NULL`,
           [
-            connectionId,
+            resolvedConnectionId,
             key.remoteJid,
             key.id,
             key.fromMe ? 1 : 0,
@@ -650,7 +650,7 @@ export function createSqlStore(): SqlStore {
                 `DELETE FROM message_media
                  WHERE connection_id = ?
                    AND message_db_id = ?`,
-                [connectionId, messageDbId]
+                [resolvedConnectionId, messageDbId]
               )
               await pool.execute(
                 `INSERT INTO message_media (
@@ -668,7 +668,7 @@ export function createSqlStore(): SqlStore {
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
                 `,
                 [
-                  connectionId,
+                  resolvedConnectionId,
                   messageDbId,
                   mediaInfo.mediaType,
                   mediaInfo.mimeType,
@@ -690,7 +690,7 @@ export function createSqlStore(): SqlStore {
                  VALUES (?, ?, ?)
                  ON DUPLICATE KEY UPDATE
                    text_content = VALUES(text_content)`,
-                [connectionId, messageDbId, messageText]
+                [resolvedConnectionId, messageDbId, messageText]
               )
             }
           }
@@ -705,7 +705,7 @@ export function createSqlStore(): SqlStore {
              AND chat_jid = ?
              AND message_id = ?
              AND from_me = ?`,
-          [connectionId, chatJid, messageId, fromMe ? 1 : 0]
+          [resolvedConnectionId, chatJid, messageId, fromMe ? 1 : 0]
         )
       }, undefined, { ensureConnection: true }),
     deleteMessagesByJid: async (jid) =>
@@ -715,7 +715,7 @@ export function createSqlStore(): SqlStore {
            SET deleted_at = CURRENT_TIMESTAMP
            WHERE connection_id = ?
              AND chat_jid = ?`,
-          [connectionId, jid]
+          [resolvedConnectionId, jid]
         )
       }, undefined, { ensureConnection: true }),
     getGroup: async (id) =>
@@ -727,7 +727,7 @@ export function createSqlStore(): SqlStore {
            WHERE connection_id = ?
              AND jid = ?
            LIMIT 1`,
-          [connectionId, id]
+          [resolvedConnectionId, id]
         )
         const row = rows[0]
         return row ? deserialize<GroupMetadata>(row.data_json) : undefined
@@ -764,7 +764,7 @@ export function createSqlStore(): SqlStore {
                size = VALUES(size),
                data_json = VALUES(data_json)`,
             [
-              connectionId,
+              resolvedConnectionId,
               id,
               subject,
               ownerUserId ? 1 : 0,
@@ -787,7 +787,7 @@ export function createSqlStore(): SqlStore {
       safe(async (pool) => {
         await pool.execute(
           `DELETE FROM \`groups\` WHERE connection_id = ? AND jid = ?`,
-          [connectionId, id]
+          [resolvedConnectionId, id]
         )
       }, undefined, { ensureConnection: true }),
     setGroupParticipants: async (groupJid, participants, options) =>
@@ -798,7 +798,7 @@ export function createSqlStore(): SqlStore {
               `DELETE FROM group_participants
                WHERE connection_id = ?
                  AND group_jid = ?`,
-              [connectionId, groupJid]
+              [resolvedConnectionId, groupJid]
             )
           }
           return
@@ -833,7 +833,7 @@ export function createSqlStore(): SqlStore {
                is_superadmin = VALUES(is_superadmin),
                data_json = VALUES(data_json)`,
             [
-              connectionId,
+              resolvedConnectionId,
               groupJid,
               userId,
               jid,
@@ -853,7 +853,7 @@ export function createSqlStore(): SqlStore {
                WHERE connection_id = ?
                  AND group_jid = ?
                  AND participant_jid NOT IN (${placeholders})`,
-              [connectionId, groupJid, ...participantJids]
+              [resolvedConnectionId, groupJid, ...participantJids]
             )
           }
         }
@@ -867,7 +867,7 @@ export function createSqlStore(): SqlStore {
            WHERE connection_id = ?
              AND group_jid = ?
              AND participant_jid IN (${placeholders})`,
-          [connectionId, groupJid, ...participantJids]
+          [resolvedConnectionId, groupJid, ...participantJids]
         )
       }, undefined, { ensureConnection: true }),
     setChat: async (id, chat) =>
@@ -891,7 +891,7 @@ export function createSqlStore(): SqlStore {
         const unreadCount: number | null =
           typeof rawUnreadCount === 'number' ? rawUnreadCount : null
         const values: Array<string | number | null> = [
-          connectionId,
+          resolvedConnectionId,
           id,
           displayName,
           lastMessageTs,
@@ -924,7 +924,7 @@ export function createSqlStore(): SqlStore {
            SET deleted_at = CURRENT_TIMESTAMP
            WHERE connection_id = ?
              AND jid = ?`,
-          [connectionId, id]
+          [resolvedConnectionId, id]
         )
       }, undefined, { ensureConnection: true }),
     setContact: async (id, contact) =>
@@ -965,7 +965,7 @@ export function createSqlStore(): SqlStore {
              user_id = VALUES(user_id),
              display_name = VALUES(display_name),
              data_json = VALUES(data_json)`,
-          [connectionId, id, userId ? 1 : 0, userId, displayName, payload]
+          [resolvedConnectionId, id, userId ? 1 : 0, userId, displayName, payload]
         )
       }, undefined, { ensureConnection: true }),
     setLidMapping: async ({ lid, pn }) =>
@@ -990,7 +990,7 @@ export function createSqlStore(): SqlStore {
            ON DUPLICATE KEY UPDATE
              lid = VALUES(lid),
              user_id = VALUES(user_id)`,
-          [connectionId, pn, lid, userId ? 1 : 0, userId]
+          [resolvedConnectionId, pn, lid, userId ? 1 : 0, userId]
         )
       }, undefined, { ensureConnection: true }),
     getLidForPn: async (pn) =>
@@ -1002,7 +1002,7 @@ export function createSqlStore(): SqlStore {
            WHERE connection_id = ?
              AND pn = ?
            LIMIT 1`,
-          [connectionId, pn]
+          [resolvedConnectionId, pn]
         )
         const row = rows[0]
         return row?.lid ?? null
@@ -1016,7 +1016,7 @@ export function createSqlStore(): SqlStore {
            WHERE connection_id = ?
              AND lid = ?
            LIMIT 1`,
-          [connectionId, lid]
+          [resolvedConnectionId, lid]
         )
         const row = rows[0]
         return row?.pn ?? null
@@ -1047,7 +1047,7 @@ export function createSqlStore(): SqlStore {
            )
            VALUES (?, ?, ?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?)`,
           [
-            connectionId,
+            resolvedConnectionId,
             event.key.chatJid,
             event.key.messageId,
             event.type,
@@ -1088,7 +1088,7 @@ export function createSqlStore(): SqlStore {
            )
            VALUES (?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?, ?, ?)`,
           [
-            connectionId,
+            resolvedConnectionId,
             event.type,
             actorId ? 1 : 0,
             actorId,
@@ -1125,7 +1125,7 @@ export function createSqlStore(): SqlStore {
              is_blocked = VALUES(is_blocked),
              reason = VALUES(reason)`,
           [
-            connectionId,
+            resolvedConnectionId,
             userId ? 1 : 0,
             userId,
             actorId ? 1 : 0,
@@ -1157,7 +1157,7 @@ export function createSqlStore(): SqlStore {
            )
            VALUES (?, ?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?)`,
           [
-            connectionId,
+            resolvedConnectionId,
             groupJid,
             event.eventType,
             actorId ? 1 : 0,
@@ -1189,7 +1189,7 @@ export function createSqlStore(): SqlStore {
            )
            VALUES (?, ?, UUID_TO_BIN(?, 1), IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?, ?)`,
           [
-            connectionId,
+            resolvedConnectionId,
             groupJid,
             userId,
             actorId ? 1 : 0,
@@ -1210,7 +1210,7 @@ export function createSqlStore(): SqlStore {
            )
            VALUES (?, ?, ?)
            ON DUPLICATE KEY UPDATE data_json = VALUES(data_json)`,
-          [connectionId, entry.newsletterId, serialize(entry.data ?? {})]
+          [resolvedConnectionId, entry.newsletterId, serialize(entry.data ?? {})]
         )
       }, undefined, { ensureConnection: true }),
     recordNewsletterParticipant: async (entry) =>
@@ -1228,7 +1228,7 @@ export function createSqlStore(): SqlStore {
            ON DUPLICATE KEY UPDATE
              role = VALUES(role),
              status = VALUES(status)`,
-          [connectionId, entry.newsletterId, userId, entry.role ?? null, entry.status ?? null]
+          [resolvedConnectionId, entry.newsletterId, userId, entry.role ?? null, entry.status ?? null]
         )
       }, undefined, { ensureConnection: true }),
     recordNewsletterEvent: async (event) =>
@@ -1250,7 +1250,7 @@ export function createSqlStore(): SqlStore {
            )
            VALUES (?, ?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?)`,
           [
-            connectionId,
+            resolvedConnectionId,
             event.newsletterId,
             event.eventType,
             actorId ? 1 : 0,
@@ -1281,7 +1281,7 @@ export function createSqlStore(): SqlStore {
            )
            VALUES (?, ?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?)`,
           [
-            connectionId,
+            resolvedConnectionId,
             entry.chatJid,
             entry.messageId ?? null,
             senderId ? 1 : 0,
@@ -1306,7 +1306,7 @@ export function createSqlStore(): SqlStore {
            )
            VALUES (?, ?, ?, ?, ?, ?)`,
           [
-            connectionId,
+            resolvedConnectionId,
             entry.deviceLabel ?? null,
             entry.platform ?? null,
             entry.appVersion ?? null,
@@ -1333,7 +1333,7 @@ export function createSqlStore(): SqlStore {
            )
            VALUES (?, IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?, ?, ?, ?, ?)`,
           [
-            connectionId,
+            resolvedConnectionId,
             actorId ? 1 : 0,
             actorId,
             entry.chatJid,
@@ -1358,7 +1358,7 @@ export function createSqlStore(): SqlStore {
            VALUES (?, UUID_TO_BIN(?, 1), ?, ?)
            ON DUPLICATE KEY UPDATE
              data_json = VALUES(data_json)`,
-          [connectionId, userId, entry.deviceId, entry.data ? serialize(entry.data) : null]
+          [resolvedConnectionId, userId, entry.deviceId, entry.data ? serialize(entry.data) : null]
         )
       }, undefined, { ensureConnection: true }),
     setChatUser: async (chatJid, userJid, role) =>
@@ -1379,7 +1379,7 @@ export function createSqlStore(): SqlStore {
            VALUES (?, ?, UUID_TO_BIN(?, 1), ?)
            ON DUPLICATE KEY UPDATE
              role = VALUES(role)`,
-          [connectionId, normalizedChat, userId, resolvedRole]
+          [resolvedConnectionId, normalizedChat, userId, resolvedRole]
         )
       }, undefined, { ensureConnection: true }),
     deleteChatUser: async (chatJid, userJid) =>
@@ -1394,7 +1394,7 @@ export function createSqlStore(): SqlStore {
            WHERE connection_id = ?
              AND chat_jid = ?
              AND user_id = UUID_TO_BIN(?, 1)`,
-          [connectionId, normalizedChat, userId]
+          [resolvedConnectionId, normalizedChat, userId]
         )
       }, undefined, { ensureConnection: true }),
     setLabel: async (label) =>
@@ -1418,7 +1418,7 @@ export function createSqlStore(): SqlStore {
              color = VALUES(color),
              data_json = VALUES(data_json)`,
           [
-            connectionId,
+            resolvedConnectionId,
             label.id,
             actorId ? 1 : 0,
             actorId,
@@ -1462,7 +1462,7 @@ export function createSqlStore(): SqlStore {
              target_jid = VALUES(target_jid),
              data_json = VALUES(data_json)`,
           [
-            connectionId,
+            resolvedConnectionId,
             association.labelId,
             actorId ? 1 : 0,
             actorId,

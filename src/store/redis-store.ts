@@ -13,16 +13,6 @@ import { getRedisNamespace } from '../core/redis/prefix.js'
 const serialize = (value: unknown) => JSON.stringify(value, BufferJSON.replacer)
 const deserialize = <T>(value: string) => JSON.parse(value, BufferJSON.reviver) as T
 
-const storePrefix = `${getRedisNamespace()}:store`
-const storeKeys = {
-  messages: `${storePrefix}:messages`,
-  groups: `${storePrefix}:groups`,
-  chats: `${storePrefix}:chats`,
-  contacts: `${storePrefix}:contacts`,
-  lidByPn: `${storePrefix}:lid:pn`,
-  pnByLid: `${storePrefix}:lid:lid`,
-}
-
 export type RedisStore = {
   enabled: boolean
   getMessage: (key: string) => Promise<WAMessage | undefined>
@@ -43,7 +33,7 @@ export type RedisStore = {
 /**
  * Cria a store Redis para chats, grupos, contatos e mensagens.
  */
-export function createRedisStore(): RedisStore {
+export function createRedisStore(connectionId?: string): RedisStore {
   if (!config.redisUrl) {
     return {
       enabled: false,
@@ -63,7 +53,20 @@ export function createRedisStore(): RedisStore {
     }
   }
 
-  const safe = async <T>(fn: (client: Awaited<ReturnType<typeof getRedisClient>>) => Promise<T>, fallback: T): Promise<T> => {
+  const storePrefix = `${getRedisNamespace(connectionId)}:store`
+  const storeKeys = {
+    messages: `${storePrefix}:messages`,
+    groups: `${storePrefix}:groups`,
+    chats: `${storePrefix}:chats`,
+    contacts: `${storePrefix}:contacts`,
+    lidByPn: `${storePrefix}:lid:pn`,
+    pnByLid: `${storePrefix}:lid:lid`,
+  }
+
+  const safe = async <T>(
+    fn: (client: Awaited<ReturnType<typeof getRedisClient>>) => Promise<T>,
+    fallback: T
+  ): Promise<T> => {
     try {
       const client = await getRedisClient()
       return await fn(client)
