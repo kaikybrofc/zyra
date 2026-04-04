@@ -193,6 +193,9 @@ export function createBaileysStore(): BaileysStore {
         }
         if (chat.id && sqlStore.enabled) {
           void sqlStore.setChat(chat.id, chat)
+          if (!chat.id.endsWith('@g.us')) {
+            void sqlStore.setChatUser(chat.id, chat.id, null)
+          }
         }
       }
     })
@@ -209,6 +212,9 @@ export function createBaileysStore(): BaileysStore {
         }
         if (sqlStore.enabled) {
           void sqlStore.setChat(id, next)
+          if (!id.endsWith('@g.us')) {
+            void sqlStore.setChatUser(id, id, null)
+          }
         }
       }
     })
@@ -261,6 +267,13 @@ export function createBaileysStore(): BaileysStore {
         }
         if (group.id && sqlStore.enabled) {
           void sqlStore.setGroup(group.id, group)
+          if (group.participants?.length) {
+            void sqlStore.setGroupParticipants(group.id, group.participants, { replace: true })
+            for (const participant of group.participants) {
+              const role = participant.admin ?? null
+              void sqlStore.setChatUser(group.id, participant.id, role)
+            }
+          }
         }
         upsertGroupLidMappings(group)
       }
@@ -279,6 +292,13 @@ export function createBaileysStore(): BaileysStore {
         }
         if (sqlStore.enabled) {
           void sqlStore.setGroup(id, next)
+          if (next.participants?.length) {
+            void sqlStore.setGroupParticipants(id, next.participants, { replace: true })
+            for (const participant of next.participants) {
+              const role = participant.admin ?? null
+              void sqlStore.setChatUser(id, participant.id, role)
+            }
+          }
         }
         upsertGroupLidMappings(update)
       }
@@ -324,12 +344,38 @@ export function createBaileysStore(): BaileysStore {
       }
       if (sqlStore.enabled) {
         void sqlStore.setGroup(id, nextGroup)
+        const participantIds = participants.map((participant) => participant.id)
+        if (action === 'remove') {
+          void sqlStore.removeGroupParticipants(id, participantIds)
+        } else {
+          void sqlStore.setGroupParticipants(id, participants)
+        }
+        if (action === 'add' || action === 'promote' || action === 'demote' || action === 'modify') {
+          for (const participant of participants) {
+            const role = participant.admin ?? null
+            void sqlStore.setChatUser(id, participant.id, role)
+          }
+        } else if (action === 'remove') {
+          for (const participant of participants) {
+            void sqlStore.deleteChatUser(id, participant.id)
+          }
+        }
       }
     })
 
     ev.on('messages.upsert', ({ messages: messageList }) => {
       for (const message of messageList) {
         upsertMessage(message)
+        if (sqlStore.enabled) {
+          const key = message.key
+          if (key?.remoteJid) {
+            const senderJid = key.fromMe ? null : (key.participant ?? key.remoteJid ?? null)
+            const role = null
+            if (senderJid) {
+              void sqlStore.setChatUser(key.remoteJid, senderJid, role)
+            }
+          }
+        }
       }
     })
 
@@ -344,6 +390,13 @@ export function createBaileysStore(): BaileysStore {
         }
         if (sqlStore.enabled) {
           void sqlStore.setMessage(merged)
+          if (key.remoteJid && key.id) {
+            void sqlStore.recordMessageEvent({
+              key: { chatJid: key.remoteJid, messageId: key.id, fromMe: Boolean(key.fromMe) },
+              type: 'update',
+              data: update,
+            })
+          }
         }
       }
     })
@@ -360,6 +413,11 @@ export function createBaileysStore(): BaileysStore {
         }
         if (sqlStore.enabled) {
           void sqlStore.deleteMessagesByJid(item.jid)
+          void sqlStore.recordMessageEvent({
+            key: { chatJid: item.jid, messageId: '*', fromMe: false },
+            type: 'delete_all',
+            data: item,
+          })
         }
         return
       }
@@ -373,10 +431,116 @@ export function createBaileysStore(): BaileysStore {
           if (sqlStore.enabled) {
             if (key.remoteJid && key.id) {
               void sqlStore.deleteMessage(key.remoteJid, key.id, Boolean(key.fromMe))
+              void sqlStore.recordMessageEvent({
+                key: { chatJid: key.remoteJid, messageId: key.id, fromMe: Boolean(key.fromMe) },
+                type: 'delete',
+                data: key,
+              })
             }
           }
         }
       }
+    })
+
+    ev.on('messages.reaction', (reactions) => {
+      if (!sqlStore.enabled) return
+      for (const reaction of reactions) {
+        const key = reaction.key
+        if (!key?.remoteJid || !key.id) continue
+        const actorJid =
+          reaction.key.participant ?? reaction.sender ?? reaction.reaction?.participant ?? null
+        const targetJid = key.participant ?? null
+        void sqlStore.recordMessageEvent({
+          key: { chatJid: key.remoteJid, messageId: key.id, fromMe: Boolean(key.fromMe) },
+          type: 'reaction',
+          actorJid,
+          targetJid,
+          data: reaction,
+        })
+      }
+    })
+
+    ev.on('message-receipt.update', (updates) => {
+      if (!sqlStore.enabled) return
+      for (const update of updates) {
+        const key = update.key
+        if (!key?.remoteJid || !key.id) continue
+        const actorJid = update.participant ?? update.key.participant ?? null
+        void sqlStore.recordMessageEvent({
+          key: { chatJid: key.remoteJid, messageId: key.id, fromMe: Boolean(key.fromMe) },
+          type: 'receipt',
+          actorJid,
+          data: update,
+        })
+      }
+    })
+
+    ev.on('labels.edit', (label) => {
+      if (!sqlStore.enabled) return
+      const labelActor =
+        (label as { author?: string | null }).author ??
+        (label as { actor?: string | null }).actor ??
+        (label as { creator?: string | null }).creator ??
+        null
+      void sqlStore.setLabel({
+        id: label.id,
+        name: label.name ?? null,
+        color: label.color ?? null,
+        data: label,
+        actorJid: labelActor,
+      })
+    })
+
+    ev.on('labels.association', ({ association, type }) => {
+      if (!sqlStore.enabled) return
+      const assoc = association as {
+        labelId?: string
+        messageId?: string
+        chatId?: string
+        contactJid?: string
+        groupJid?: string
+        actor?: string
+        author?: string
+        label_id?: string
+        message_id?: string
+        chat_id?: string
+        contact_jid?: string
+        group_jid?: string
+      }
+      const labelId = assoc.labelId ?? assoc.label_id
+      if (!labelId) return
+      const messageId = assoc.messageId ?? assoc.message_id
+      const chatJid = assoc.chatId ?? assoc.chat_id ?? null
+      const contactJid = assoc.contactJid ?? assoc.contact_jid ?? null
+      const groupJid = assoc.groupJid ?? assoc.group_jid ?? null
+      const associationType =
+        type === 'chat' || type === 'message' || type === 'contact' || type === 'group'
+          ? type
+          : messageId
+            ? 'message'
+            : groupJid
+              ? 'group'
+              : contactJid
+                ? 'contact'
+                : 'chat'
+      const actorJid = assoc.actor ?? assoc.author ?? null
+      void sqlStore.setLabelAssociation({
+        labelId,
+        associationType,
+        chatJid: associationType === 'chat' ? chatJid : null,
+        targetJid:
+          associationType === 'contact'
+            ? contactJid
+            : associationType === 'group'
+              ? groupJid
+              : null,
+        messageKey:
+          associationType === 'message' && messageId && chatJid
+            ? { chatJid, messageId, fromMe: false }
+            : null,
+        actorJid,
+        data: association,
+      })
     })
 
     ev.on('lid-mapping.update', (mapping) => {
