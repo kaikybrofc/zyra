@@ -13,6 +13,7 @@ export const allowHistorySyncOnceForNewLogin = () => {
 }
 
 export const shouldSyncHistoryMessageOnce = (_msg: proto.Message.IHistorySyncNotification) => {
+  void _msg
   if (allowHistorySyncOnce) {
     allowHistorySyncOnce = false
     return true

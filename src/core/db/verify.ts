@@ -1,4 +1,5 @@
 import { loadEnv } from '../../bootstrap/env.js'
+import type { RowDataPacket } from 'mysql2/promise'
 import { config } from '../../config/index.js'
 import { createLogger } from '../../observability/logger.js'
 import { getMysqlPool } from './mysql.js'
@@ -7,8 +8,8 @@ import { ensureMysqlConnection } from './connection.js'
 loadEnv()
 const logger = createLogger()
 
-type TableRow = { table_name: string }
-type ColumnRow = { count: number }
+type TableRow = RowDataPacket & { table_name: string }
+type ColumnRow = RowDataPacket & { count: number }
 
 async function main() {
   if (!config.mysqlUrl) {
@@ -49,21 +50,24 @@ async function main() {
       )
       const hasConnectionId = (columns[0]?.count ?? 0) > 0
       if (hasConnectionId) {
-        const [rows] = await pool.execute<[{ count: number }]>(
+        type CountRow = RowDataPacket & { count: number }
+        const [rows] = await pool.execute<CountRow[]>(
           `SELECT COUNT(*) AS count FROM \`${table}\` WHERE connection_id = ?`,
           [connectionId]
         )
         const count = rows[0]?.count ?? 0
         logger.info(`tabela ${table}`, { count })
       } else if (table === 'connections') {
-        const [rows] = await pool.execute<[{ count: number }]>(
+        type CountRow = RowDataPacket & { count: number }
+        const [rows] = await pool.execute<CountRow[]>(
           `SELECT COUNT(*) AS count FROM \`connections\` WHERE id = ?`,
           [connectionId]
         )
         const count = rows[0]?.count ?? 0
         logger.info(`tabela ${table}`, { count })
       } else {
-        const [rows] = await pool.execute<[{ count: number }]>(
+        type CountRow = RowDataPacket & { count: number }
+        const [rows] = await pool.execute<CountRow[]>(
           `SELECT COUNT(*) AS count FROM \`${table}\``
         )
         const count = rows[0]?.count ?? 0

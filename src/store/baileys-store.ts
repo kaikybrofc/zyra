@@ -465,11 +465,16 @@ export function createBaileysStore(): BaileysStore {
     ev.on('messages.reaction', (reactions) => {
       if (!sqlStore.enabled) return
       for (const reaction of reactions) {
-        const key = reaction.key
+        const reactionAny = reaction as {
+          key?: { remoteJid?: string | null; id?: string | null; fromMe?: boolean | null; participant?: string | null }
+          sender?: string | null
+          reaction?: { participant?: string | null }
+        }
+        const key = reactionAny.key
         if (!key?.remoteJid || !key.id) continue
         const actorJid =
-          reaction.key.participant ?? reaction.sender ?? reaction.reaction?.participant ?? null
-        const targetJid = key.participant ?? null
+          reactionAny.key?.participant ?? reactionAny.sender ?? reactionAny.reaction?.participant ?? null
+        const targetJid = reactionAny.key?.participant ?? null
         void sqlStore.recordMessageEvent({
           key: { chatJid: key.remoteJid, messageId: key.id, fromMe: Boolean(key.fromMe) },
           type: 'reaction',
@@ -483,9 +488,13 @@ export function createBaileysStore(): BaileysStore {
     ev.on('message-receipt.update', (updates) => {
       if (!sqlStore.enabled) return
       for (const update of updates) {
-        const key = update.key
+        const updateAny = update as {
+          key?: { remoteJid?: string | null; id?: string | null; fromMe?: boolean | null; participant?: string | null }
+          participant?: string | null
+        }
+        const key = updateAny.key
         if (!key?.remoteJid || !key.id) continue
-        const actorJid = update.participant ?? update.key.participant ?? null
+        const actorJid = updateAny.participant ?? updateAny.key?.participant ?? null
         void sqlStore.recordMessageEvent({
           key: { chatJid: key.remoteJid, messageId: key.id, fromMe: Boolean(key.fromMe) },
           type: 'receipt',
@@ -502,16 +511,17 @@ export function createBaileysStore(): BaileysStore {
         (label as { actor?: string | null }).actor ??
         (label as { creator?: string | null }).creator ??
         null
+      const color = label.color == null ? null : String(label.color)
       void sqlStore.setLabel({
         id: label.id,
         name: label.name ?? null,
-        color: label.color ?? null,
+        color,
         data: label,
         actorJid: labelActor,
       })
     })
 
-    ev.on('labels.association', ({ association, type }) => {
+    ev.on('labels.association', ({ association }) => {
       if (!sqlStore.enabled) return
       const assoc = association as {
         labelId?: string
@@ -534,15 +544,13 @@ export function createBaileysStore(): BaileysStore {
       const contactJid = assoc.contactJid ?? assoc.contact_jid ?? null
       const groupJid = assoc.groupJid ?? assoc.group_jid ?? null
       const associationType =
-        type === 'chat' || type === 'message' || type === 'contact' || type === 'group'
-          ? type
-          : messageId
-            ? 'message'
-            : groupJid
-              ? 'group'
-              : contactJid
-                ? 'contact'
-                : 'chat'
+        messageId && chatJid
+          ? 'message'
+          : groupJid
+            ? 'group'
+            : contactJid
+              ? 'contact'
+              : 'chat'
       const actorJid = assoc.actor ?? assoc.author ?? null
       void sqlStore.setLabelAssociation({
         labelId,

@@ -1,4 +1,5 @@
 import { loadEnv } from '../../bootstrap/env.js'
+import type { RowDataPacket } from 'mysql2/promise'
 import { config } from '../../config/index.js'
 import { createLogger } from '../../observability/logger.js'
 import { ensureMysqlConnection } from './connection.js'
@@ -7,9 +8,9 @@ import { getMysqlPool } from './mysql.js'
 loadEnv()
 const logger = createLogger()
 
-type TableRow = { table_name: string }
+type TableRow = RowDataPacket & { table_name: string }
 
-type ColumnRow = {
+type ColumnRow = RowDataPacket & {
   column_name: string
   is_nullable: 'YES' | 'NO'
 }
@@ -112,7 +113,8 @@ async function main() {
     const totalQuery = hasConnectionId
       ? `SELECT COUNT(*) AS total FROM \`${tableEscaped}\` WHERE connection_id = ?`
       : `SELECT COUNT(*) AS total FROM \`${tableEscaped}\``
-    const [totalRows] = await pool.execute<[{ total: number }]>(
+    type TotalRow = RowDataPacket & { total: number }
+    const [totalRows] = await pool.execute<TotalRow[]>(
       totalQuery,
       hasConnectionId ? [connectionId] : []
     )
@@ -124,7 +126,8 @@ async function main() {
       const nullQuery = hasConnectionId
         ? `SELECT COUNT(*) AS count FROM \`${tableEscaped}\` WHERE connection_id = ? AND \`${columnEscaped}\` IS NULL`
         : `SELECT COUNT(*) AS count FROM \`${tableEscaped}\` WHERE \`${columnEscaped}\` IS NULL`
-      const [nullRows] = await pool.execute<[{ count: number }]>(
+      type CountRow = RowDataPacket & { count: number }
+      const [nullRows] = await pool.execute<CountRow[]>(
         nullQuery,
         hasConnectionId ? [connectionId] : []
       )

@@ -1430,9 +1430,9 @@ export function createSqlStore(): SqlStore {
         const actorId = association.actorJid
           ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: association.actorJid }], null)
           : null
-        const targetId = association.targetJid
-          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: association.targetJid }], null)
-          : null
+        if (association.targetJid) {
+          await ensureUserByIdentifiers(pool, [{ type: 'jid', value: association.targetJid }], null)
+        }
         const messageDbId = association.messageKey
           ? await getMessageDbId(pool, {
               chatJid: association.messageKey.chatJid,

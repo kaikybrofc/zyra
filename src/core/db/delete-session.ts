@@ -35,7 +35,7 @@ const deleteAuthFiles = async (authDir: string) => {
 }
 
 const scanAndDelete = async (client: Awaited<ReturnType<typeof getRedisClient>>, pattern: string) => {
-  let cursor = '0'
+  let cursor = 0
   let deleted = 0
   const startedAt = Date.now()
   do {
@@ -48,7 +48,7 @@ const scanAndDelete = async (client: Awaited<ReturnType<typeof getRedisClient>>,
       break
     }
     const reply = await client.scan(cursor, { MATCH: pattern, COUNT: 500 })
-    cursor = reply.cursor
+    cursor = Number(reply.cursor)
     if (reply.keys.length) {
       deleted += reply.keys.length
       if (typeof client.unlink === 'function') {
@@ -57,7 +57,7 @@ const scanAndDelete = async (client: Awaited<ReturnType<typeof getRedisClient>>,
         await client.del(reply.keys)
       }
     }
-  } while (cursor !== '0')
+  } while (cursor !== 0)
   return deleted
 }
 

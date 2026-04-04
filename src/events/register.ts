@@ -330,7 +330,7 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
       logger.debug('evento do Baileys recebido', { event: 'messages.media-update', count: updates.length })
       const selfJid = resolveSelfJid()
       for (const item of updates) {
-        const key = (item as { key?: { remoteJid?: string | null; id?: string | null; fromMe?: boolean | null } }).key
+        const key = (item as { key?: { remoteJid?: string | null; id?: string | null; fromMe?: boolean | null; participant?: string | null } }).key
         const update = (item as { update?: unknown }).update
         const messageKey = toEventMessageKey(key)
         if (!messageKey) continue
@@ -400,14 +400,19 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
     'messages.reaction': (reactions) => {
       logger.debug('evento do Baileys recebido', { event: 'messages.reaction', count: reactions.length })
       for (const reaction of reactions) {
-        const key = reaction.key
+        const reactionAny = reaction as {
+          key?: { remoteJid?: string | null; id?: string | null; fromMe?: boolean | null; participant?: string | null }
+          sender?: string | null
+          reaction?: { participant?: string | null }
+        }
+        const key = reactionAny.key
         const messageKey = toEventMessageKey(key)
         if (!messageKey) continue
         const chatJid = messageKey.chatJid
         const groupJid = toGroupJid(chatJid)
         const actorJid =
-          reaction.key.participant ?? reaction.sender ?? reaction.reaction?.participant ?? null
-        const targetJid = key?.participant ?? null
+          reactionAny.key?.participant ?? reactionAny.sender ?? reactionAny.reaction?.participant ?? null
+        const targetJid = reactionAny.key?.participant ?? null
         recordEvent(
           'messages.reaction',
           { id: key?.id ?? null },
@@ -418,15 +423,20 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
     'message-receipt.update': (updates) => {
       logger.debug('evento do Baileys recebido', { event: 'message-receipt.update', count: updates.length })
       for (const update of updates) {
-        const key = update.key
+        const updateAny = update as {
+          key?: { remoteJid?: string | null; id?: string | null; fromMe?: boolean | null; participant?: string | null }
+          participant?: string | null
+          receipt?: unknown
+        }
+        const key = updateAny.key
         const messageKey = toEventMessageKey(key)
         if (!messageKey) continue
         const chatJid = messageKey.chatJid
         const groupJid = toGroupJid(chatJid)
-        const actorJid = update.participant ?? update.key.participant ?? null
+        const actorJid = updateAny.participant ?? updateAny.key?.participant ?? null
         recordEvent(
           'message-receipt.update',
-          { receipt: (update as { receipt?: unknown }).receipt ?? null },
+          { receipt: updateAny.receipt ?? null },
           { chatJid, groupJid, messageKey, actorJid }
         )
       }
@@ -563,18 +573,26 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
       const groupJid = assoc.groupJid ?? assoc.group_jid ?? null
       const contactJid = assoc.contactJid ?? assoc.contact_jid ?? null
       const actorJid = assoc.actor ?? assoc.author ?? null
+      const associationType =
+        messageId && chatJid
+          ? 'message'
+          : groupJid
+            ? 'group'
+            : contactJid
+              ? 'contact'
+              : 'chat'
       const messageKey =
-        type === 'message' && messageId && chatJid
+        associationType === 'message' && messageId && chatJid
           ? { chatJid, messageId, fromMe: false }
           : null
       logEvent(
         'labels.association',
-        { type, association },
+        { action: type, associationType, association },
         {
           actorJid,
-          chatJid: type === 'chat' ? chatJid : null,
-          groupJid: type === 'group' ? groupJid : null,
-          targetJid: type === 'contact' ? contactJid : null,
+          chatJid: associationType === 'chat' ? chatJid : null,
+          groupJid: associationType === 'group' ? groupJid : null,
+          targetJid: associationType === 'contact' ? contactJid : null,
           messageKey,
         }
       )
