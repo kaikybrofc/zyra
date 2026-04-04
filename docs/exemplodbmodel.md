@@ -131,10 +131,6 @@ erDiagram
   users ||--o{ wa_contacts_cache : "fk_contacts_cache_user"
 ```
 
-## Diagrama (Imagem)
-
-![Diagrama do banco](diagrama-db.svg)
-
 ```sql
 CREATE TABLE connections (
   id VARCHAR(64) PRIMARY KEY,
