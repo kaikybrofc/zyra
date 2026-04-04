@@ -1,5 +1,7 @@
 # Modelo completo do banco (MySQL 8)
 
+![Diagrama do banco](diagrama-db.svg)
+
 Este arquivo contem o modelo completo proposto para persistencia do bot, com:
 - conexoes
 - usuarios internos (id unico)
@@ -71,6 +73,67 @@ chats
   |
   +-- chat_users
 ```
+
+## Diagrama (Mermaid)
+
+```mermaid
+erDiagram
+  connections ||--o{ auth_creds : "fk_auth_creds_conn"
+  connections ||--o{ blocklist : "fk_block_conn"
+  connections ||--o{ bot_sessions : "fk_bot_sessions_conn"
+  connections ||--o{ chat_users : "fk_chat_users_conn"
+  connections ||--o{ chats : "fk_chats_conn"
+  connections ||--o{ commands_log : "fk_commands_conn"
+  connections ||--o{ events_log : "fk_events_conn"
+  connections ||--o{ events_log_archive : "fk_events_archive_conn"
+  connections ||--o{ group_events : "fk_group_events_conn"
+  connections ||--o{ group_join_requests : "fk_join_req_conn"
+  connections ||--o{ group_participants : "fk_group_part_conn"
+  connections ||--o{ groups : "fk_groups_conn"
+  connections ||--o{ label_associations : "fk_label_assoc_conn"
+  connections ||--o{ labels : "fk_labels_conn"
+  connections ||--o{ lid_mappings : "fk_lid_conn"
+  connections ||--o{ message_events : "fk_events_conn"
+  connections ||--o{ message_failures : "fk_message_failures_conn"
+  connections ||--o{ message_media : "fk_media_conn"
+  connections ||--o{ message_text_index : "fk_text_conn"
+  connections ||--o{ message_users : "fk_message_users_conn"
+  connections ||--o{ messages : "fk_messages_conn"
+  connections ||--o{ newsletter_events : "fk_news_events_conn"
+  connections ||--o{ newsletter_participants : "fk_news_part_conn"
+  connections ||--o{ newsletters : "fk_newsletters_conn"
+  connections ||--o{ signal_keys : "fk_signal_keys_conn"
+  connections ||--o{ user_aliases : "fk_user_aliases_conn"
+  connections ||--o{ user_devices : "fk_user_devices_conn"
+  connections ||--o{ user_identifiers : "fk_user_ident_conn"
+  connections ||--o{ users : "fk_users_conn"
+  connections ||--o{ wa_contacts_cache : "fk_contacts_cache_conn"
+  labels ||--o{ label_associations : "fk_label_assoc_label"
+  messages ||--o{ message_media : "fk_media_msg"
+  messages ||--o{ message_text_index : "fk_text_msg"
+  messages ||--o{ message_users : "fk_message_users_msg"
+  users ||--o{ blocklist : "fk_block_actor"
+  users ||--o{ blocklist : "fk_block_user"
+  users ||--o{ chat_users : "fk_chat_users_user"
+  users ||--o{ group_join_requests : "fk_join_req_actor"
+  users ||--o{ group_join_requests : "fk_join_req_user"
+  users ||--o{ group_participants : "fk_group_part_user"
+  users ||--o{ groups : "fk_groups_owner"
+  users ||--o{ label_associations : "fk_label_assoc_actor"
+  users ||--o{ labels : "fk_labels_actor"
+  users ||--o{ lid_mappings : "fk_lid_user"
+  users ||--o{ message_users : "fk_message_users_user"
+  users ||--o{ messages : "fk_messages_sender"
+  users ||--o{ newsletter_participants : "fk_news_part_user"
+  users ||--o{ user_aliases : "fk_user_aliases_user"
+  users ||--o{ user_devices : "fk_user_devices_user"
+  users ||--o{ user_identifiers : "fk_user_ident_user"
+  users ||--o{ wa_contacts_cache : "fk_contacts_cache_user"
+```
+
+## Diagrama (Imagem)
+
+![Diagrama do banco](diagrama-db.svg)
 
 ```sql
 CREATE TABLE connections (
@@ -530,3 +593,55 @@ Este modelo foi desenhado para equilibrar compatibilidade com o Baileys, consult
 - Para alta escala, as tabelas de eventos ficam sem FKs de usuario/mensagem (consistencia eventual) e o volume de `messages` pode ser particionado por data ou por `connection_id`.
 - Para buscas pesadas, o `message_text_index` pode ser substituido futuramente por um motor dedicado (Meilisearch/Elastic).
 - `deleted_at` permite soft delete sem perder historico, facilitando auditoria e recuperacao.
+
+## Relatorio de Conformidade do Banco
+
+Data da analise: `2026-04-04T03:42:42.024Z`
+Banco analisado: `zyra` (via `MYSQL_URL`)
+
+Escopo da comparacao:
+- Tabelas e colunas
+- Tipos (base e tamanho quando especificado)
+- Nulidade, DEFAULT, ON UPDATE e AUTO_INCREMENT
+- Indices (PRIMARY/UNIQUE/INDEX/FULLTEXT)
+- Chaves estrangeiras
+- Engine e collation
+
+Resumo:
+- Tabelas esperadas: 31
+- Tabelas encontradas: 31
+- Tabelas faltando: nenhuma
+- Tabelas extras: nenhuma
+- Colunas faltando: nenhuma
+- Colunas extras: nenhuma
+- Divergencias de tipo: nenhuma
+- Divergencias de nulidade: nenhuma
+- Divergencias de DEFAULT: nenhuma
+- Divergencias de ON UPDATE: nenhuma
+- Divergencias de AUTO_INCREMENT: nenhuma
+- FKs faltando: nenhuma
+- FKs extras: nenhuma
+- Problemas de engine: nenhum
+- Problemas de collation: nenhum
+
+Indices extras (provavel criacao automatica para FKs):
+- `blocklist`: `INDEX (actor_user_id)`
+- `blocklist`: `INDEX (user_id)`
+- `chat_users`: `INDEX (user_id)`
+- `group_join_requests`: `INDEX (actor_user_id)`
+- `group_join_requests`: `INDEX (user_id)`
+- `group_participants`: `INDEX (user_id)`
+- `groups`: `INDEX (owner_user_id)`
+- `label_associations`: `INDEX (actor_user_id)`
+- `labels`: `INDEX (actor_user_id)`
+- `lid_mappings`: `INDEX (user_id)`
+- `message_media`: `INDEX (message_db_id)`
+- `message_text_index`: `INDEX (message_db_id)`
+- `message_users`: `INDEX (message_db_id)`
+- `message_users`: `INDEX (user_id)`
+- `messages`: `INDEX (sender_user_id)`
+- `newsletter_participants`: `INDEX (user_id)`
+- `user_aliases`: `INDEX (user_id)`
+- `user_devices`: `INDEX (user_id)`
+- `user_identifiers`: `INDEX (user_id)`
+- `wa_contacts_cache`: `INDEX (user_id)`

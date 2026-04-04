@@ -46,7 +46,7 @@ const resolveDatabaseName = (urlValue: string): string | null => {
 }
 
 const loadSchemaSql = async (): Promise<string> => {
-  const schemaUrl = new URL('../../../exemplodbmodel.md', import.meta.url)
+  const schemaUrl = new URL('../../../docs/exemplodbmodel.md', import.meta.url)
   return readFile(schemaUrl, { encoding: 'utf-8' })
 }
 
