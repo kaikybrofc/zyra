@@ -57,12 +57,40 @@ type EventHandler<K extends keyof BaileysEventMap> = (
 
 export function registerEvents({ sock, logger, reconnect }: RegisterOptions): void {
   const sqlStore = createSqlStore()
-  const logEvent = (event: keyof BaileysEventMap, meta: Record<string, unknown>) => {
-    logger.debug('evento do Baileys recebido', { event, ...meta })
-    if (sqlStore.enabled) {
-      void sqlStore.recordEvent({ type: String(event), data: meta })
-    }
+  type EventContext = {
+    actorJid?: string | null
+    targetJid?: string | null
+    chatJid?: string | null
+    groupJid?: string | null
+    messageKey?: { chatJid: string; messageId: string; fromMe: boolean } | null
   }
+  const recordEvent = (
+    event: keyof BaileysEventMap,
+    meta: Record<string, unknown>,
+    context?: EventContext
+  ) => {
+    if (!sqlStore.enabled) return
+    void sqlStore.recordEvent({ type: String(event), data: meta, ...context })
+  }
+  const logEvent = (
+    event: keyof BaileysEventMap,
+    meta: Record<string, unknown>,
+    context?: EventContext
+  ) => {
+    logger.debug('evento do Baileys recebido', { event, ...meta })
+    recordEvent(event, meta, context)
+  }
+  const resolveSelfJid = () => sock.user?.id ?? null
+  const toEventMessageKey = (key?: {
+    remoteJid?: string | null
+    id?: string | null
+    fromMe?: boolean | null
+  }) => {
+    if (!key?.remoteJid || !key.id) return null
+    return { chatJid: key.remoteJid, messageId: key.id, fromMe: Boolean(key.fromMe) }
+  }
+  const toGroupJid = (jid?: string | null) =>
+    jid && jid.endsWith('@g.us') ? jid : null
 
   const syncGroupsOnConnect = async (): Promise<GroupMetadata[]> => {
     try {
@@ -140,7 +168,7 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
         hasQr: Boolean(qr),
         receivedPendingNotifications,
         isNewLogin,
-      })
+      }, { actorJid: resolveSelfJid() })
 
       if (connection === 'close') {
         const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode
@@ -179,7 +207,7 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
       }
     },
     'creds.update': () => {
-      logEvent('creds.update', {})
+      logEvent('creds.update', {}, { actorJid: resolveSelfJid() })
     },
     'messaging-history.set': ({ chats, contacts, messages, isLatest, progress, syncType }) => {
       logEvent('messaging-history.set', {
@@ -189,29 +217,125 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
         isLatest,
         progress,
         syncType,
-      })
+      }, { actorJid: resolveSelfJid() })
     },
-    'chats.upsert': (chats) => logEvent('chats.upsert', { count: chats.length }),
-    'chats.update': (updates) => logEvent('chats.update', { count: updates.length }),
-    'lid-mapping.update': ({ lid, pn }) => logEvent('lid-mapping.update', { lid, pn }),
-    'chats.delete': (ids) => logEvent('chats.delete', { count: ids.length }),
+    'chats.upsert': (chats) => {
+      logger.debug('evento do Baileys recebido', { event: 'chats.upsert', count: chats.length })
+      const actorJid = resolveSelfJid()
+      for (const chat of chats) {
+        if (!chat.id) continue
+        recordEvent('chats.upsert', { id: chat.id }, { chatJid: chat.id, actorJid })
+      }
+    },
+    'chats.update': (updates) => {
+      logger.debug('evento do Baileys recebido', { event: 'chats.update', count: updates.length })
+      const actorJid = resolveSelfJid()
+      for (const update of updates) {
+        const id = (update as { id?: string | null }).id
+        if (!id) continue
+        recordEvent('chats.update', { id }, { chatJid: id, actorJid })
+      }
+    },
+    'lid-mapping.update': ({ lid, pn }) =>
+      logEvent('lid-mapping.update', { lid, pn }, { actorJid: resolveSelfJid() }),
+    'chats.delete': (ids) => {
+      logger.debug('evento do Baileys recebido', { event: 'chats.delete', count: ids.length })
+      const actorJid = resolveSelfJid()
+      for (const id of ids) {
+        recordEvent('chats.delete', { id }, { chatJid: id, actorJid })
+      }
+    },
     'presence.update': ({ id, presences }) =>
-      logEvent('presence.update', { id, count: Object.keys(presences).length }),
-    'contacts.upsert': (contacts) => logEvent('contacts.upsert', { count: contacts.length }),
-    'contacts.update': (updates) => logEvent('contacts.update', { count: updates.length }),
+      logEvent(
+        'presence.update',
+        { id, count: Object.keys(presences).length },
+        { chatJid: id, actorJid: resolveSelfJid() }
+      ),
+    'contacts.upsert': (contacts) => {
+      logger.debug('evento do Baileys recebido', { event: 'contacts.upsert', count: contacts.length })
+      const actorJid = resolveSelfJid()
+      for (const contact of contacts) {
+        if (!contact.id) continue
+        recordEvent('contacts.upsert', { id: contact.id }, { targetJid: contact.id, actorJid })
+      }
+    },
+    'contacts.update': (updates) => {
+      logger.debug('evento do Baileys recebido', { event: 'contacts.update', count: updates.length })
+      const actorJid = resolveSelfJid()
+      for (const update of updates) {
+        const id = (update as { id?: string | null }).id
+        if (!id) continue
+        recordEvent('contacts.update', { id }, { targetJid: id, actorJid })
+      }
+    },
     'messages.delete': (data) => {
+      const selfJid = resolveSelfJid()
       if ('all' in data && data.all) {
-        logEvent('messages.delete', { jid: data.jid, all: true })
+        logEvent(
+          'messages.delete',
+          { jid: data.jid, all: true },
+          { chatJid: data.jid ?? null, actorJid: selfJid }
+        )
         return
       }
       if ('keys' in data) {
-        logEvent('messages.delete', { count: data.keys.length })
-      } else {
-        logEvent('messages.delete', { count: 0 })
+        logger.debug('evento do Baileys recebido', { event: 'messages.delete', count: data.keys.length })
+        for (const key of data.keys) {
+          const messageKey = toEventMessageKey(key)
+          if (!messageKey) continue
+          const chatJid = messageKey.chatJid
+          const groupJid = toGroupJid(chatJid)
+          const actorJid = key.fromMe
+            ? selfJid
+            : (key.participant ?? (groupJid ? null : chatJid))
+          recordEvent(
+            'messages.delete',
+            { id: key.id ?? null },
+            { chatJid, groupJid, messageKey, actorJid }
+          )
+        }
+        return
+      }
+      logEvent('messages.delete', { count: 0 }, { actorJid: selfJid })
+    },
+    'messages.update': (updates) => {
+      logger.debug('evento do Baileys recebido', { event: 'messages.update', count: updates.length })
+      const selfJid = resolveSelfJid()
+      for (const { key, update } of updates) {
+        const messageKey = toEventMessageKey(key)
+        if (!messageKey) continue
+        const chatJid = messageKey.chatJid
+        const groupJid = toGroupJid(chatJid)
+        const actorJid = key.fromMe
+          ? selfJid
+          : (key.participant ?? (groupJid ? null : chatJid))
+        recordEvent(
+          'messages.update',
+          { update },
+          { chatJid, groupJid, messageKey, actorJid }
+        )
       }
     },
-    'messages.update': (updates) => logEvent('messages.update', { count: updates.length }),
-    'messages.media-update': (updates) => logEvent('messages.media-update', { count: updates.length }),
+    'messages.media-update': (updates) => {
+      logger.debug('evento do Baileys recebido', { event: 'messages.media-update', count: updates.length })
+      const selfJid = resolveSelfJid()
+      for (const item of updates) {
+        const key = (item as { key?: { remoteJid?: string | null; id?: string | null; fromMe?: boolean | null } }).key
+        const update = (item as { update?: unknown }).update
+        const messageKey = toEventMessageKey(key)
+        if (!messageKey) continue
+        const chatJid = messageKey.chatJid
+        const groupJid = toGroupJid(chatJid)
+        const actorJid = key?.fromMe
+          ? selfJid
+          : (key?.participant ?? (groupJid ? null : chatJid))
+        recordEvent(
+          'messages.media-update',
+          { update },
+          { chatJid, groupJid, messageKey, actorJid }
+        )
+      }
+    },
     'messages.upsert': async (event) => {
       logger.info('messages.upsert recebido', {
         count: event.messages.length,
@@ -219,7 +343,29 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
       })
       try {
         await handleIncomingMessages(sock, event.messages, logger)
-        logEvent('messages.upsert', { count: event.messages.length, type: event.type })
+        logger.debug('evento do Baileys recebido', {
+          event: 'messages.upsert',
+          count: event.messages.length,
+          type: event.type,
+        })
+        if (sqlStore.enabled && event.type === 'notify') {
+          const selfJid = resolveSelfJid()
+          for (const message of event.messages) {
+            const key = message.key
+            const messageKey = toEventMessageKey(key)
+            if (!messageKey) continue
+            const chatJid = messageKey.chatJid
+            const groupJid = toGroupJid(chatJid)
+            const actorJid = key?.fromMe
+              ? selfJid
+              : (key?.participant ?? (groupJid ? null : chatJid))
+            recordEvent(
+              'messages.upsert',
+              { type: event.type },
+              { chatJid, groupJid, messageKey, actorJid }
+            )
+          }
+        }
       } catch (error) {
         logger.error('falha ao processar messages.upsert', {
           err: error,
@@ -241,35 +387,94 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
         }
       }
     },
-    'messages.reaction': (reactions) =>
-      logEvent('messages.reaction', { count: reactions.length }),
-    'message-receipt.update': (updates) =>
-      logEvent('message-receipt.update', { count: updates.length }),
-    'groups.upsert': (groups) => logEvent('groups.upsert', { count: groups.length }),
-    'groups.update': (updates) => logEvent('groups.update', { count: updates.length }),
-    'group-participants.update': ({ id, action, participants }) => {
-      logEvent('group-participants.update', {
+    'messages.reaction': (reactions) => {
+      logger.debug('evento do Baileys recebido', { event: 'messages.reaction', count: reactions.length })
+      for (const reaction of reactions) {
+        const key = reaction.key
+        const messageKey = toEventMessageKey(key)
+        if (!messageKey) continue
+        const chatJid = messageKey.chatJid
+        const groupJid = toGroupJid(chatJid)
+        const actorJid =
+          reaction.key.participant ?? reaction.sender ?? reaction.reaction?.participant ?? null
+        const targetJid = key?.participant ?? null
+        recordEvent(
+          'messages.reaction',
+          { id: key?.id ?? null },
+          { chatJid, groupJid, messageKey, actorJid, targetJid }
+        )
+      }
+    },
+    'message-receipt.update': (updates) => {
+      logger.debug('evento do Baileys recebido', { event: 'message-receipt.update', count: updates.length })
+      for (const update of updates) {
+        const key = update.key
+        const messageKey = toEventMessageKey(key)
+        if (!messageKey) continue
+        const chatJid = messageKey.chatJid
+        const groupJid = toGroupJid(chatJid)
+        const actorJid = update.participant ?? update.key.participant ?? null
+        recordEvent(
+          'message-receipt.update',
+          { receipt: (update as { receipt?: unknown }).receipt ?? null },
+          { chatJid, groupJid, messageKey, actorJid }
+        )
+      }
+    },
+    'groups.upsert': (groups) => {
+      logger.debug('evento do Baileys recebido', { event: 'groups.upsert', count: groups.length })
+      const actorJid = resolveSelfJid()
+      for (const group of groups) {
+        if (!group.id) continue
+        recordEvent('groups.upsert', { id: group.id }, { groupJid: group.id, actorJid })
+      }
+    },
+    'groups.update': (updates) => {
+      logger.debug('evento do Baileys recebido', { event: 'groups.update', count: updates.length })
+      for (const update of updates) {
+        const id = (update as { id?: string | null }).id
+        if (!id) continue
+        const actorJid = (update as { author?: string | null }).author ?? resolveSelfJid()
+        recordEvent('groups.update', { id }, { groupJid: id, actorJid })
+      }
+    },
+    'group-participants.update': ({ id, action, participants, author }) => {
+      logger.debug('evento do Baileys recebido', {
+        event: 'group-participants.update',
         id,
         action,
         count: participants.length,
       })
-      if (sqlStore.enabled) {
-        for (const participant of participants) {
+      const actorJid = author ?? resolveSelfJid()
+      for (const participant of participants) {
+        recordEvent(
+          'group-participants.update',
+          { id, action, participant: participant.id },
+          { groupJid: id, actorJid, targetJid: participant.id }
+        )
+        if (sqlStore.enabled) {
           void sqlStore.recordGroupEvent({
             groupJid: id,
             eventType: action,
+            actorJid,
             targetJid: participant.id,
             data: participant,
           })
         }
       }
     },
-    'group.join-request': ({ id, action, method, participant }) => {
-      logEvent('group.join-request', { id, action, method, participant })
+    'group.join-request': ({ id, action, method, participant, author }) => {
+      const actorJid = author ?? resolveSelfJid()
+      logEvent(
+        'group.join-request',
+        { id, action, method, participant },
+        { groupJid: id, actorJid, targetJid: participant }
+      )
       if (sqlStore.enabled) {
         void sqlStore.recordGroupJoinRequest({
           groupJid: id,
           userJid: participant,
+          actorJid,
           action,
           method,
           data: { id, action, method, participant },
@@ -277,45 +482,99 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
         void sqlStore.recordGroupEvent({
           groupJid: id,
           eventType: 'join-request',
+          actorJid,
           targetJid: participant,
           data: { action, method },
         })
       }
     },
     'group.member-tag.update': ({ groupId, participant, label }) =>
-      logEvent('group.member-tag.update', { groupId, participant, label }),
+      logEvent(
+        'group.member-tag.update',
+        { groupId, participant, label },
+        { groupJid: groupId, targetJid: participant, actorJid: resolveSelfJid() }
+      ),
     'blocklist.set': ({ blocklist }) => {
-      logEvent('blocklist.set', { count: blocklist.length })
-      if (sqlStore.enabled) {
-        for (const jid of blocklist) {
+      logger.debug('evento do Baileys recebido', { event: 'blocklist.set', count: blocklist.length })
+      const actorJid = resolveSelfJid()
+      for (const jid of blocklist) {
+        recordEvent('blocklist.set', { jid }, { targetJid: jid, actorJid })
+        if (sqlStore.enabled) {
           void sqlStore.setBlocklist({ jid, isBlocked: true })
         }
       }
     },
     'blocklist.update': ({ blocklist, type }) => {
-      logEvent('blocklist.update', { count: blocklist.length, type })
+      logger.debug('evento do Baileys recebido', { event: 'blocklist.update', count: blocklist.length, type })
+      const actorJid = resolveSelfJid()
       if (sqlStore.enabled) {
         const isBlocked = type !== 'remove'
         for (const jid of blocklist) {
+          recordEvent('blocklist.update', { jid, type }, { targetJid: jid, actorJid })
           void sqlStore.setBlocklist({ jid, isBlocked })
         }
       }
     },
-    call: (calls) => logEvent('call', { count: calls.length }),
-    'labels.edit': (label) => {
-      logEvent('labels.edit', { id: label.id, deleted: label.deleted })
-      if (sqlStore.enabled) {
-        void sqlStore.recordEvent({ type: 'labels.edit', data: label })
+    call: (calls) => {
+      logger.debug('evento do Baileys recebido', { event: 'call', count: calls.length })
+      for (const call of calls) {
+        const entry = call as { chatId?: string | null; groupJid?: string | null; from?: string | null; id?: string | null; status?: string | null }
+        const chatJid = entry.chatId ?? null
+        const groupJid = entry.groupJid ?? toGroupJid(chatJid)
+        const actorJid = entry.from ?? null
+        recordEvent('call', { id: entry.id ?? null, status: entry.status ?? null }, { chatJid, groupJid, actorJid })
       }
+    },
+    'labels.edit': (label) => {
+      const actorJid =
+        (label as { author?: string | null }).author ??
+        (label as { actor?: string | null }).actor ??
+        (label as { creator?: string | null }).creator ??
+        null
+      logEvent('labels.edit', { id: label.id, deleted: label.deleted }, { actorJid })
     },
     'labels.association': ({ association, type }) => {
-      logEvent('labels.association', { type, association })
-      if (sqlStore.enabled) {
-        void sqlStore.recordEvent({ type: 'labels.association', data: { association, type } })
+      const assoc = association as {
+        labelId?: string
+        messageId?: string
+        chatId?: string
+        contactJid?: string
+        groupJid?: string
+        actor?: string
+        author?: string
+        label_id?: string
+        message_id?: string
+        chat_id?: string
+        contact_jid?: string
+        group_jid?: string
       }
+      const messageId = assoc.messageId ?? assoc.message_id
+      const chatJid = assoc.chatId ?? assoc.chat_id ?? null
+      const groupJid = assoc.groupJid ?? assoc.group_jid ?? null
+      const contactJid = assoc.contactJid ?? assoc.contact_jid ?? null
+      const actorJid = assoc.actor ?? assoc.author ?? null
+      const messageKey =
+        type === 'message' && messageId && chatJid
+          ? { chatJid, messageId, fromMe: false }
+          : null
+      logEvent(
+        'labels.association',
+        { type, association },
+        {
+          actorJid,
+          chatJid: type === 'chat' ? chatJid : null,
+          groupJid: type === 'group' ? groupJid : null,
+          targetJid: type === 'contact' ? contactJid : null,
+          messageKey,
+        }
+      )
     },
     'newsletter.reaction': ({ id, server_id }) => {
-      logEvent('newsletter.reaction', { id, serverId: server_id })
+      logEvent(
+        'newsletter.reaction',
+        { id, serverId: server_id },
+        { actorJid: resolveSelfJid() }
+      )
       if (sqlStore.enabled) {
         void sqlStore.recordNewsletter({ newsletterId: id, data: { id, server_id } })
         void sqlStore.recordNewsletterEvent({
@@ -326,7 +585,11 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
       }
     },
     'newsletter.view': ({ id, server_id, count }) => {
-      logEvent('newsletter.view', { id, serverId: server_id, count })
+      logEvent(
+        'newsletter.view',
+        { id, serverId: server_id, count },
+        { actorJid: resolveSelfJid() }
+      )
       if (sqlStore.enabled) {
         void sqlStore.recordNewsletter({ newsletterId: id, data: { id, server_id, count } })
         void sqlStore.recordNewsletterEvent({
@@ -337,7 +600,11 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
       }
     },
     'newsletter-participants.update': ({ id, author, user, new_role, action }) => {
-      logEvent('newsletter-participants.update', { id, author, user, newRole: new_role, action })
+      logEvent(
+        'newsletter-participants.update',
+        { id, author, user, newRole: new_role, action },
+        { actorJid: author ?? null, targetJid: user ?? null }
+      )
       if (sqlStore.enabled) {
         if (user) {
           void sqlStore.recordNewsletterParticipant({
@@ -357,7 +624,11 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
       }
     },
     'newsletter-settings.update': ({ id }) => {
-      logEvent('newsletter-settings.update', { id })
+      logEvent(
+        'newsletter-settings.update',
+        { id },
+        { actorJid: resolveSelfJid() }
+      )
       if (sqlStore.enabled) {
         void sqlStore.recordNewsletterEvent({
           newsletterId: id,
@@ -366,8 +637,10 @@ export function registerEvents({ sock, logger, reconnect }: RegisterOptions): vo
         })
       }
     },
-    'chats.lock': ({ id, locked }) => logEvent('chats.lock', { id, locked }),
-    'settings.update': (update) => logEvent('settings.update', { setting: update.setting }),
+    'chats.lock': ({ id, locked }) =>
+      logEvent('chats.lock', { id, locked }, { chatJid: id, actorJid: resolveSelfJid() }),
+    'settings.update': (update) =>
+      logEvent('settings.update', { setting: update.setting }, { actorJid: resolveSelfJid() }),
   }
 
   for (const event of ALL_EVENTS) {

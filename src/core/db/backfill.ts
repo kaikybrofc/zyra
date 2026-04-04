@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import {
+  type AuthenticationCreds,
   BufferJSON,
   type Contact,
   type GroupMetadata,
@@ -118,6 +119,27 @@ async function main() {
   const connectionId = config.connectionId ?? 'default'
   logger.info('iniciando backfill', { connectionId })
 
+  const resolveSelfJid = async (): Promise<string | null> => {
+    type CredsRow = { creds_json: unknown }
+    const [rows] = await pool.execute<CredsRow[]>(
+      `SELECT creds_json
+       FROM auth_creds
+       WHERE connection_id = ?
+       LIMIT 1`,
+      [connectionId]
+    )
+    const creds = rows[0]?.creds_json
+      ? deserialize<AuthenticationCreds>(rows[0].creds_json)
+      : null
+    const jid = normalizeIdentifier((creds as { me?: { id?: string | null } } | null)?.me?.id ?? null)
+    if (!jid) {
+      logger.warn('nao foi possivel resolver o JID da conta para backfill')
+    }
+    return jid
+  }
+
+  const selfJid = await resolveSelfJid()
+
   const ensureUserByJid = async (jid: string, displayName?: string | null) => {
     type UserRow = { user_id: string }
     const [rows] = await pool.execute<UserRow[]>(
@@ -191,6 +213,7 @@ async function main() {
     )
   }
 
+  // Backfill groups owner_user_id
   // Backfill groups and participants
   type GroupRow = { jid: string; data_json: unknown }
   const [groupRows] = await pool.execute<GroupRow[]>(
@@ -199,6 +222,19 @@ async function main() {
   )
   for (const row of groupRows) {
     const group = deserialize<GroupMetadata>(row.data_json)
+    if (group?.owner) {
+      const ownerJid = normalizeIdentifier(group.owner)
+      if (ownerJid) {
+        const ownerUserId = await ensureUserByJid(ownerJid)
+        await pool.execute(
+          `UPDATE \`groups\`
+           SET owner_user_id = UUID_TO_BIN(?, 1)
+           WHERE connection_id = ?
+             AND jid = ?`,
+          [ownerUserId, connectionId, row.jid]
+        )
+      }
+    }
     if (group?.participants?.length) {
       for (const participant of group.participants) {
         const jid = normalizeIdentifier(participant.id)
@@ -240,6 +276,43 @@ async function main() {
       }
     }
   }
+
+  logger.info('backfill groups.owner_user_id concluido', { total: groupRows.length })
+
+  // Backfill lid_mappings.user_id and wa_contacts_cache.user_id
+  await pool.execute(
+    `UPDATE wa_contacts_cache wc
+     INNER JOIN user_identifiers ui
+       ON ui.connection_id = wc.connection_id
+      AND ui.id_type = 'jid'
+      AND ui.id_value = wc.jid
+     SET wc.user_id = ui.user_id
+     WHERE wc.connection_id = ?
+       AND wc.user_id IS NULL`,
+    [connectionId]
+  )
+  await pool.execute(
+    `UPDATE lid_mappings lm
+     INNER JOIN user_identifiers ui
+       ON ui.connection_id = lm.connection_id
+      AND ui.id_type = 'pn'
+      AND ui.id_value = lm.pn
+     SET lm.user_id = ui.user_id
+     WHERE lm.connection_id = ?
+       AND lm.user_id IS NULL`,
+    [connectionId]
+  )
+  await pool.execute(
+    `UPDATE lid_mappings lm
+     INNER JOIN user_identifiers ui
+       ON ui.connection_id = lm.connection_id
+      AND ui.id_type = 'lid'
+      AND ui.id_value = lm.lid
+     SET lm.user_id = ui.user_id
+     WHERE lm.connection_id = ?
+       AND lm.user_id IS NULL`,
+    [connectionId]
+  )
 
   // Backfill chat_users for direct chats
   type ChatRow = { jid: string; data_json: unknown }
@@ -353,10 +426,18 @@ async function main() {
       const quotedJid = typeof contextInfo?.participant === 'string' ? contextInfo.participant : null
 
       const senderJid = message.key.fromMe
-        ? null
+        ? selfJid
         : (message.key.participant ?? message.key.remoteJid ?? null)
       if (senderJid) {
         const senderUserId = await ensureUserByJid(senderJid)
+        await pool.execute(
+          `UPDATE messages
+           SET sender_user_id = UUID_TO_BIN(?, 1)
+           WHERE connection_id = ?
+             AND id = ?
+             AND sender_user_id IS NULL`,
+          [senderUserId, connectionId, row.id]
+        )
         await pool.execute(
           `INSERT IGNORE INTO message_users (
              connection_id,
@@ -413,6 +494,95 @@ async function main() {
     }
 
     logger.info('backfill mensagens', { lastId })
+  }
+
+  // Backfill message_events.message_db_id
+  await pool.execute(
+    `UPDATE message_events me
+     INNER JOIN messages m
+       ON m.connection_id = me.connection_id
+      AND m.chat_jid = me.chat_jid
+      AND m.message_id = me.message_id
+     SET me.message_db_id = m.id
+     WHERE me.connection_id = ?
+       AND me.message_db_id IS NULL`,
+    [connectionId]
+  )
+
+  // Backfill events_log.message_db_id (best effort from data_json)
+  type EventRow = {
+    id: number
+    chat_jid: string | null
+    group_jid: string | null
+    data_json: unknown
+  }
+  const [eventRows] = await pool.execute<EventRow[]>(
+    `SELECT id, chat_jid, group_jid, data_json
+     FROM events_log
+     WHERE connection_id = ?
+       AND message_db_id IS NULL
+       AND data_json IS NOT NULL`,
+    [connectionId]
+  )
+  const extractMessageRef = (
+    raw: unknown,
+    fallbackChatJid: string | null
+  ): { chatJid: string; messageId: string } | null => {
+    if (!raw || typeof raw !== 'object') return null
+    const data = raw as Record<string, unknown>
+    const key = data.key as Record<string, unknown> | undefined
+    const messageKey = data.messageKey as Record<string, unknown> | undefined
+    const chatJid =
+      (data.chatJid as string | undefined) ??
+      (data.chatId as string | undefined) ??
+      (data.chat_jid as string | undefined) ??
+      (data.remoteJid as string | undefined) ??
+      (key?.remoteJid as string | undefined) ??
+      (messageKey?.chatJid as string | undefined) ??
+      fallbackChatJid ??
+      null
+    const messageId =
+      (data.messageId as string | undefined) ??
+      (data.message_id as string | undefined) ??
+      (data.id as string | undefined) ??
+      (key?.id as string | undefined) ??
+      (messageKey?.messageId as string | undefined) ??
+      null
+    if (!chatJid || !messageId) return null
+    return { chatJid, messageId }
+  }
+
+  for (const row of eventRows) {
+    let parsed: unknown = null
+    try {
+      parsed = deserialize<unknown>(row.data_json)
+    } catch {
+      parsed = null
+    }
+    const ref = extractMessageRef(parsed, row.chat_jid ?? null)
+    if (!ref) continue
+    type MessageRow = { id: number }
+    const [msgRows] = await pool.execute<MessageRow[]>(
+      `SELECT id
+       FROM messages
+       WHERE connection_id = ?
+         AND chat_jid = ?
+         AND message_id = ?
+       LIMIT 1`,
+      [connectionId, ref.chatJid, ref.messageId]
+    )
+    const msgId = msgRows[0]?.id
+    if (!msgId) continue
+    const groupJid = ref.chatJid.endsWith('@g.us') ? ref.chatJid : null
+    await pool.execute(
+      `UPDATE events_log
+       SET message_db_id = ?,
+           chat_jid = COALESCE(chat_jid, ?),
+           group_jid = COALESCE(group_jid, ?)
+       WHERE connection_id = ?
+         AND id = ?`,
+      [msgId, ref.chatJid, groupJid, connectionId, row.id]
+    )
   }
 
   await pool.end()

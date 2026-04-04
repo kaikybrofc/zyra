@@ -90,6 +90,7 @@ const parseMessageKey = (key: string): MessageKeyParts | null => {
 
 export type SqlStore = {
   enabled: boolean
+  setSelfJid: (jid: string | null) => void
   getMessage: (key: string) => Promise<WAMessage | undefined>
   setMessage: (message: WAMessage) => Promise<void>
   deleteMessage: (chatJid: string, messageId: string, fromMe: boolean) => Promise<void>
@@ -207,9 +208,11 @@ export type SqlStore = {
 }
 
 export function createSqlStore(): SqlStore {
+  let selfJid: string | null = null
   if (!config.mysqlUrl) {
     return {
       enabled: false,
+      setSelfJid: () => undefined,
       getMessage: async () => undefined,
       setMessage: async () => undefined,
       deleteMessage: async () => undefined,
@@ -515,6 +518,9 @@ export function createSqlStore(): SqlStore {
 
   return {
     enabled: true,
+    setSelfJid: (jid) => {
+      selfJid = jid ?? null
+    },
     getMessage: async (key) =>
       safe(async (pool) => {
         const parsed = parseMessageKey(key)
@@ -539,8 +545,9 @@ export function createSqlStore(): SqlStore {
       safe(async (pool) => {
         const key = message.key
         if (!key?.remoteJid || !key.id) return
-        const senderJid =
-          key.fromMe ? null : (key.participant ?? key.remoteJid ?? null)
+        const senderJid = key.fromMe
+          ? (selfJid ?? key.participant ?? null)
+          : (key.participant ?? key.remoteJid ?? null)
         const normalizedSender = normalizeIdentifier(senderJid)
         const senderUserId = normalizedSender
           ? await ensureUserByIdentifiers(
@@ -727,10 +734,11 @@ export function createSqlStore(): SqlStore {
         try {
           const payload = serialize(group)
           const subject = group.subject ?? null
+          let ownerUserId: string | null = null
           if (group.owner) {
             const owner = normalizeIdentifier(group.owner)
             if (owner) {
-              await ensureUserByIdentifiers(pool, [{ type: 'jid', value: owner }], null)
+              ownerUserId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: owner }], null)
             }
           }
           await pool.execute(
@@ -744,9 +752,10 @@ export function createSqlStore(): SqlStore {
                size,
                data_json
              )
-             VALUES (?, ?, ?, NULL, ?, ?, ?, ?)
+             VALUES (?, ?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
                subject = VALUES(subject),
+               owner_user_id = VALUES(owner_user_id),
                announce = VALUES(announce),
                \`restrict\` = VALUES(\`restrict\`),
                size = VALUES(size),
@@ -755,6 +764,8 @@ export function createSqlStore(): SqlStore {
               connectionId,
               id,
               subject,
+              ownerUserId ? 1 : 0,
+              ownerUserId,
               toTinyInt(group.announce),
               toTinyInt(group.restrict),
               typeof group.size === 'number' ? group.size : null,
@@ -797,7 +808,7 @@ export function createSqlStore(): SqlStore {
           participantJids.push(jid)
           const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: jid }], null)
           if (!userId) continue
-          const role = participant.admin ?? null
+          const role = participant.admin ?? 'member'
           const isSuper = role === 'superadmin'
           const isAdmin = role === 'admin' || isSuper
           await pool.execute(
@@ -930,14 +941,14 @@ export function createSqlStore(): SqlStore {
             value: (contact as { pushName?: string }).pushName as string,
           })
         }
-        if (normalizedJid) {
-          await ensureUserByIdentifiers(
-            pool,
-            [{ type: 'jid', value: normalizedJid }],
-            displayName,
-            aliases.length ? aliases : undefined
-          )
-        }
+        const userId = normalizedJid
+          ? await ensureUserByIdentifiers(
+              pool,
+              [{ type: 'jid', value: normalizedJid }],
+              displayName,
+              aliases.length ? aliases : undefined
+            )
+          : null
         await pool.execute(
           `INSERT INTO wa_contacts_cache (
              connection_id,
@@ -946,22 +957,24 @@ export function createSqlStore(): SqlStore {
              display_name,
              data_json
            )
-           VALUES (?, ?, NULL, ?, ?)
+           VALUES (?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?)
            ON DUPLICATE KEY UPDATE
+             user_id = VALUES(user_id),
              display_name = VALUES(display_name),
              data_json = VALUES(data_json)`,
-          [connectionId, id, displayName, payload]
+          [connectionId, id, userId ? 1 : 0, userId, displayName, payload]
         )
       }, undefined, { ensureConnection: true }),
     setLidMapping: async ({ lid, pn }) =>
       safe(async (pool) => {
         const normalizedPn = normalizeIdentifier(pn)
         const normalizedLid = normalizeIdentifier(lid)
+        let userId: string | null = null
         if (normalizedPn || normalizedLid) {
           const identifiers: Array<{ type: UserIdentifierType; value: string }> = []
           if (normalizedPn) identifiers.push({ type: 'pn', value: normalizedPn })
           if (normalizedLid) identifiers.push({ type: 'lid', value: normalizedLid })
-          await ensureUserByIdentifiers(pool, identifiers, null)
+          userId = await ensureUserByIdentifiers(pool, identifiers, null)
         }
         await pool.execute(
           `INSERT INTO lid_mappings (
@@ -970,10 +983,11 @@ export function createSqlStore(): SqlStore {
              lid,
              user_id
            )
-           VALUES (?, ?, ?, NULL)
+           VALUES (?, ?, ?, IF(?, UUID_TO_BIN(?, 1), NULL))
            ON DUPLICATE KEY UPDATE
-             lid = VALUES(lid)`,
-          [connectionId, pn, lid]
+             lid = VALUES(lid),
+             user_id = VALUES(user_id)`,
+          [connectionId, pn, lid, userId ? 1 : 0, userId]
         )
       }, undefined, { ensureConnection: true }),
     getLidForPn: async (pn) =>
@@ -1351,6 +1365,7 @@ export function createSqlStore(): SqlStore {
         if (!normalizedChat || !normalizedUser) return
         const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedUser }], null)
         if (!userId) return
+        const resolvedRole = role ?? 'member'
         await pool.execute(
           `INSERT INTO chat_users (
              connection_id,
@@ -1361,7 +1376,7 @@ export function createSqlStore(): SqlStore {
            VALUES (?, ?, UUID_TO_BIN(?, 1), ?)
            ON DUPLICATE KEY UPDATE
              role = VALUES(role)`,
-          [connectionId, normalizedChat, userId, role ?? null]
+          [connectionId, normalizedChat, userId, resolvedRole]
         )
       }, undefined, { ensureConnection: true }),
     deleteChatUser: async (chatJid, userJid) =>

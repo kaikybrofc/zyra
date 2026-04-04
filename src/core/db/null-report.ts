@@ -16,6 +16,46 @@ type ColumnRow = {
 
 const escapeId = (value: string) => value.replace(/`/g, '``')
 
+const ignoredColumns = new Set<string>([
+  'message_media.local_path',
+  'message_media.file_name',
+  'message_media.file_length',
+])
+
+const optionalColumns = new Set<string>([
+  'messages.content_type',
+  'messages.text_preview',
+  'messages.is_forwarded',
+  'messages.status',
+  'messages.message_type',
+])
+
+const targetColumns = new Set<string>([
+  'groups.owner_user_id',
+  'lid_mappings.user_id',
+  'wa_contacts_cache.user_id',
+  'messages.sender_user_id',
+  'commands_log.actor_user_id',
+  'group_events.actor_user_id',
+  'message_events.actor_user_id',
+  'message_events.target_user_id',
+  'message_events.message_db_id',
+  'chats.display_name',
+  'users.display_name',
+  'chat_users.role',
+  'group_participants.role',
+])
+
+const classifyColumn = (table: string, column: string) => {
+  if (column === 'deleted_at') return 'ignored'
+  const key = `${table}.${column}`
+  if (ignoredColumns.has(key)) return 'ignored'
+  if (optionalColumns.has(key)) return 'optional'
+  if (table === 'events_log') return 'target'
+  if (targetColumns.has(key)) return 'target'
+  return 'other'
+}
+
 async function main() {
   if (!config.mysqlUrl) {
     logger.error('MYSQL_URL nao configurada')
@@ -42,7 +82,14 @@ async function main() {
      ORDER BY table_name`
   )
 
-  const findings: Array<{ table: string; column: string; count: number; total: number; percent: number }> = []
+  const findings: Array<{
+    table: string
+    column: string
+    count: number
+    total: number
+    percent: number
+    category: 'target' | 'optional' | 'other' | 'ignored'
+  }> = []
 
   for (const row of tableRows) {
     const table = row.table_name
@@ -90,21 +137,55 @@ async function main() {
         count,
         total,
         percent,
+        category: classifyColumn(table, column.column_name),
       })
     }
   }
 
   await pool.end()
-  const sorted = findings.sort((a, b) => b.percent - a.percent)
+  const filtered = findings.filter((item) => item.category !== 'ignored')
+  const sorted = filtered.sort((a, b) => b.percent - a.percent)
   if (!sorted.length) {
     logger.info('verificacao de NULL concluida (nenhum NULL encontrado)')
     return
   }
-  logger.info('verificacao de NULL concluida', { total: sorted.length })
-  for (const item of sorted) {
-    console.log(
-      `${item.table}.${item.column} -> ${item.count}/${item.total} (${item.percent}%)`
-    )
+
+  const targets = sorted.filter((item) => item.category === 'target')
+  const optional = sorted.filter((item) => item.category === 'optional')
+  const other = sorted.filter((item) => item.category === 'other')
+
+  logger.info('verificacao de NULL concluida', {
+    total: sorted.length,
+    target: targets.length,
+    optional: optional.length,
+    other: other.length,
+  })
+
+  if (targets.length) {
+    console.log('\n[ALVO <1%]')
+    for (const item of targets) {
+      console.log(
+        `${item.table}.${item.column} -> ${item.count}/${item.total} (${item.percent}%)`
+      )
+    }
+  }
+
+  if (optional.length) {
+    console.log('\n[OPCIONAL]')
+    for (const item of optional) {
+      console.log(
+        `${item.table}.${item.column} -> ${item.count}/${item.total} (${item.percent}%)`
+      )
+    }
+  }
+
+  if (other.length) {
+    console.log('\n[OUTROS]')
+    for (const item of other) {
+      console.log(
+        `${item.table}.${item.column} -> ${item.count}/${item.total} (${item.percent}%)`
+      )
+    }
   }
 }
 

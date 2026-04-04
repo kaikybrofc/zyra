@@ -60,6 +60,7 @@ const upsertParticipants = (
 
 export type BaileysStore = {
   bind: (ev: BaileysEventEmitter) => void
+  setSelfJid: (jid: string | null) => void
   getMessage: (key: WAMessageKey) => Promise<MessageContent | undefined>
   getGroupMetadata: (jid: string) => Promise<GroupMetadata | undefined>
   bindLidMappingStore: (store: LidMappingStore | undefined) => void
@@ -99,6 +100,7 @@ export function createBaileysStore(): BaileysStore {
   const pnToLid = new Map<string, string>()
   const lidToPn = new Map<string, string>()
   let externalLidMapping: LidMappingStore | undefined
+  let selfJid: string | null = null
   const msgRetryCounterCache = createCacheStore('msg-retry', DEFAULT_CACHE_TTLS.MSG_RETRY)
   const callOfferCache = createCacheStore('call-offer', DEFAULT_CACHE_TTLS.CALL_OFFER)
   const placeholderResendCache = createCacheStore(
@@ -401,9 +403,13 @@ export function createBaileysStore(): BaileysStore {
         if (sqlStore.enabled) {
           void sqlStore.setMessage(merged)
           if (key.remoteJid && key.id) {
+            const actorJid = key.fromMe
+              ? selfJid
+              : (key.participant ?? key.remoteJid ?? null)
             void sqlStore.recordMessageEvent({
               key: { chatJid: key.remoteJid, messageId: key.id, fromMe: Boolean(key.fromMe) },
               type: 'update',
+              actorJid,
               data: update,
             })
           }
@@ -440,10 +446,14 @@ export function createBaileysStore(): BaileysStore {
           }
           if (sqlStore.enabled) {
             if (key.remoteJid && key.id) {
+              const actorJid = key.fromMe
+                ? selfJid
+                : (key.participant ?? key.remoteJid ?? null)
               void sqlStore.deleteMessage(key.remoteJid, key.id, Boolean(key.fromMe))
               void sqlStore.recordMessageEvent({
                 key: { chatJid: key.remoteJid, messageId: key.id, fromMe: Boolean(key.fromMe) },
                 type: 'delete',
+                actorJid,
                 data: key,
               })
             }
@@ -602,6 +612,13 @@ export function createBaileysStore(): BaileysStore {
     externalLidMapping = store
   }
 
+  const setSelfJid = (jid: string | null) => {
+    selfJid = jid ?? null
+    if (sqlStore.enabled) {
+      sqlStore.setSelfJid(selfJid)
+    }
+  }
+
   const lidMapping: LidMappingFacade = {
     storeMappings: async (pairs) => {
       if (externalLidMapping) {
@@ -721,6 +738,7 @@ export function createBaileysStore(): BaileysStore {
 
   return {
     bind,
+    setSelfJid,
     getMessage,
     getGroupMetadata,
     bindLidMappingStore,

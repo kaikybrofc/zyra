@@ -135,7 +135,8 @@ const handleCommand = async (context: IncomingMessageContext, logger: AppLogger)
   } finally {
     if (sqlStore.enabled) {
       const actorJid =
-        context.message.key?.participant ?? context.message.key?.remoteJid ?? null
+        context.message.key?.participant ??
+        (!context.chatId.endsWith('@g.us') ? context.chatId : null)
       const durationMs = Date.now() - startedAt
       void sqlStore.recordCommandLog({
         actorJid,

@@ -63,6 +63,13 @@ export async function createSocket(logger: AppLogger) {
     mediaCache: store.caches.mediaCache,
   })
 
+  store.setSelfJid(sock.user?.id ?? null)
+  sock.ev.on('connection.update', (update) => {
+    if (update.connection === 'open') {
+      store.setSelfJid(sock.user?.id ?? null)
+    }
+  })
+
   const lidMappingStore = (sock as SocketWithSignalRepository).signalRepository?.lidMapping
   store.bindLidMappingStore(lidMappingStore)
   store.bind(sock.ev)
