@@ -146,8 +146,12 @@ const handleCommand = async (
     logger.error('comando falhou', { err: error, command: context.commandName })
   } finally {
     if (sqlStore.enabled) {
+      const messageKey = context.message.key
+      const selfJid =
+        messageKey?.fromMe ? (context.sock.user?.id ?? null) : null
       const actorJid =
-        context.message.key?.participant ??
+        selfJid ??
+        messageKey?.participant ??
         (!context.chatId.endsWith('@g.us') ? context.chatId : null)
       const durationMs = Date.now() - startedAt
       void sqlStore.recordCommandLog({
