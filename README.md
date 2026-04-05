@@ -1,27 +1,52 @@
 # Zyra System
 
-Zyra System — bot de WhatsApp em Node.js usando Baileys.
+Zyra System — bot de WhatsApp em Node.js usando Baileys, com persistência em MySQL e suporte a múltiplas conexões.
 
-## Release v0.1.2 — MySQL Edition
+## Visão geral
 
-```sql
--- Zyra 0.1.2 (MySQL Edition)
--- foco: backfill mais rápido e observável
-```
+- Conexões isoladas por `connection_id`, permitindo múltiplas instâncias no mesmo banco.
+- Persistência de credenciais e chaves do Baileys, evitando login recorrente.
+- Store persistente para chats, mensagens, grupos e caches auxiliares.
+- Rastreamento de eventos e histórico para auditoria e troubleshooting.
 
-Novidades incluídas nesta release:
-- Cache em memória de `user_id` no backfill para reduzir consultas repetidas.
-- Logs de progresso em grupos, participantes e mensagens durante o backfill.
-- `WA_BACKFILL_BATCH_SIZE` para ajustar o tamanho do lote de mensagens.
-- `WA_BACKFILL_GROUP_LOG_EVERY` para controlar o log de progresso de grupos.
-- `WA_BACKFILL_PARTICIPANT_LOG_EVERY` para controlar o log de participantes.
-- `WA_BACKFILL_MESSAGE_LOG_EVERY` para controlar o log de mensagens.
-- `.codex` adicionado ao `.gitignore`.
-- Dependências atualizadas via `npm update`.
+## Sistema de conexão
+
+O módulo `src/core/connection` centraliza a criação e o ciclo de vida do socket do WhatsApp.
+
+- `createSocket(connectionId, logger)` cria uma conexão isolada por `connection_id`.
+- Carrega credenciais via `getAuthState` e salva atualizações com `creds.update`.
+- Resolve a versão do Baileys com fallback seguro e logs de aviso quando necessário.
+- Inicializa a política de sincronização de histórico para evitar reprocessamento.
+- Configura o socket com store e caches, e liga o store aos eventos do Baileys.
+- Atualiza o `selfJid` quando a conexão abre e libera um único sync completo após novo login.
+
+A política de sync em `src/core/connection/history-sync.ts` libera a sincronização completa apenas:
+
+- No primeiro login (quando `accountSyncCounter` indica conta nova).
+- Em um novo login detectado pelo Baileys.
+
+Isso reduz carga, evita travamentos no buffer e mantém o histórico sob controle.
 
 ## Modelo do banco
 
-Veja o modelo completo em [`docs/exemplodbmodel.md`](docs/exemplodbmodel.md).
+O modelo completo está documentado em `docs/exemplodbmodel.md` (inclui diagrama e DDL MySQL 8).
+
+Principais entidades e responsabilidades:
+
+- `connections`: raiz de isolamento por conexão.
+- `auth_creds` e `signal_keys`: persistência das credenciais e chaves do Baileys.
+- `users` e `user_identifiers`: identidade única por usuário com múltiplos identificadores (`pn`, `lid`, `jid`, `username`).
+- Store persistente: `chats`, `messages`, `groups`, `wa_contacts_cache`.
+- Relacionamentos e suporte: `chat_users`, `group_participants`, `message_users`, `message_media`.
+- Observabilidade e histórico: `events_log`, `message_events`, `message_failures`, `commands_log`.
+
+## Vantagens do modelo
+
+- Multi-tenant real: cada `connection_id` isola dados, credenciais e store.
+- Identidade de usuário consistente, mesmo com múltiplos identificadores.
+- Facilidade de auditoria e depuração com logs e eventos persistidos.
+- Persistência confiável de credenciais e store, reduzindo re-login e inconsistência.
+- Estrutura extensível para features futuras (labels, bloqueios, newsletters, etc.).
 
 ## Requisitos
 
