@@ -592,7 +592,7 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
           reactionAny.key?.participant ?? reactionAny.sender ?? reactionAny.reaction?.participant ?? null
         const targetJid = reactionAny.key?.participant ?? null
         void sqlStore.recordMessageEvent({
-          key: { chatJid, messageId, fromMe: Boolean(key.fromMe) },
+          key: { chatJid, messageId, fromMe: Boolean(key?.fromMe) },
           type: 'reaction',
           actorJid: normalizeJid(actorJid),
           targetJid: normalizeJid(targetJid),
@@ -614,7 +614,7 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
         if (!chatJid || !messageId) continue
         const actorJid = updateAny.participant ?? updateAny.key?.participant ?? null
         void sqlStore.recordMessageEvent({
-          key: { chatJid, messageId, fromMe: Boolean(key.fromMe) },
+          key: { chatJid, messageId, fromMe: Boolean(key?.fromMe) },
           type: 'receipt',
           actorJid: normalizeJid(actorJid),
           data: update,

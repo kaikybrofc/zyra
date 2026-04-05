@@ -1,6 +1,5 @@
 import {
   BufferJSON,
-  initAuthCreds,
   proto,
   type AuthenticationCreds,
   type AuthenticationState,
@@ -16,6 +15,7 @@ import { ensureMysqlConnection } from '../db/connection.js'
 import { getMysqlPool } from '../db/mysql.js'
 import { getRedisClient } from '../redis/client.js'
 import { getLegacyRedisNamespace, getRedisNamespace } from '../redis/prefix.js'
+import { selectBestCreds } from './creds-utils.js'
 
 type MysqlAuthState = {
   state: AuthenticationState
@@ -134,16 +134,34 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
       ? deserialize<AuthenticationCreds>(credsFromLegacyRaw)
       : null
   const credsFromDisk = await readData<AuthenticationCreds>(config.authDir, 'creds.json')
-  const creds = credsFromMysql ?? credsFromRedis ?? credsFromDisk ?? initAuthCreds()
+  const selection = selectBestCreds(
+    [
+      { source: 'mysql', creds: credsFromMysql },
+      { source: 'redis', creds: credsFromRedis },
+      { source: 'disk', creds: credsFromDisk },
+    ],
+    ['mysql', 'redis', 'disk']
+  )
+  const creds = selection.creds
 
-  if (!credsFromMysql) {
+  if (selection.meta.missingCritical.length) {
+    console.warn('[auth] credenciais incompletas', {
+      source: selection.meta.source,
+      missing: selection.meta.missingCritical,
+    })
+  }
+
+  const serializedCurrent = serialize(creds)
+  const serializedMysql = credsFromMysql ? serialize(credsFromMysql) : null
+  if (!serializedMysql || serializedMysql !== serializedCurrent) {
     await storeCredsInMysql(creds)
   }
-  if (redisClient && !credsFromRedisRaw) {
-    await redisClient.set(redisCredsKey, serialize(creds))
+  if (redisClient && credsFromRedisRaw !== serializedCurrent) {
+    await redisClient.set(redisCredsKey, serializedCurrent)
   }
-  if (credsFromDisk && !credsFromMysql) {
-    await writeData(config.authDir, 'creds.json', credsFromDisk)
+  const serializedDisk = credsFromDisk ? serialize(credsFromDisk) : null
+  if (!serializedDisk || serializedDisk !== serializedCurrent) {
+    await writeData(config.authDir, 'creds.json', creds)
   }
 
   const keys: SignalKeyStore = {

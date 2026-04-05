@@ -1,6 +1,5 @@
 import {
   BufferJSON,
-  initAuthCreds,
   proto,
   type AuthenticationCreds,
   type AuthenticationState,
@@ -13,6 +12,7 @@ import { join } from 'node:path'
 import { config } from '../../config/index.js'
 import { getRedisClient } from '../redis/client.js'
 import { getLegacyRedisNamespace, getRedisNamespace } from '../redis/prefix.js'
+import { selectBestCreds } from './creds-utils.js'
 
 type RedisAuthState = {
   state: AuthenticationState
@@ -91,10 +91,30 @@ export async function useRedisAuthState(connectionId?: string): Promise<RedisAut
     : credsFromLegacyRaw
       ? deserialize<AuthenticationCreds>(credsFromLegacyRaw)
       : null
-  const creds = credsFromDisk ?? credsFromRedis ?? initAuthCreds()
+  const selection = selectBestCreds(
+    [
+      { source: 'redis', creds: credsFromRedis },
+      { source: 'disk', creds: credsFromDisk },
+    ],
+    ['redis', 'disk']
+  )
+  const creds = selection.creds
 
-  if (credsFromDisk && !credsFromRedisRaw) {
-    await client.set(redisCredsKey, serialize(credsFromDisk))
+  if (selection.meta.missingCritical.length) {
+    console.warn('[auth] credenciais incompletas', {
+      source: selection.meta.source,
+      missing: selection.meta.missingCritical,
+    })
+  }
+
+  const serializedCurrent = serialize(creds)
+  if (credsFromRedisRaw !== serializedCurrent) {
+    await client.set(redisCredsKey, serializedCurrent)
+  }
+
+  const serializedDisk = credsFromDisk ? serialize(credsFromDisk) : null
+  if (!serializedDisk || serializedDisk !== serializedCurrent) {
+    await writeData(config.authDir, 'creds.json', creds)
   }
 
   const keys: SignalKeyStore = {
