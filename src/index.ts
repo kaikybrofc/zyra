@@ -12,7 +12,7 @@ const LOG_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error', 'fatal'])
 const BOOLEAN_VALUES = new Set(['true', 'false'])
 
 /**
- * Faz validações básicas de ambiente e configuração antes do boot.
+ * Realiza validações básicas de ambiente e configuração antes da inicialização (boot).
  */
 const validateEnvironment = (): ValidationResult => {
   const errors: string[] = []
@@ -40,27 +40,27 @@ const validateEnvironment = (): ValidationResult => {
       const allowed = options.allowedProtocols ?? []
       if (allowed.length && !allowed.includes(url.protocol)) {
         errors.push(
-          `${key} deve usar protocolo ${allowed.join(' ou ')} (valor atual: "${value}").`
+          `${key} deve utilizar o protocolo ${allowed.join(' ou ')} (valor atual: "${value}").`
         )
       }
       if (options.requireDatabase) {
         const dbName = url.pathname.replace(/^\//, '').trim()
         if (!dbName) {
-          errors.push(`${key} precisa apontar para um banco (ex: /zyra).`)
+          errors.push(`${key} precisa apontar para um banco de dados (ex: /zyra).`)
         }
       }
     } catch {
-      errors.push(`${key} nao e uma URL valida (valor atual: "${value}").`)
+      errors.push(`${key} não é uma URL válida (valor atual: "${value}").`)
     }
   }
 
   if (!config.authDir.trim()) {
-    errors.push('WA_AUTH_DIR nao pode estar vazio.')
+    errors.push('WA_AUTH_DIR não pode estar vazio.')
   }
 
   if (!LOG_LEVELS.has(config.logLevel)) {
     warnings.push(
-      `LOG_LEVEL invalido ("${config.logLevel}"). Valores aceitos: ${[
+      `LOG_LEVEL inválido ("${config.logLevel}"). Valores aceitos: ${[
         ...LOG_LEVELS,
       ].join(', ')}.`
     )
@@ -79,25 +79,25 @@ const validateEnvironment = (): ValidationResult => {
   })
 
   if (!config.connectionId.trim()) {
-    errors.push('WA_CONNECTION_ID nao pode estar vazio.')
+    errors.push('WA_CONNECTION_ID não pode estar vazio.')
   }
 
   return { errors, warnings }
 }
 
 /**
- * Inicializa o bot com validação e tratamento de erro padrao.
+ * Inicializa o bot com validação e tratamento de erro padrão.
  */
 const bootstrap = async (): Promise<void> => {
   loadEnv()
 
   const { errors, warnings } = validateEnvironment()
   for (const warning of warnings) {
-    console.warn(`[warn] ${warning}`)
+    console.warn(`[Aviso] ${warning}`)
   }
   if (errors.length) {
     for (const error of errors) {
-      console.error(`[erro] ${error}`)
+      console.error(`[Erro] ${error}`)
     }
     process.exitCode = 1
     return
@@ -107,6 +107,6 @@ const bootstrap = async (): Promise<void> => {
 }
 
 bootstrap().catch((error) => {
-  console.error('falha ao iniciar o bot', error)
+  console.error('Falha ao iniciar o bot:', error)
   process.exitCode = 1
 })
