@@ -581,8 +581,13 @@ export function createSqlStore(connectionId?: string): SqlStore {
       if (normalized === selfJid) return
       selfJid = normalized
       if (!selfJid) return
+      const currentSelfJid = selfJid
       void safe(async (pool) => {
-        const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: selfJid }], null)
+        const userId = await ensureUserByIdentifiers(
+          pool,
+          [{ type: 'jid', value: currentSelfJid }],
+          null
+        )
         if (!userId) return
         await pool.execute(
           `UPDATE messages
@@ -1134,7 +1139,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
       }, null),
     recordMessageEvent: async (event) =>
       safe(async (pool) => {
-        let messageDbId = await ensureMessageDbId(pool, {
+        const messageDbId = await ensureMessageDbId(pool, {
           chatJid: event.key.chatJid,
           messageId: event.key.messageId,
           fromMe: event.key.fromMe ? 1 : 0,
@@ -1193,7 +1198,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
           ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: event.targetJid }], null)
           : null
         const messageKey = event.messageKey ?? null
-        let messageDbId = messageKey
+        const messageDbId = messageKey
           ? await ensureMessageDbId(pool, {
               chatJid: messageKey.chatJid,
               messageId: messageKey.messageId,
