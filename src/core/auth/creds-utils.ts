@@ -4,7 +4,7 @@ import { initAuthCreds, type AuthenticationCreds } from '@whiskeysockets/baileys
  * Par candidato de credenciais e sua origem.
  */
 type CredsCandidate = {
-  source: string
+  source: CredsSource
   creds: AuthenticationCreds | null
 }
 
@@ -16,20 +16,28 @@ type CredsScore = {
   missingCritical: string[]
 }
 
+type CredsSource = 'mysql' | 'redis' | 'disk' | 'init'
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
 
+const isBinary = (value: unknown): value is Uint8Array => value instanceof Uint8Array
+
+const hasBinaryData = (value: unknown): boolean => isBinary(value) && value.length > 0
+
 const isKeyPair = (value: unknown): boolean =>
-  isRecord(value) && 'public' in value && 'private' in value
+  isRecord(value) && hasBinaryData(value.public) && hasBinaryData(value.private)
 
 const isSignedPreKey = (value: unknown): boolean =>
   isRecord(value) &&
   isRecord(value.keyPair) &&
   isKeyPair(value.keyPair) &&
-  Boolean(value.signature)
+  hasBinaryData(value.signature)
 
-const isNumber = (value: unknown): boolean =>
+const isNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value)
+
+const isPositiveNumber = (value: unknown): boolean => isNumber(value) && value > 0
 
 const isBoolean = (value: unknown): boolean => typeof value === 'boolean'
 
@@ -40,12 +48,14 @@ const isArray = (value: unknown): boolean => Array.isArray(value)
 
 const isObject = (value: unknown): boolean => isRecord(value)
 
+const hasId = (value: unknown): boolean =>
+  isRecord(value) && isNonEmptyString((value as { id?: unknown }).id)
+
 const CRITICAL_CHECKS: Array<{ key: string; check: (value: unknown) => boolean; weight: number }> = [
   { key: 'noiseKey', check: isKeyPair, weight: 3 },
   { key: 'signedIdentityKey', check: isKeyPair, weight: 3 },
   { key: 'signedPreKey', check: isSignedPreKey, weight: 3 },
-  { key: 'registrationId', check: isNumber, weight: 2 },
-  { key: 'advSecretKey', check: isNonEmptyString, weight: 2 },
+  { key: 'registrationId', check: isPositiveNumber, weight: 2 },
 ]
 
 const IMPORTANT_CHECKS: Array<{ key: string; check: (value: unknown) => boolean; weight: number }> = [
@@ -55,8 +65,9 @@ const IMPORTANT_CHECKS: Array<{ key: string; check: (value: unknown) => boolean;
   { key: 'firstUnuploadedPreKeyId', check: isNumber, weight: 1 },
   { key: 'accountSyncCounter', check: isNumber, weight: 1 },
   { key: 'accountSettings', check: isObject, weight: 1 },
+  { key: 'advSecretKey', check: isNonEmptyString, weight: 1 },
   { key: 'registered', check: isBoolean, weight: 1 },
-  { key: 'me', check: isObject, weight: 1 },
+  { key: 'me', check: hasId, weight: 1 },
   { key: 'account', check: isObject, weight: 1 },
 ]
 
@@ -118,7 +129,7 @@ export const scoreCreds = (creds: AuthenticationCreds | null | undefined): Creds
  */
 export const selectBestCreds = (
   candidates: CredsCandidate[],
-  priority: string[]
+  priority: CredsSource[]
 ): { creds: AuthenticationCreds; meta: { source: string; score: number; missingCritical: string[] } } => {
   const scored = candidates.map((candidate) => {
     const { score, missingCritical } = scoreCreds(candidate.creds)
@@ -139,12 +150,15 @@ export const selectBestCreds = (
     }
   }
 
-  valid.sort((a, b) => {
+  const complete = valid.filter((entry) => entry.missingCritical.length === 0)
+  const pool = complete.length ? complete : valid
+
+  pool.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score
     return a.priorityIndex - b.priorityIndex
   })
 
-  const best = valid[0]
+  const best = pool[0]
   return {
     creds: normalizeCreds(best.creds),
     meta: { source: best.source, score: best.score, missingCritical: best.missingCritical },
