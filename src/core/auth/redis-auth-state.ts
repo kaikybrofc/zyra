@@ -1,18 +1,23 @@
 import {
-  BufferJSON,
-  proto,
   type AuthenticationCreds,
   type AuthenticationState,
   type SignalDataSet,
   type SignalDataTypeMap,
   type SignalKeyStore,
 } from '@whiskeysockets/baileys'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { config } from '../../config/index.js'
 import { getRedisClient } from '../redis/client.js'
 import { getLegacyRedisNamespace, getRedisNamespace } from '../redis/prefix.js'
 import { selectBestCreds } from './creds-utils.js'
+import {
+  deleteData,
+  deserialize,
+  ensureAuthFolder,
+  normalizeKeyValue,
+  readData,
+  serialize,
+  writeData,
+} from './storage-utils.js'
 
 /**
  * Representa o estado de autenticação configurado especificamente para o Redis.
@@ -22,61 +27,6 @@ type RedisAuthState = {
   state: AuthenticationState
   /** Persiste as credenciais atuais no Redis e no Disco */
   saveCreds: () => Promise<void>
-}
-
-/** Controle de estado para garantir a criação da pasta de logs/auth apenas uma vez */
-let authFolderReady: Promise<void> | null = null
-
-/**
- * Assegura que o diretório base para arquivos de fallback exista.
- * @internal
- */
-const ensureAuthFolder = async (folder: string) => {
-  if (!authFolderReady) {
-    authFolderReady = mkdir(folder, { recursive: true }).then(() => undefined)
-  }
-  await authFolderReady
-}
-
-/**
- * Formata o nome do arquivo para evitar caracteres inválidos no sistema de arquivos.
- * @internal
- */
-const fixFileName = (file: string) => file.replace(/\//g, '__').replace(/:/g, '-')
-
-/**
- * Converte objetos em string JSON usando o replacer do Baileys (suporte a Buffer).
- * @internal
- */
-const serialize = (value: unknown) => JSON.stringify(value, BufferJSON.replacer)
-
-/**
- * Converte string JSON de volta em objetos usando o reviver do Baileys (restaura Buffers).
- * @internal
- */
-const deserialize = <T>(value: string) => JSON.parse(value, BufferJSON.reviver) as T
-
-/**
- * Tenta ler um arquivo JSON do disco e desserializá-lo. Retorna null em caso de erro.
- * @internal
- */
-const readData = async <T>(folder: string, file: string): Promise<T | null> => {
-  try {
-    const filePath = join(folder, fixFileName(file))
-    const data = await readFile(filePath, { encoding: 'utf-8' })
-    return deserialize<T>(data)
-  } catch {
-    return null
-  }
-}
-
-/**
- * Salva dados no disco de forma serializada.
- * @internal
- */
-const writeData = async (folder: string, file: string, data: unknown): Promise<void> => {
-  const filePath = join(folder, fixFileName(file))
-  await writeFile(filePath, serialize(data))
 }
 
 /**
@@ -93,24 +43,6 @@ const buildRedisKeys = (connectionId?: string) => {
     legacyRedisKeysKey: (type: string) =>
       legacyRedisKeyPrefix ? `${legacyRedisKeyPrefix}:keys:${type}` : null,
   }
-}
-
-/**
- * Normaliza objetos do Signal para garantir que correspondam aos tipos do ProtoBuf.
- * @internal
- */
-const normalizeKeyValue = <T extends keyof SignalDataTypeMap>(
-  type: T,
-  value: SignalDataTypeMap[T] | null
-): SignalDataTypeMap[T] | null => {
-  if (!value) return null
-  if (type === 'app-state-sync-key') {
-    const normalized = proto.Message.AppStateSyncKeyData.fromObject(
-      value as unknown as proto.Message.IAppStateSyncKeyData
-    )
-    return normalized as unknown as SignalDataTypeMap[T]
-  }
-  return value
 }
 
 /**
@@ -134,6 +66,7 @@ const normalizeKeyValue = <T extends keyof SignalDataTypeMap>(
 export async function useRedisAuthState(connectionId?: string): Promise<RedisAuthState> {
   await ensureAuthFolder(config.authDir)
   const client = await getRedisClient()
+  const persistKeysOnDisk = config.authPersistKeysOnDisk
   const { redisCredsKey, legacyRedisCredsKey, redisKeysKey, legacyRedisKeysKey } =
     buildRedisKeys(connectionId)
 
@@ -254,12 +187,19 @@ export async function useRedisAuthState(connectionId?: string): Promise<RedisAut
         const redisKey = redisKeysKey(category)
         const toSet: Record<string, string> = {}
         const toDelete: string[] = []
+        const diskTasks: Promise<void>[] = []
 
         for (const [id, value] of Object.entries(entries)) {
           if (value) {
             toSet[id] = serialize(value)
+            if (persistKeysOnDisk) {
+              diskTasks.push(writeData(config.authDir, `${category}-${id}.json`, value))
+            }
           } else {
             toDelete.push(id)
+            if (persistKeysOnDisk) {
+              diskTasks.push(deleteData(config.authDir, `${category}-${id}.json`))
+            }
           }
         }
 
@@ -269,6 +209,7 @@ export async function useRedisAuthState(connectionId?: string): Promise<RedisAut
         if (toDelete.length) {
           pipeline.hDel(redisKey, toDelete)
         }
+        if (diskTasks.length) await Promise.all(diskTasks)
       }
 
       await pipeline.exec()

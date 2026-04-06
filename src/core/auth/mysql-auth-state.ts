@@ -1,6 +1,4 @@
 import {
-  BufferJSON,
-  proto,
   type AuthenticationCreds,
   type AuthenticationState,
   type SignalDataSet,
@@ -8,14 +6,21 @@ import {
   type SignalKeyStore,
 } from '@whiskeysockets/baileys'
 import type { RowDataPacket } from 'mysql2/promise'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { config } from '../../config/index.js'
 import { ensureMysqlConnection } from '../db/connection.js'
 import { getMysqlPool } from '../db/mysql.js'
 import { getRedisClient } from '../redis/client.js'
 import { getLegacyRedisNamespace, getRedisNamespace } from '../redis/prefix.js'
 import { selectBestCreds } from './creds-utils.js'
+import {
+  deleteData,
+  deserialize,
+  ensureAuthFolder,
+  normalizeKeyValue,
+  readData,
+  serialize,
+  writeData,
+} from './storage-utils.js'
 
 /**
  * Representa o estado de autenticação multicamadas com foco em persistência SQL.
@@ -30,87 +35,8 @@ type MysqlAuthState = {
   saveCreds: () => Promise<void>
 }
 
-/** * Mutex simples para evitar condições de corrida na criação do diretório de fallback. 
- * @internal 
- */
-let authFolderReady: Promise<void> | null = null
+let mysqlUnavailableLogged = false
 
-/**
- * Cria recursivamente a pasta de autenticação se ela não existir.
- * @internal
- */
-const ensureAuthFolder = async (folder: string) => {
-  if (!authFolderReady) {
-    authFolderReady = mkdir(folder, { recursive: true }).then(() => undefined)
-  }
-  await authFolderReady
-}
-
-/**
- * Normaliza nomes de arquivos removendo caracteres reservados do sistema de arquivos.
- * @internal
- */
-const fixFileName = (file: string) => file.replace(/\//g, '__').replace(/:/g, '-')
-
-/**
- * Transforma objetos em JSON preservando tipos binários (Buffers/Uint8Arrays).
- * @internal
- */
-const serialize = (value: unknown) => JSON.stringify(value, BufferJSON.replacer)
-
-/**
- * Reconstitui objetos a partir de strings JSON, restaurando tipos binários.
- * @internal
- */
-const deserialize = <T>(value: unknown) => {
-  if (value === null || value === undefined) return null as T
-  if (typeof value === 'string') {
-    return JSON.parse(value, BufferJSON.reviver) as T
-  }
-  return JSON.parse(JSON.stringify(value), BufferJSON.reviver) as T
-}
-
-/**
- * Lê e desserializa dados do armazenamento em disco local.
- * @internal
- */
-const readData = async <T>(folder: string, file: string): Promise<T | null> => {
-  try {
-    const filePath = join(folder, fixFileName(file))
-    const data = await readFile(filePath, { encoding: 'utf-8' })
-    return deserialize<T>(data)
-  } catch {
-    return null
-  }
-}
-
-/**
- * Serializa e escreve dados no armazenamento em disco local.
- * @internal
- */
-const writeData = async (folder: string, file: string, data: unknown): Promise<void> => {
-  const filePath = join(folder, fixFileName(file))
-  await writeFile(filePath, serialize(data))
-}
-
-/**
- * Converte chaves brutas para instâncias de classe do ProtoBuf quando necessário.
- * @remarks Essencial para chaves de sincronização de dados do WhatsApp Web/Desktop.
- * @internal
- */
-const normalizeKeyValue = <T extends keyof SignalDataTypeMap>(
-  type: T,
-  value: SignalDataTypeMap[T] | null
-): SignalDataTypeMap[T] | null => {
-  if (!value) return null
-  if (type === 'app-state-sync-key') {
-    const normalized = proto.Message.AppStateSyncKeyData.fromObject(
-      value as unknown as proto.Message.IAppStateSyncKeyData
-    )
-    return normalized as unknown as SignalDataTypeMap[T]
-  }
-  return value
-}
 
 /**
  * Constrói o mapeamento de chaves para o Redis considerando o isolamento da conexão.
@@ -143,8 +69,13 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
   const pool = getMysqlPool()
   let mysqlHealthy = Boolean(pool)
   let mysqlFailureLogged = false
+  let mysqlRecoveryLogged = false
+  let lastMysqlFailureAt = 0
+  const mysqlRetryIntervalMs = Math.max(0, config.mysqlRetryIntervalMs)
+  const persistKeysOnDisk = config.authPersistKeysOnDisk
   
-  if (!pool) {
+  if (!pool && !mysqlUnavailableLogged) {
+    mysqlUnavailableLogged = true
     console.warn('[auth] mysql indisponivel, usando redis/disco como fallback')
   }
 
@@ -153,6 +84,27 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
   const { redisCredsKey, legacyRedisCredsKey, redisKeysKey } = buildRedisKeys(connectionId)
 
   const resolvedConnectionId = connectionId ?? config.connectionId ?? 'default'
+
+  const markMysqlUnhealthy = (error: unknown) => {
+    mysqlHealthy = false
+    lastMysqlFailureAt = Date.now()
+    if (!mysqlFailureLogged) {
+      mysqlFailureLogged = true
+      mysqlRecoveryLogged = false
+      console.warn('[auth] falha crítica ao acessar mysql, fallback ativado', { error })
+    }
+  }
+
+  const markMysqlHealthy = () => {
+    if (mysqlHealthy) return
+    mysqlHealthy = true
+    lastMysqlFailureAt = 0
+    if (!mysqlRecoveryLogged) {
+      mysqlRecoveryLogged = true
+      mysqlFailureLogged = false
+      console.info('[auth] mysql recuperado, reativando persistencia')
+    }
+  }
 
   /**
    * Executa uma operação no MySQL com tratamento de erro e fallback automático.
@@ -165,16 +117,14 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
     fn: (client: MysqlPool) => Promise<T>,
     fallback: T
   ): Promise<T> => {
-    if (!pool || !mysqlHealthy) return fallback
+    if (!pool) return fallback
+    if (!mysqlHealthy && Date.now() - lastMysqlFailureAt < mysqlRetryIntervalMs) return fallback
     try {
       await ensureMysqlConnection(pool)
+      if (!mysqlHealthy) markMysqlHealthy()
       return await fn(pool)
     } catch (error) {
-      mysqlHealthy = false
-      if (!mysqlFailureLogged) {
-        mysqlFailureLogged = true
-        console.warn('[auth] falha crítica ao acessar mysql, fallback ativado', { error })
-      }
+      markMysqlUnhealthy(error)
       return fallback
     }
   }
@@ -337,12 +287,12 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
       for (const category of Object.keys(dataSet) as Array<keyof SignalDataSet>) {
         const entries = dataSet[category]
         if (!entries) continue
-        const toSet: Array<{ id: string; value: string }> = []
+        const toSet: Array<{ id: string; value: string; raw: SignalDataTypeMap[typeof category] }> = []
         const toDelete: string[] = []
 
         for (const [id, value] of Object.entries(entries)) {
           if (value) {
-            toSet.push({ id, value: serialize(value) })
+            toSet.push({ id, value: serialize(value), raw: value })
           } else {
             toDelete.push(id)
           }
@@ -380,6 +330,17 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
             )
           }, undefined)
           if (redisPipeline) redisPipeline.hDel(redisKeysKey(category), toDelete)
+        }
+
+        if (persistKeysOnDisk) {
+          const diskTasks: Promise<void>[] = []
+          for (const entry of toSet) {
+            diskTasks.push(writeData(config.authDir, `${category}-${entry.id}.json`, entry.raw))
+          }
+          for (const id of toDelete) {
+            diskTasks.push(deleteData(config.authDir, `${category}-${id}.json`))
+          }
+          if (diskTasks.length) await Promise.all(diskTasks)
         }
       }
       if (redisPipeline) await redisPipeline.exec()

@@ -55,7 +55,7 @@ const isNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value)
 
 /** @internal */
-const isPositiveNumber = (value: unknown): boolean => isNumber(value) && value > 0
+const isNonNegativeNumber = (value: unknown): boolean => isNumber(value) && value >= 0
 
 /** @internal */
 const isBoolean = (value: unknown): boolean => typeof value === 'boolean'
@@ -82,7 +82,7 @@ const CRITICAL_CHECKS: Array<{ key: string; check: (value: unknown) => boolean; 
   { key: 'noiseKey', check: isKeyPair, weight: 3 },
   { key: 'signedIdentityKey', check: isKeyPair, weight: 3 },
   { key: 'signedPreKey', check: isSignedPreKey, weight: 3 },
-  { key: 'registrationId', check: isPositiveNumber, weight: 2 },
+  { key: 'registrationId', check: isNonNegativeNumber, weight: 2 },
 ]
 
 /**

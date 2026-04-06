@@ -8,6 +8,12 @@ function readBoolean(value: string | undefined, fallback: boolean): boolean {
   return value.toLowerCase() !== 'false'
 }
 
+function readNumber(value: string | undefined, fallback: number): number {
+  if (value === undefined) return fallback
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
 /**
  * Configuracoes da aplicacao derivadas das variaveis de ambiente.
  */
@@ -18,6 +24,8 @@ export const config = {
   redisUrl: process.env.WA_REDIS_URL,
   redisPrefix: process.env.WA_REDIS_PREFIX ?? 'zyra:conexao',
   mysqlUrl: process.env.MYSQL_URL ?? process.env.WA_DB_URL,
+  mysqlRetryIntervalMs: readNumber(process.env.WA_MYSQL_RETRY_MS, 60_000),
   connectionId: process.env.WA_CONNECTION_ID ?? 'default',
   allowOwnMessages: readBoolean(process.env.WA_ACCEPT_OWN_MESSAGES, false),
+  authPersistKeysOnDisk: readBoolean(process.env.WA_AUTH_PERSIST_KEYS, false),
 }

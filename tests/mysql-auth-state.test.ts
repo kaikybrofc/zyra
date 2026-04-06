@@ -16,11 +16,13 @@ const writeFile = vi.fn(async (path: string, data: unknown) => {
   fileStore.set(String(path), String(data))
 })
 const mkdir = vi.fn(async () => undefined)
+const unlink = vi.fn(async () => undefined)
 
 vi.mock('node:fs/promises', () => ({
   readFile,
   writeFile,
   mkdir,
+  unlink,
 }))
 
 const mockConfig = {
@@ -30,8 +32,10 @@ const mockConfig = {
   redisUrl: 'redis://test',
   redisPrefix: 'test:conexao',
   mysqlUrl: 'mysql://test',
+  mysqlRetryIntervalMs: 1000,
   connectionId: 'default',
   allowOwnMessages: false,
+  authPersistKeysOnDisk: false,
 }
 
 vi.mock('../src/config/index.js', () => ({ config: mockConfig }))

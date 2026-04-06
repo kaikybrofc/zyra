@@ -38,9 +38,9 @@ describe('creds-utils', () => {
     expect(selection.meta.missingCritical.length).toBe(0)
   })
 
-  it('scoreCreds considera registrationId invalido como critico', () => {
+  it('scoreCreds considera registrationId negativo como critico', () => {
     const creds = initAuthCreds()
-    const result = scoreCreds({ ...creds, registrationId: 0 })
+    const result = scoreCreds({ ...creds, registrationId: -1 })
     expect(result.missingCritical).toContain('registrationId')
   })
 
