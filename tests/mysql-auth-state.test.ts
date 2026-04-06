@@ -78,8 +78,10 @@ const pool = {
   }),
 }
 
+const mysqlPoolRef: { value: typeof pool | null } = { value: pool }
+
 vi.mock('../src/core/db/mysql.js', () => ({
-  getMysqlPool: () => pool,
+  getMysqlPool: () => mysqlPoolRef.value,
 }))
 
 vi.mock('../src/core/db/connection.js', () => ({
@@ -89,10 +91,20 @@ vi.mock('../src/core/db/connection.js', () => ({
 describe('mysql-auth-state', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.resetModules()
     fileStore.clear()
     redisStore.clear()
     queries.length = 0
     mysqlCredsSerialized = null
+    mysqlPoolRef.value = pool
+    pool.execute.mockImplementation(async (sql: string, params?: unknown[]) => {
+      queries.push({ sql, params })
+      if (sql.includes('SELECT creds_json')) {
+        const rows = mysqlCredsSerialized ? [{ creds_json: mysqlCredsSerialized }] : []
+        return [rows as unknown[], []]
+      }
+      return [[], []]
+    })
   })
 
   it('prioriza redis quando o mysql esta incompleto', async () => {
@@ -138,5 +150,32 @@ describe('mysql-auth-state', () => {
     await useMysqlAuthState('conn')
 
     expect(fileStore.get(credsPath)).toBe(serialize(mysqlCreds))
+  })
+
+  it('faz fallback para redis/disco quando mysql esta indisponivel', async () => {
+    mysqlPoolRef.value = null
+    const redisCreds = initAuthCreds()
+    const credsKey = `${getRedisNamespace('conn')}:creds`
+    redisStore.set(credsKey, serialize(redisCreds))
+
+    const { useMysqlAuthState } = await import('../src/core/auth/mysql-auth-state.ts')
+    const { state } = await useMysqlAuthState('conn')
+
+    expect(state.creds.advSecretKey).toBe(redisCreds.advSecretKey)
+    expect(queries.length).toBe(0)
+  })
+
+  it('faz fallback quando mysql falha durante leitura', async () => {
+    pool.execute.mockImplementationOnce(async () => {
+      throw new Error('mysql down')
+    })
+    const redisCreds = initAuthCreds()
+    const credsKey = `${getRedisNamespace('conn')}:creds`
+    redisStore.set(credsKey, serialize(redisCreds))
+
+    const { useMysqlAuthState } = await import('../src/core/auth/mysql-auth-state.ts')
+    const { state } = await useMysqlAuthState('conn')
+
+    expect(state.creds.advSecretKey).toBe(redisCreds.advSecretKey)
   })
 })

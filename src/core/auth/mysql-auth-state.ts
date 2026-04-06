@@ -18,20 +18,25 @@ import { getLegacyRedisNamespace, getRedisNamespace } from '../redis/prefix.js'
 import { selectBestCreds } from './creds-utils.js'
 
 /**
- * Interface que estende o estado de autenticação do Baileys com a função de persistência.
+ * Representa o estado de autenticação multicamadas com foco em persistência SQL.
+ * Estende a funcionalidade padrão do Baileys para suportar sincronização entre MySQL, Redis e Disco.
  */
 type MysqlAuthState = {
-  /** Estado de autenticação compatível com o Baileys (creds e keys) */
+  /** Objeto de estado contendo credenciais ativas e o gerenciador de chaves criptográficas. */
   state: AuthenticationState
-  /** Função assíncrona para persistir as credenciais atuais em todas as camadas de storage */
+  /** * Sincroniza e persiste as credenciais principais em todas as camadas de storage disponíveis.
+   * Deve ser vinculada ao evento 'creds.update' do socket.
+   */
   saveCreds: () => Promise<void>
 }
 
-/** Controle de concorrência para garantir que a pasta de autenticação seja criada apenas uma vez */
+/** * Mutex simples para evitar condições de corrida na criação do diretório de fallback. 
+ * @internal 
+ */
 let authFolderReady: Promise<void> | null = null
 
 /**
- * Garante a existência do diretório de autenticação de forma assíncrona e segura.
+ * Cria recursivamente a pasta de autenticação se ela não existir.
  * @internal
  */
 const ensureAuthFolder = async (folder: string) => {
@@ -42,19 +47,19 @@ const ensureAuthFolder = async (folder: string) => {
 }
 
 /**
- * Sanitiza nomes de arquivos para evitar conflitos com separadores de diretório.
+ * Normaliza nomes de arquivos removendo caracteres reservados do sistema de arquivos.
  * @internal
  */
 const fixFileName = (file: string) => file.replace(/\//g, '__').replace(/:/g, '-')
 
 /**
- * Serializa dados usando o replacer específico do Baileys para lidar com Buffers e tipos proto.
+ * Transforma objetos em JSON preservando tipos binários (Buffers/Uint8Arrays).
  * @internal
  */
 const serialize = (value: unknown) => JSON.stringify(value, BufferJSON.replacer)
 
 /**
- * Desserializa strings ou objetos para o formato original, convertendo JSON de volta para Buffers/Uint8Arrays.
+ * Reconstitui objetos a partir de strings JSON, restaurando tipos binários.
  * @internal
  */
 const deserialize = <T>(value: unknown) => {
@@ -66,7 +71,7 @@ const deserialize = <T>(value: unknown) => {
 }
 
 /**
- * Lê dados do sistema de arquivos local.
+ * Lê e desserializa dados do armazenamento em disco local.
  * @internal
  */
 const readData = async <T>(folder: string, file: string): Promise<T | null> => {
@@ -80,7 +85,7 @@ const readData = async <T>(folder: string, file: string): Promise<T | null> => {
 }
 
 /**
- * Escreve dados no sistema de arquivos local de forma atômica.
+ * Serializa e escreve dados no armazenamento em disco local.
  * @internal
  */
 const writeData = async (folder: string, file: string, data: unknown): Promise<void> => {
@@ -89,8 +94,8 @@ const writeData = async (folder: string, file: string, data: unknown): Promise<v
 }
 
 /**
- * Normaliza valores de chaves específicas para garantir compatibilidade com as classes do ProtoBuf.
- * @remarks Necessário principalmente para chaves de sincronização de estado do app.
+ * Converte chaves brutas para instâncias de classe do ProtoBuf quando necessário.
+ * @remarks Essencial para chaves de sincronização de dados do WhatsApp Web/Desktop.
  * @internal
  */
 const normalizeKeyValue = <T extends keyof SignalDataTypeMap>(
@@ -108,7 +113,7 @@ const normalizeKeyValue = <T extends keyof SignalDataTypeMap>(
 }
 
 /**
- * Gera os nomes das chaves do Redis baseadas no ID da conexão e namespaces de legado.
+ * Constrói o mapeamento de chaves para o Redis considerando o isolamento da conexão.
  * @internal
  */
 const buildRedisKeys = (connectionId?: string) => {
@@ -124,60 +129,80 @@ const buildRedisKeys = (connectionId?: string) => {
 }
 
 /**
- * Inicializa e gerencia o estado de autenticação multitarefa (MySQL, Redis e Disco).
+ * Inicializa o motor de autenticação persistente com suporte a MySQL, Redis e Disco.
  * * @remarks
- * Este hook é responsável por:
- * 1. Recuperar credenciais de 3 fontes diferentes e escolher a melhor via {@link selectBestCreds}.
- * 2. Sincronizar automaticamente as fontes caso estejam defasadas.
- * 3. Implementar um `SignalKeyStore` que utiliza Redis como cache (L1) e MySQL/Disco como storage permanente (L2).
- * * @example
- * ```typescript
- * const { state, saveCreds } = await useMysqlAuthState('minha-sessao');
- * const sock = makeWASocket({ auth: state });
- * sock.ev.on('creds.update', saveCreds);
- * ```
- * * @param connectionId - Identificador único da conexão (instância do bot).
- * @returns Um objeto contendo o estado de autenticação e o método de persistência.
- * @throws Error caso a conexão com o MySQL não esteja configurada.
+ * Esta função implementa uma arquitetura de alta disponibilidade para sessões do Baileys:
+ * 1. **Seleção de Credenciais**: Busca em todas as fontes e usa {@link selectBestCreds} para eleger a mais íntegra.
+ * 2. **Auto-Cura**: Sincroniza automaticamente fontes atrasadas ou vazias no boot.
+ * 3. **Resiliência a Falhas (Failover)**: Utiliza o wrapper `withMysql` para detectar quedas no banco de dados e chavear dinamicamente para Redis/Disco sem interromper o bot.
+ * 4. **Caching L1/L2**: O Redis atua como cache de leitura rápida, enquanto MySQL/Disco servem como storage persistente de longo prazo.
+ * * @param connectionId - Identificador único para isolamento de dados da sessão.
+ * @returns Promessa com estado de autenticação compatível com `makeWASocket`.
  */
 export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAuthState> {
   const pool = getMysqlPool()
+  let mysqlHealthy = Boolean(pool)
+  let mysqlFailureLogged = false
+  
   if (!pool) {
-    throw new Error('MYSQL_URL nao configurada')
+    console.warn('[auth] mysql indisponivel, usando redis/disco como fallback')
   }
 
   await ensureAuthFolder(config.authDir)
   const redisClient = config.redisUrl ? await getRedisClient() : null
-  const { redisCredsKey, legacyRedisCredsKey, redisKeysKey, legacyRedisKeysKey } =
-    buildRedisKeys(connectionId)
+  const { redisCredsKey, legacyRedisCredsKey, redisKeysKey } = buildRedisKeys(connectionId)
 
   const resolvedConnectionId = connectionId ?? config.connectionId ?? 'default'
 
-  /** Busca credenciais no banco de dados MySQL */
-  const fetchCredsFromMysql = async (): Promise<AuthenticationCreds | null> => {
-    type CredsRow = RowDataPacket & { creds_json: unknown }
-    const [rows] = await pool.execute<CredsRow[]>(
-      `SELECT creds_json FROM auth_creds WHERE connection_id = ? LIMIT 1`,
-      [resolvedConnectionId]
-    )
-    const row = rows[0]
-    return row ? deserialize<AuthenticationCreds>(row.creds_json) : null
+  /**
+   * Executa uma operação no MySQL com tratamento de erro e fallback automático.
+   * @param fn - Operação a ser executada no pool do MySQL.
+   * @param fallback - Valor retornado caso o MySQL esteja offline.
+   * @internal
+   */
+  type MysqlPool = NonNullable<ReturnType<typeof getMysqlPool>>
+  const withMysql = async <T>(
+    fn: (client: MysqlPool) => Promise<T>,
+    fallback: T
+  ): Promise<T> => {
+    if (!pool || !mysqlHealthy) return fallback
+    try {
+      await ensureMysqlConnection(pool)
+      return await fn(pool)
+    } catch (error) {
+      mysqlHealthy = false
+      if (!mysqlFailureLogged) {
+        mysqlFailureLogged = true
+        console.warn('[auth] falha crítica ao acessar mysql, fallback ativado', { error })
+      }
+      return fallback
+    }
   }
 
-  /** Salva credenciais no banco de dados MySQL com UPSERT */
-  const storeCredsInMysql = async (creds: AuthenticationCreds) => {
-    await ensureMysqlConnection(pool)
-    await pool.execute(
-      `INSERT INTO auth_creds (connection_id, creds_json)
-       VALUES (?, ?)
-       ON DUPLICATE KEY UPDATE
-         creds_json = VALUES(creds_json),
-         updated_at = CURRENT_TIMESTAMP`,
-      [resolvedConnectionId, serialize(creds)]
-    )
-  }
+  const fetchCredsFromMysql = async (): Promise<AuthenticationCreds | null> =>
+    withMysql(async (client) => {
+      type CredsRow = RowDataPacket & { creds_json: unknown }
+      const [rows] = await client.execute<CredsRow[]>(
+        `SELECT creds_json FROM auth_creds WHERE connection_id = ? LIMIT 1`,
+        [resolvedConnectionId]
+      )
+      const row = rows[0]
+      return row ? deserialize<AuthenticationCreds>(row.creds_json) : null
+    }, null)
 
-  // --- Fase de Recuperação e Eleição de Credenciais ---
+  const storeCredsInMysql = async (creds: AuthenticationCreds) =>
+    withMysql(async (client) => {
+      await client.execute(
+        `INSERT INTO auth_creds (connection_id, creds_json)
+         VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE
+           creds_json = VALUES(creds_json),
+           updated_at = CURRENT_TIMESTAMP`,
+        [resolvedConnectionId, serialize(creds)]
+      )
+    }, undefined)
+
+  // --- Recuperação das Credenciais ---
   const credsFromMysql = await fetchCredsFromMysql()
   const credsFromRedisRaw = redisClient ? await redisClient.get(redisCredsKey) : null
   const credsFromLegacyRaw =
@@ -191,7 +216,6 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
       
   const credsFromDisk = await readData<AuthenticationCreds>(config.authDir, 'creds.json')
 
-  // Seleciona o melhor conjunto de dados disponível entre as camadas
   const selection = selectBestCreds(
     [
       { source: 'mysql', creds: credsFromMysql },
@@ -202,14 +226,7 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
   )
   const creds = selection.creds
 
-  if (selection.meta.missingCritical.length) {
-    console.warn('[auth] credenciais incompletas', {
-      source: selection.meta.source,
-      missing: selection.meta.missingCritical,
-    })
-  }
-
-  // --- Sincronização Proativa ---
+  // --- Sincronização Proativa (Boot) ---
   const serializedCurrent = serialize(creds)
   const serializedMysql = credsFromMysql ? serialize(credsFromMysql) : null
   if (!serializedMysql || serializedMysql !== serializedCurrent) {
@@ -224,8 +241,8 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
   }
 
   /**
-   * Implementação do armazenamento de chaves do Signal (pre-keys, sessions, etc).
-   * Segue o padrão: Tenta Redis -> Se falhar, tenta MySQL -> Se falhar, tenta Disco -> Faz cache no Redis.
+   * Implementação do KeyStore com inteligência de cache e fallback.
+   * Lógica: Redis HMGET -> MySQL SELECT -> Disco READ -> Redis HSET (Warming).
    */
   const keys: SignalKeyStore = {
     get: async (type, ids) => {
@@ -235,7 +252,7 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
       const remaining = new Set(ids)
       const toWarm: Record<string, string> = {}
 
-      // 1. Tentar Cache L1 (Redis)
+      // L1: Redis
       if (redisClient) {
         const redisKey = redisKeysKey(type)
         const values = await redisClient.hmGet(redisKey, ids)
@@ -247,51 +264,39 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
           const normalized = normalizeKeyValue(type, value)
           if (normalized) data[id] = normalized
         })
-        
-        // Fallback para namespace antigo no Redis
-        if (remaining.size && legacyRedisKeysKey(type)) {
-          const legacyKey = legacyRedisKeysKey(type)
-          if (legacyKey) {
-            const legacyIds = Array.from(remaining)
-            const legacyValues = await redisClient.hmGet(legacyKey, legacyIds)
-            legacyValues.forEach((raw, index) => {
-              const id = legacyIds[index]
-              if (!id || !raw) return
-              const value = deserialize<SignalDataTypeMap[typeof type]>(raw)
-              const normalized = normalizeKeyValue(type, value)
-              if (normalized) {
-                data[id] = normalized
-                toWarm[id] = raw
-                remaining.delete(id)
-              }
-            })
-          }
-        }
       }
 
-      // 2. Tentar Storage L2 (MySQL)
+      // L2: MySQL (Com wrapper withMysql)
       if (remaining.size) {
         const idsToFetch = Array.from(remaining)
         const placeholders = idsToFetch.map(() => '?').join(', ')
         type KeyRow = RowDataPacket & { key_id: string; value_json: unknown }
-        const [rows] = await pool.execute<KeyRow[]>(
-          `SELECT key_id, value_json FROM signal_keys 
-           WHERE connection_id = ? AND key_type = ? AND key_id IN (${placeholders})`,
-          [resolvedConnectionId, type, ...idsToFetch]
+        const rows = await withMysql<KeyRow[] | null>(
+          async (client) => {
+            const [mysqlRows] = await client.execute<KeyRow[]>(
+              `SELECT key_id, value_json FROM signal_keys 
+               WHERE connection_id = ? AND key_type = ? AND key_id IN (${placeholders})`,
+              [resolvedConnectionId, type, ...idsToFetch]
+            )
+            return mysqlRows
+          },
+          null
         )
 
-        for (const row of rows) {
-          const value = deserialize<SignalDataTypeMap[typeof type]>(row.value_json)
-          const normalized = normalizeKeyValue(type, value)
-          if (normalized) {
-            data[row.key_id] = normalized
-            toWarm[row.key_id] = serialize(value)
-            remaining.delete(row.key_id)
+        if (rows) {
+          for (const row of rows) {
+            const value = deserialize<SignalDataTypeMap[typeof type]>(row.value_json)
+            const normalized = normalizeKeyValue(type, value)
+            if (normalized) {
+              data[row.key_id] = normalized
+              toWarm[row.key_id] = serialize(value)
+              remaining.delete(row.key_id)
+            }
           }
         }
       }
 
-      // 3. Tentar Fallback L3 (Disco) e Sincronizar com MySQL
+      // L3: Disco (Fallback Final)
       if (remaining.size) {
         await Promise.all(
           Array.from(remaining).map(async (id) => {
@@ -303,19 +308,23 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
               const normalized = normalizeKeyValue(type, diskValue)
               if (normalized) data[id] = normalized
               toWarm[id] = serialize(diskValue)
-              
-              await ensureMysqlConnection(pool)
-              await pool.execute(
-                `INSERT INTO signal_keys (connection_id, key_type, key_id, value_json)
-                 VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE value_json = VALUES(value_json)`,
-                [resolvedConnectionId, type, id, serialize(diskValue)]
+
+              await withMysql(
+                async (client) => {
+                  await client.execute(
+                    `INSERT INTO signal_keys (connection_id, key_type, key_id, value_json)
+                     VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE value_json = VALUES(value_json)`,
+                    [resolvedConnectionId, type, id, serialize(diskValue)]
+                  )
+                },
+                undefined
               )
             }
           })
         )
       }
 
-      // "Aquecer" o Redis com os dados encontrados no MySQL/Disco
+      // Cache Warming: Sincroniza L2/L3 de volta para L1
       if (redisClient && Object.keys(toWarm).length) {
         await redisClient.hSet(redisKeysKey(type), toWarm)
       }
@@ -339,7 +348,6 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
           }
         }
 
-        // Persistência em Lote (Batch) no MySQL e Redis
         if (toSet.length) {
           const values = toSet.map(() => '(?, ?, ?, ?)').join(', ')
           const params = toSet.flatMap((entry) => [
@@ -348,12 +356,14 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
             entry.id,
             entry.value,
           ])
-          await ensureMysqlConnection(pool)
-          await pool.execute(
-            `INSERT INTO signal_keys (connection_id, key_type, key_id, value_json)
-             VALUES ${values} ON DUPLICATE KEY UPDATE value_json = VALUES(value_json), updated_at = CURRENT_TIMESTAMP`,
-            params
-          )
+          await withMysql(async (client) => {
+            await client.execute(
+              `INSERT INTO signal_keys (connection_id, key_type, key_id, value_json)
+               VALUES ${values} ON DUPLICATE KEY UPDATE value_json = VALUES(value_json), updated_at = CURRENT_TIMESTAMP`,
+              params
+            )
+          }, undefined)
+          
           if (redisPipeline) {
             const payload: Record<string, string> = {}
             for (const entry of toSet) payload[entry.id] = entry.value
@@ -363,31 +373,22 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
 
         if (toDelete.length) {
           const placeholders = toDelete.map(() => '?').join(', ')
-          await ensureMysqlConnection(pool)
-          await pool.execute(
-            `DELETE FROM signal_keys 
-             WHERE connection_id = ? AND key_type = ? AND key_id IN (${placeholders})`,
-            [resolvedConnectionId, category, ...toDelete]
-          )
-          if (redisPipeline) {
-            redisPipeline.hDel(redisKeysKey(category), toDelete)
-          }
+          await withMysql(async (client) => {
+            await client.execute(
+              `DELETE FROM signal_keys WHERE connection_id = ? AND key_type = ? AND key_id IN (${placeholders})`,
+              [resolvedConnectionId, category, ...toDelete]
+            )
+          }, undefined)
+          if (redisPipeline) redisPipeline.hDel(redisKeysKey(category), toDelete)
         }
       }
-
       if (redisPipeline) await redisPipeline.exec()
     },
   }
 
-  /**
-   * Persiste as credenciais principais (AuthenticationCreds) em todas as camadas.
-   * Deve ser chamado sempre que o evento 'creds.update' for disparado.
-   */
   const saveCreds = async () => {
     await storeCredsInMysql(creds)
-    if (redisClient) {
-      await redisClient.set(redisCredsKey, serialize(creds))
-    }
+    if (redisClient) await redisClient.set(redisCredsKey, serialize(creds))
     await writeData(config.authDir, 'creds.json', creds)
   }
 
