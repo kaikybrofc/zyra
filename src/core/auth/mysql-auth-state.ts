@@ -25,18 +25,64 @@ import {
 /**
  * Representa o estado de autenticação multicamadas com foco em persistência SQL.
  * Estende a funcionalidade padrão do Baileys para suportar sincronização entre MySQL, Redis e Disco.
+ * @remarks
+ * - L1 Redis (cache rápido) com cache warming automático.
+ * - L2 MySQL (persistência primária) com circuit breaker e failover.
+ * - L3 Disco (fallback final) com concorrência de I/O limitada.
+ * - Escritas em lote com chunking para evitar limites do MySQL.
+ * @example
+ * const { state, saveCreds } = await useMysqlAuthState('bot-01')
+ * socket.ev.on('creds.update', saveCreds)
  */
 type MysqlAuthState = {
-  /** Objeto de estado contendo credenciais ativas e o gerenciador de chaves criptográficas. */
+  /**
+   * Estado do Baileys contendo credenciais ativas e o KeyStore multicamadas.
+   * As leituras priorizam Redis, depois MySQL e por fim Disco.
+   */
   state: AuthenticationState
-  /** * Sincroniza e persiste as credenciais principais em todas as camadas de storage disponíveis.
+  /**
+   * Sincroniza e persiste as credenciais principais em todas as camadas disponíveis.
    * Deve ser vinculada ao evento 'creds.update' do socket.
+   * @remarks
+   * Executa as persistências em paralelo e tolera falhas temporárias do MySQL.
    */
   saveCreds: () => Promise<void>
 }
 
 let mysqlUnavailableLogged = false
 
+const MYSQL_SIGNAL_KEYS_CHUNK_SIZE = Math.max(
+  1,
+  Number(process.env.WA_SIGNAL_KEYS_CHUNK ?? 500)
+)
+const DISK_READ_CONCURRENCY = Math.max(
+  1,
+  Number(process.env.WA_AUTH_DISK_CONCURRENCY ?? 50)
+)
+
+const chunkArray = <T>(items: T[], size: number): T[][] => {
+  const chunks: T[][] = []
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size))
+  }
+  return chunks
+}
+
+const runWithConcurrency = async <T>(
+  items: T[],
+  concurrency: number,
+  handler: (item: T) => Promise<void>
+) => {
+  let index = 0
+  const workers = new Array(Math.min(concurrency, items.length)).fill(null).map(async () => {
+    while (index < items.length) {
+      const current = items[index]
+      index += 1
+      await handler(current)
+    }
+  })
+  await Promise.all(workers)
+}
 
 /**
  * Constrói o mapeamento de chaves para o Redis considerando o isolamento da conexão.
@@ -62,6 +108,11 @@ const buildRedisKeys = (connectionId?: string) => {
  * 2. **Auto-Cura**: Sincroniza automaticamente fontes atrasadas ou vazias no boot.
  * 3. **Resiliência a Falhas (Failover)**: Utiliza o wrapper `withMysql` para detectar quedas no banco de dados e chavear dinamicamente para Redis/Disco sem interromper o bot.
  * 4. **Caching L1/L2**: O Redis atua como cache de leitura rápida, enquanto MySQL/Disco servem como storage persistente de longo prazo.
+ *
+ * Configurações úteis:
+ * - `WA_SIGNAL_KEYS_CHUNK`: tamanho do lote para INSERT/DELETE em `signal_keys` (default 500).
+ * - `WA_AUTH_DISK_CONCURRENCY`: limite de concorrência para leitura/escrita em disco (default 50).
+ * - `config.authPersistKeysOnDisk`: habilita persistência das chaves no disco.
  * * @param connectionId - Identificador único para isolamento de dados da sessão.
  * @returns Promessa com estado de autenticação compatível com `makeWASocket`.
  */
@@ -248,8 +299,8 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
 
       // L3: Disco (Fallback Final)
       if (remaining.size) {
-        await Promise.all(
-          Array.from(remaining).map(async (id) => {
+        const remainingIds = Array.from(remaining)
+        await runWithConcurrency(remainingIds, DISK_READ_CONCURRENCY, async (id) => {
             const diskValue = await readData<SignalDataTypeMap[typeof type]>(
               config.authDir,
               `${type}-${id}.json`
@@ -270,8 +321,7 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
                 undefined
               )
             }
-          })
-        )
+        })
       }
 
       // Cache Warming: Sincroniza L2/L3 de volta para L1
@@ -299,20 +349,23 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
         }
 
         if (toSet.length) {
-          const values = toSet.map(() => '(?, ?, ?, ?)').join(', ')
-          const params = toSet.flatMap((entry) => [
-            resolvedConnectionId,
-            category,
-            entry.id,
-            entry.value,
-          ])
-          await withMysql(async (client) => {
-            await client.execute(
-              `INSERT INTO signal_keys (connection_id, key_type, key_id, value_json)
-               VALUES ${values} ON DUPLICATE KEY UPDATE value_json = VALUES(value_json), updated_at = CURRENT_TIMESTAMP`,
-              params
-            )
-          }, undefined)
+          const chunks = chunkArray(toSet, MYSQL_SIGNAL_KEYS_CHUNK_SIZE)
+          for (const chunk of chunks) {
+            const values = chunk.map(() => '(?, ?, ?, ?)').join(', ')
+            const params = chunk.flatMap((entry) => [
+              resolvedConnectionId,
+              category,
+              entry.id,
+              entry.value,
+            ])
+            await withMysql(async (client) => {
+              await client.execute(
+                `INSERT INTO signal_keys (connection_id, key_type, key_id, value_json)
+                 VALUES ${values} ON DUPLICATE KEY UPDATE value_json = VALUES(value_json), updated_at = CURRENT_TIMESTAMP`,
+                params
+              )
+            }, undefined)
+          }
           
           if (redisPipeline) {
             const payload: Record<string, string> = {}
@@ -322,25 +375,34 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
         }
 
         if (toDelete.length) {
-          const placeholders = toDelete.map(() => '?').join(', ')
-          await withMysql(async (client) => {
-            await client.execute(
-              `DELETE FROM signal_keys WHERE connection_id = ? AND key_type = ? AND key_id IN (${placeholders})`,
-              [resolvedConnectionId, category, ...toDelete]
-            )
-          }, undefined)
+          const chunks = chunkArray(toDelete, MYSQL_SIGNAL_KEYS_CHUNK_SIZE)
+          for (const chunk of chunks) {
+            const placeholders = chunk.map(() => '?').join(', ')
+            await withMysql(async (client) => {
+              await client.execute(
+                `DELETE FROM signal_keys WHERE connection_id = ? AND key_type = ? AND key_id IN (${placeholders})`,
+                [resolvedConnectionId, category, ...chunk]
+              )
+            }, undefined)
+          }
           if (redisPipeline) redisPipeline.hDel(redisKeysKey(category), toDelete)
         }
 
         if (persistKeysOnDisk) {
-          const diskTasks: Promise<void>[] = []
+          const diskOperations: Array<() => Promise<void>> = []
           for (const entry of toSet) {
-            diskTasks.push(writeData(config.authDir, `${category}-${entry.id}.json`, entry.raw))
+            diskOperations.push(() =>
+              writeData(config.authDir, `${category}-${entry.id}.json`, entry.raw)
+            )
           }
           for (const id of toDelete) {
-            diskTasks.push(deleteData(config.authDir, `${category}-${id}.json`))
+            diskOperations.push(() => deleteData(config.authDir, `${category}-${id}.json`))
           }
-          if (diskTasks.length) await Promise.all(diskTasks)
+          if (diskOperations.length) {
+            await runWithConcurrency(diskOperations, DISK_READ_CONCURRENCY, async (op) => {
+              await op()
+            })
+          }
         }
       }
       if (redisPipeline) await redisPipeline.exec()
@@ -348,9 +410,10 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
   }
 
   const saveCreds = async () => {
-    await storeCredsInMysql(creds)
-    if (redisClient) await redisClient.set(redisCredsKey, serialize(creds))
-    await writeData(config.authDir, 'creds.json', creds)
+    const tasks: Array<Promise<unknown>> = [storeCredsInMysql(creds)]
+    if (redisClient) tasks.push(redisClient.set(redisCredsKey, serialize(creds)))
+    tasks.push(writeData(config.authDir, 'creds.json', creds))
+    await Promise.all(tasks)
   }
 
   return { state: { creds, keys }, saveCreds }
