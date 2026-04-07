@@ -26,6 +26,10 @@ type SocketVersion = typeof DEFAULT_CONNECTION_CONFIG.version
 
 /** Tempo de vida do cache da versão do Baileys (24 horas) */
 const VERSION_CACHE_TTL_MS = 24 * 60 * 60 * 1000
+/** Timeout máximo para shutdown gracioso antes de forçar saída */
+const SHUTDOWN_TIMEOUT_MS = Math.max(0, Number(process.env.WA_SHUTDOWN_TIMEOUT_MS ?? 10_000))
+/** Debounce para evitar tempestade de gravações em creds.update */
+const CREDS_DEBOUNCE_MS = Math.max(0, Number(process.env.WA_CREDS_DEBOUNCE_MS ?? 1_500))
 
 /** Cache volátil para evitar requisições excessivas à API de versões */
 let cachedVersion: { version: SocketVersion; fetchedAt: number } | null = null
@@ -120,19 +124,42 @@ const registerGracefulShutdown = () => {
     const targets = Array.from(shutdownTargets)
     shutdownTargets.clear()
 
-    await Promise.all(
-      targets.map(async ({ sock, saveCreds, logger, connectionId }) => {
-        logger.warn('executando shutdown gracioso do socket', { signal, connectionId })
-        try {
-          await saveCreds()
-        } catch (error) {
-          logger.error('falha ao persistir credenciais durante o encerramento', { err: error })
-        }
-        if (typeof sock.end === 'function') {
-          await sock.end(undefined)
-        }
-      })
-    )
+    const baseLogger = targets[0]?.logger ?? null
+    const forceExit =
+      SHUTDOWN_TIMEOUT_MS > 0
+        ? setTimeout(() => {
+            if (baseLogger) {
+              baseLogger.error('shutdown demorou demais, forçando encerramento', { signal })
+            } else {
+              console.error('shutdown demorou demais, forçando encerramento', { signal })
+            }
+            process.exit(1)
+          }, SHUTDOWN_TIMEOUT_MS)
+        : null
+
+    try {
+      await Promise.all(
+        targets.map(async ({ sock, saveCreds, logger, connectionId }) => {
+          logger.warn('executando shutdown gracioso do socket', { signal, connectionId })
+          try {
+            await saveCreds()
+          } catch (error) {
+            logger.error('falha ao persistir credenciais durante o encerramento', { err: error })
+          }
+          if (typeof sock.end === 'function') {
+            await sock.end(undefined)
+          }
+        })
+      )
+    } catch (error) {
+      if (baseLogger) {
+        baseLogger.error('falha durante shutdown gracioso', { err: error })
+      } else {
+        console.error('falha durante shutdown gracioso', { err: error })
+      }
+    } finally {
+      if (forceExit) clearTimeout(forceExit)
+    }
     // Opcional: process.exit(0) se este for o único serviço
   }
 
@@ -221,15 +248,42 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
   store.bind(sock.ev)
 
   // Escuta atualizações de chaves criptográficas e tokens
-  sock.ev.on('creds.update', () => {
-    void (async () => {
-      try {
-        await saveCreds()
-      } catch (error) {
-        logger.error('erro ao salvar credenciais durante ciclo de vida', { err: error })
-      }
-    })()
-  })
+  let credsSaveTimer: NodeJS.Timeout | null = null
+  let credsSaveInFlight = false
+  let credsSaveQueued = false
+
+  const flushCredsSave = async () => {
+    if (credsSaveInFlight) {
+      credsSaveQueued = true
+      return
+    }
+    credsSaveInFlight = true
+    try {
+      await saveCreds()
+    } catch (error) {
+      logger.error('erro ao salvar credenciais durante ciclo de vida', { err: error })
+    } finally {
+      credsSaveInFlight = false
+    }
+    if (credsSaveQueued) {
+      credsSaveQueued = false
+      void flushCredsSave()
+    }
+  }
+
+  const scheduleCredsSave = () => {
+    if (CREDS_DEBOUNCE_MS <= 0) {
+      void flushCredsSave()
+      return
+    }
+    if (credsSaveTimer) clearTimeout(credsSaveTimer)
+    credsSaveTimer = setTimeout(() => {
+      credsSaveTimer = null
+      void flushCredsSave()
+    }, CREDS_DEBOUNCE_MS)
+  }
+
+  sock.ev.on('creds.update', scheduleCredsSave)
 
   // Registro para encerramento seguro do processo
   shutdownTargets.add({ sock, store, saveCreds, logger, connectionId })
