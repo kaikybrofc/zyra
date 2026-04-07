@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DisconnectReason, initAuthCreds, type AuthenticationState } from '@whiskeysockets/baileys'
 
 let makeWASocketMock: ReturnType<typeof vi.fn>
@@ -73,6 +73,9 @@ const createStore = () => ({
   },
 })
 
+const originalCredsDebounce = process.env.WA_CREDS_DEBOUNCE_MS
+const originalShutdownTimeout = process.env.WA_SHUTDOWN_TIMEOUT_MS
+
 beforeEach(() => {
   vi.resetModules()
   vi.clearAllMocks()
@@ -87,8 +90,23 @@ beforeEach(() => {
   shouldSyncHistoryMessageOnceMock = vi.fn()
 })
 
+afterEach(() => {
+  if (originalCredsDebounce === undefined) {
+    delete process.env.WA_CREDS_DEBOUNCE_MS
+  } else {
+    process.env.WA_CREDS_DEBOUNCE_MS = originalCredsDebounce
+  }
+  if (originalShutdownTimeout === undefined) {
+    delete process.env.WA_SHUTDOWN_TIMEOUT_MS
+  } else {
+    process.env.WA_SHUTDOWN_TIMEOUT_MS = originalShutdownTimeout
+  }
+  vi.useRealTimers()
+})
+
 describe('socket', () => {
   it('cria socket, trata eventos e persiste credenciais', async () => {
+    process.env.WA_CREDS_DEBOUNCE_MS = '0'
     const ev = new EventEmitter()
     const sock = {
       ev,
@@ -132,6 +150,7 @@ describe('socket', () => {
   })
 
   it('usa cache de versao, fallback de auth e shutdown gracioso', async () => {
+    process.env.WA_CREDS_DEBOUNCE_MS = '0'
     const handlers: Record<string, () => void> = {}
     const onceSpy = vi.spyOn(process, 'once')
     onceSpy.mockImplementation(((event: string, handler: () => void) => {
@@ -181,6 +200,7 @@ describe('socket', () => {
   })
 
   it('registra warning de versao e loga erro ao falhar saveCreds', async () => {
+    process.env.WA_CREDS_DEBOUNCE_MS = '0'
     const ev = new EventEmitter()
     const sock = { ev, user: { id: '3@s.whatsapp.net' }, end: vi.fn() }
 
@@ -207,5 +227,115 @@ describe('socket', () => {
     expect(logger.error).toHaveBeenCalledWith('erro ao salvar credenciais durante ciclo de vida', {
       err: persistError,
     })
+  })
+
+  it('debounce agrupa atualizacoes de credenciais', async () => {
+    vi.useFakeTimers()
+    process.env.WA_CREDS_DEBOUNCE_MS = '1000'
+    const ev = new EventEmitter()
+    const sock = { ev, user: { id: '4@s.whatsapp.net' }, end: vi.fn() }
+
+    makeWASocketMock.mockReturnValue(sock)
+    fetchLatestMock.mockResolvedValue({ version: [2, 0, 0], isLatest: true })
+
+    const saveCreds = vi.fn().mockResolvedValue(undefined)
+    getAuthStateMock.mockResolvedValue({ state: createState(), saveCreds })
+
+    const store = createStore()
+    createBaileysStoreMock.mockReturnValue(store)
+
+    const logger = createLogger()
+    const { createSocket } = await import('../src/core/connection/socket.ts')
+    await createSocket('conn', logger)
+
+    ev.emit('creds.update')
+    ev.emit('creds.update')
+    await vi.advanceTimersByTimeAsync(900)
+    expect(saveCreds).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(200)
+    expect(saveCreds).toHaveBeenCalledTimes(1)
+  })
+
+  it('enfileira um segundo salvamento quando ha um save em andamento', async () => {
+    process.env.WA_CREDS_DEBOUNCE_MS = '0'
+    const ev = new EventEmitter()
+    const sock = { ev, user: { id: '5@s.whatsapp.net' }, end: vi.fn() }
+
+    makeWASocketMock.mockReturnValue(sock)
+    fetchLatestMock.mockResolvedValue({ version: [2, 0, 0], isLatest: true })
+
+    let resolveFirst: (() => void) | null = null
+    const saveCreds = vi.fn().mockImplementation(() => {
+      if (!resolveFirst) {
+        return new Promise<void>((resolve) => {
+          resolveFirst = resolve
+        })
+      }
+      return Promise.resolve()
+    })
+    getAuthStateMock.mockResolvedValue({ state: createState(), saveCreds })
+
+    const store = createStore()
+    createBaileysStoreMock.mockReturnValue(store)
+
+    const logger = createLogger()
+    const { createSocket } = await import('../src/core/connection/socket.ts')
+    await createSocket('conn', logger)
+
+    ev.emit('creds.update')
+    await Promise.resolve()
+    expect(saveCreds).toHaveBeenCalledTimes(1)
+
+    ev.emit('creds.update')
+    await Promise.resolve()
+    expect(saveCreds).toHaveBeenCalledTimes(1)
+
+    resolveFirst?.()
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(saveCreds).toHaveBeenCalledTimes(2)
+  })
+
+  it('forca encerramento quando shutdown excede timeout', async () => {
+    vi.useFakeTimers()
+    process.env.WA_CREDS_DEBOUNCE_MS = '0'
+    process.env.WA_SHUTDOWN_TIMEOUT_MS = '10'
+    const handlers: Record<string, () => void> = {}
+    const onceSpy = vi.spyOn(process, 'once')
+    onceSpy.mockImplementation(((event: string, handler: () => void) => {
+      handlers[event] = handler
+      return process
+    }) as typeof process.once)
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      return undefined as never
+    }) as typeof process.exit)
+
+    const ev = new EventEmitter()
+    const sock = { ev, user: { id: '6@s.whatsapp.net' }, end: vi.fn(() => new Promise(() => {})) }
+
+    makeWASocketMock.mockReturnValue(sock)
+    fetchLatestMock.mockResolvedValue({ version: [2, 0, 0], isLatest: true })
+
+    const saveCreds = vi.fn(() => new Promise<void>(() => {}))
+    getAuthStateMock.mockResolvedValue({ state: createState(), saveCreds })
+
+    const store = createStore()
+    createBaileysStoreMock.mockReturnValue(store)
+
+    const logger = createLogger()
+    const { createSocket } = await import('../src/core/connection/socket.ts')
+    await createSocket('conn', logger)
+
+    handlers.SIGTERM?.()
+    await vi.advanceTimersByTimeAsync(10)
+
+    expect(logger.error).toHaveBeenCalledWith('shutdown demorou demais, forçando encerramento', {
+      signal: 'SIGTERM',
+    })
+    expect(exitSpy).toHaveBeenCalledWith(1)
+
+    onceSpy.mockRestore()
+    exitSpy.mockRestore()
   })
 })
