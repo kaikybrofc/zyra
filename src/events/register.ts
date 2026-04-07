@@ -13,6 +13,10 @@ type RegisterOptions = {
   connectionId: string
 }
 
+type SocketWithCredsFlush = WASocket & {
+  flushCredsNow?: (reason: string) => Promise<void>
+}
+
 const ALL_EVENTS = ['connection.update', 'creds.update', 'messaging-history.set', 'chats.upsert', 'chats.update', 'lid-mapping.update', 'chats.delete', 'presence.update', 'contacts.upsert', 'contacts.update', 'messages.delete', 'messages.update', 'messages.media-update', 'messages.upsert', 'messages.reaction', 'message-receipt.update', 'groups.upsert', 'groups.update', 'group-participants.update', 'group.join-request', 'group.member-tag.update', 'blocklist.set', 'blocklist.update', 'call', 'labels.edit', 'labels.association', 'newsletter.reaction', 'newsletter.view', 'newsletter-participants.update', 'newsletter-settings.update', 'chats.lock', 'settings.update'] as const satisfies readonly (keyof BaileysEventMap)[]
 
 type MissingEvents = Exclude<keyof BaileysEventMap, (typeof ALL_EVENTS)[number]>
@@ -25,6 +29,7 @@ type EventHandler<K extends keyof BaileysEventMap> = (data: BaileysEventMap[K]) 
  * Registra os listeners de eventos do Baileys e integra persistencia/logs por connection_id.
  */
 export function registerEvents({ sock, logger, reconnect, connectionId }: RegisterOptions): void {
+  const socketWithCredsFlush = sock as SocketWithCredsFlush
   const sqlStore = createSqlStore(connectionId)
   let restartedAfterNewLogin = false
   type EventContext = {
@@ -135,7 +140,16 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
         logger.warn('conexão encerrada', { statusCode, restartRequired })
 
         if (shouldReconnect) {
-          void reconnect()
+          void (async () => {
+            if (restartRequired && socketWithCredsFlush.flushCredsNow) {
+              try {
+                await socketWithCredsFlush.flushCredsNow('before_reconnect')
+              } catch (error) {
+                logger.warn('falha ao forcar persistencia de creds antes de reconectar', { err: error })
+              }
+            }
+            await reconnect()
+          })()
         }
       } else if (connection === 'open') {
         logger.info('conexão aberta')

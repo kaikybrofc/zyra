@@ -14,6 +14,10 @@ type SocketWithSignalRepository = {
   signalRepository?: SignalRepositoryWithLIDStore
 }
 
+type SocketWithCredsFlush = ReturnType<typeof makeWASocket> & {
+  flushCredsNow?: (reason: string) => Promise<void>
+}
+
 /** Tipo que representa o formato da versão do protocolo do WhatsApp (ex: [2, 3000, 101]) */
 type SocketVersion = typeof DEFAULT_CONNECTION_CONFIG.version
 
@@ -221,37 +225,42 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
 
   // Escuta atualizações de chaves criptográficas e tokens
   let credsSaveTimer: NodeJS.Timeout | null = null
-  let credsSaveInFlight = false
-  let credsSaveQueued = false
+  let credsSaveRequested = false
+  let credsSaveRunner: Promise<void> | null = null
 
-  const flushCredsSave = async () => {
-    if (credsSaveInFlight) {
-      credsSaveQueued = true
-      return
-    }
-    credsSaveInFlight = true
-    try {
-      await saveCreds()
-    } catch (error) {
-      logger.error('erro ao salvar credenciais durante ciclo de vida', {
-        err: error,
-      })
-    } finally {
-      credsSaveInFlight = false
-    }
-    if (credsSaveQueued) {
-      credsSaveQueued = false
-      void flushCredsSave()
-    }
+  const flushCredsSave = (): Promise<void> => {
+    credsSaveRequested = true
+    if (credsSaveRunner) return credsSaveRunner
+
+    credsSaveRunner = (async () => {
+      while (credsSaveRequested) {
+        credsSaveRequested = false
+        try {
+          await saveCreds()
+        } catch (error) {
+          logger.error('erro ao salvar credenciais durante ciclo de vida', {
+            err: error,
+          })
+        }
+      }
+    })().finally(() => {
+      credsSaveRunner = null
+    })
+
+    return credsSaveRunner
   }
 
-  const forceCredsSave = (reason: string) => {
+  const flushCredsNow = async (reason: string): Promise<void> => {
     if (credsSaveTimer) {
       clearTimeout(credsSaveTimer)
       credsSaveTimer = null
     }
     logger.info('forcando persistencia imediata de credenciais', { connectionId, reason })
-    void flushCredsSave()
+    await flushCredsSave()
+  }
+
+  const forceCredsSave = (reason: string) => {
+    void flushCredsNow(reason)
   }
 
   const scheduleCredsSave = () => {
@@ -304,6 +313,8 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
   store.bind(sock.ev)
 
   sock.ev.on('creds.update', scheduleCredsSave)
+
+  ;(sock as SocketWithCredsFlush).flushCredsNow = flushCredsNow
 
   // Registro para encerramento seguro do processo
   shutdownTargets.add({ sock, store, saveCreds, logger, connectionId })
