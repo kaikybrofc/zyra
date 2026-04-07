@@ -1,4 +1,4 @@
-import { type WASocket, type proto } from '@whiskeysockets/baileys'
+import { type WASocket, type WAMessage, type proto } from '@whiskeysockets/baileys'
 import type { AppLogger } from '../observability/logger.js'
 import { commands } from '../commands/index.js'
 import { getMessageText, getNormalizedMessage } from '../utils/message.js'
@@ -14,6 +14,19 @@ const ANSI_MAGENTA = '\x1b[35m'
 const ANSI_GRAY = '\x1b[90m'
 
 const colorize = (value: string, color: string): string => (process.stdout.isTTY ? `${color}${value}${ANSI_RESET}` : value)
+
+const MEDIA_TYPES = new Set([
+  'imageMessage',
+  'videoMessage',
+  'audioMessage',
+  'documentMessage',
+  'stickerMessage',
+  'ptvMessage',
+  'contactMessage',
+  'contactsArrayMessage',
+  'locationMessage',
+  'liveLocationMessage',
+])
 
 let defaultSqlStore: SqlStore | null = null
 
@@ -33,6 +46,17 @@ export type IncomingMessageContext = {
   isCommand: boolean
   commandName: string | null
   commandArgs: string[]
+}
+
+const parseTimestamp = (raw: unknown): number | null => {
+  if (!raw) return null
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null
+  if (typeof (raw as { toNumber?: () => number }).toNumber === 'function') {
+    const value = (raw as { toNumber: () => number }).toNumber()
+    return Number.isFinite(value) ? value : null
+  }
+  const value = Number(raw)
+  return Number.isFinite(value) ? value : null
 }
 
 const buildContext = (sock: WASocket, message: proto.IWebMessageInfo): IncomingMessageContext | null => {
@@ -62,19 +86,31 @@ const buildContext = (sock: WASocket, message: proto.IWebMessageInfo): IncomingM
 
 const processIncomingMessage = async (context: IncomingMessageContext, logger: AppLogger): Promise<void> => {
   const { type: messageType } = getNormalizedMessage(context.message)
-  const mediaTypes = new Set(['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage', 'ptvMessage', 'contactMessage', 'contactsArrayMessage', 'locationMessage', 'liveLocationMessage'])
 
   const messageKey = context.message.key
   const sender = messageKey?.participant ?? messageKey?.remoteJid ?? null
   const rawTimestamp = context.message.messageTimestamp
-  const timestampSeconds = typeof rawTimestamp === 'number' ? rawTimestamp : typeof (rawTimestamp as { toNumber?: () => number } | null)?.toNumber === 'function' ? (rawTimestamp as { toNumber: () => number }).toNumber() : rawTimestamp ? Number(rawTimestamp) : null
+  const timestampSeconds = parseTimestamp(rawTimestamp)
   const timestampMs = timestampSeconds ? timestampSeconds * 1000 : null
   const timestampIso = timestampMs ? new Date(timestampMs).toISOString() : null
   const rawText = context.text?.trim()
   const text = rawText && rawText.length > 200 ? `${rawText.slice(0, 200)}...` : (rawText ?? null)
   const compactText = text ? text.replace(/\s+/g, ' ').trim() : null
-  const hasMedia = messageType ? mediaTypes.has(messageType) : false
-  const logParts = [`chatId=${context.chatId}`, `messageId=${messageKey?.id ?? ''}`, `fromMe=${messageKey?.fromMe ?? ''}`, `sender=${sender ?? ''}`, `pushName=${context.message.pushName ?? ''}`, `isGroup=${context.chatId.endsWith('@g.us')}`, `messageType=${messageType ? colorize(messageType, ANSI_MAGENTA) : ''}`, `hasMedia=${hasMedia}`, `text=${compactText ? JSON.stringify(compactText) : ''}`, `isCommand=${colorize(String(context.isCommand), context.isCommand ? ANSI_GREEN : ANSI_GRAY)}`, `commandName=${context.commandName ? colorize(context.commandName, ANSI_CYAN) : ''}`, `timestamp=${timestampIso ?? ''}`]
+  const hasMedia = messageType ? MEDIA_TYPES.has(messageType) : false
+  const logParts = [
+    `chatId=${context.chatId}`,
+    `messageId=${messageKey?.id ?? ''}`,
+    `fromMe=${messageKey?.fromMe ?? ''}`,
+    `sender=${sender ?? ''}`,
+    `pushName=${context.message.pushName ?? ''}`,
+    `isGroup=${context.chatId.endsWith('@g.us')}`,
+    `messageType=${messageType ? colorize(messageType, ANSI_MAGENTA) : ''}`,
+    `hasMedia=${hasMedia}`,
+    `text=${compactText ? JSON.stringify(compactText) : ''}`,
+    `isCommand=${colorize(String(context.isCommand), context.isCommand ? ANSI_GREEN : ANSI_GRAY)}`,
+    `commandName=${context.commandName ? colorize(context.commandName, ANSI_CYAN) : ''}`,
+    `timestamp=${timestampIso ?? ''}`,
+  ]
   const title = colorize('mensagem recebida', `${ANSI_BOLD}${ANSI_CYAN}`)
   logger.info(`\n\n${title} | ${logParts.join(' ')}`)
 }
@@ -99,6 +135,19 @@ const handleCommand = async (context: IncomingMessageContext, logger: AppLogger,
   } catch (error) {
     success = false
     logger.error('comando falhou', { err: error, command: context.commandName })
+    try {
+      const quoted = context.message?.key ? (context.message as WAMessage) : undefined
+      await context.sock.sendMessage(
+        context.chatId,
+        { text: '❌ Ocorreu um erro interno ao executar este comando.' },
+        quoted ? { quoted } : undefined
+      )
+    } catch (sendError) {
+      logger.error('falha ao enviar aviso de erro do comando', {
+        err: sendError,
+        command: context.commandName,
+      })
+    }
   } finally {
     if (sqlStore.enabled) {
       const messageKey = context.message.key
