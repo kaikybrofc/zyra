@@ -16,6 +16,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "postinstall": "patch-package",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -33,9 +34,10 @@
     "@types/node": "^22.13.5",
     "@types/qrcode-terminal": "^0.12.2",
     "eslint": "^9.0.0",
+    "patch-package": "^8.0.1",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
-    "vitest": "^4.1.2",
-    "typescript-eslint": "^8.0.0"
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^4.1.2"
   }
 }

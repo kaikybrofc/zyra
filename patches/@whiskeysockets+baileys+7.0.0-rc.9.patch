@@ -1,0 +1,59 @@
+--- a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
++++ b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
+@@ -89,20 +89,31 @@
+     // Handles mex newsletter notifications
+     const handleMexNewsletterNotification = async (node) => {
+         const mexNode = getBinaryNodeChild(node, 'mex');
+-        if (!mexNode?.content) {
++        const updateNode = mexNode?.content ? null : getBinaryNodeChild(node, 'update') || getAllBinaryNodeChildren(node)[0];
++        const payloadNode = mexNode?.content ? mexNode : updateNode;
++        if (!payloadNode?.content) {
+             logger.warn({ node }, 'Invalid mex newsletter notification');
+             return;
+         }
+         let data;
+         try {
+-            data = JSON.parse(mexNode.content.toString());
++            const contentBuf = typeof payloadNode.content === 'string'
++                ? Buffer.from(payloadNode.content, 'binary')
++                : Buffer.from(payloadNode.content);
++            data = JSON.parse(contentBuf.toString());
+         }
+         catch (error) {
+             logger.error({ err: error, node }, 'Failed to parse mex newsletter notification');
+             return;
+         }
+-        const operation = data?.operation;
+-        const updates = data?.updates;
++        const operation = data?.operation ?? payloadNode?.attrs?.op_name;
++        let updates = data?.updates;
++        if (!updates) {
++            const linkedProfiles = data?.data?.xwa2_notify_linked_profiles;
++            if (linkedProfiles) {
++                updates = [linkedProfiles];
++            }
++        }
+         if (!updates || !operation) {
+             logger.warn({ data }, 'Invalid mex newsletter notification content');
+             return;
+@@ -132,6 +143,20 @@
+                     }
+                 }
+                 break;
++            case 'NotificationLinkedProfilesUpdates':
++                for (const update of updates) {
++                    const lid = update?.jid;
++                    const addedProfiles = Array.isArray(update?.added_profiles) ? update.added_profiles : [];
++                    for (const profile of addedProfiles) {
++                        const pn = typeof profile === 'string'
++                            ? profile
++                            : profile?.pn ?? profile?.jid ?? null;
++                        if (lid && pn) {
++                            ev.emit('lid-mapping.update', { lid, pn });
++                        }
++                    }
++                }
++                break;
+             default:
+                 logger.info({ operation, data }, 'Unhandled mex newsletter notification');
+                 break;
