@@ -281,14 +281,14 @@ async function main() {
           `UPDATE users
            SET display_name = ?
            WHERE connection_id = ?
-             AND id = UUID_TO_BIN(?, 1)`,
+             AND id = UNHEX(REPLACE(?, '-', ''))`,
           [displayName, connectionId, cachedUserId]
         )
       }
       for (const ident of clean) {
         await pool.execute(
           `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
-           VALUES (?, UUID_TO_BIN(?, 1), ?, ?)
+           VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?)
            ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
           [connectionId, cachedUserId, ident.type, ident.value]
         )
@@ -301,7 +301,7 @@ async function main() {
     const whereClauses = clean.map(() => `(id_type = ? AND id_value = ?)`).join(' OR ')
     const whereParams = clean.flatMap((entry) => [entry.type, entry.value])
     const [rows] = await pool.execute<UserRow[]>(
-      `SELECT BIN_TO_UUID(user_id, 1) AS user_id, id_type, id_value
+      `SELECT LOWER(CONCAT(HEX(SUBSTR(user_id, 1, 4)),'-',HEX(SUBSTR(user_id, 5, 2)),'-',HEX(SUBSTR(user_id, 7, 2)),'-',HEX(SUBSTR(user_id, 9, 2)),'-',HEX(SUBSTR(user_id, 11, 6)))) AS user_id, id_type, id_value
        FROM user_identifiers
        WHERE connection_id = ?
          AND (${whereClauses})`,
@@ -314,14 +314,14 @@ async function main() {
           `UPDATE users
            SET display_name = ?
            WHERE connection_id = ?
-             AND id = UUID_TO_BIN(?, 1)`,
+             AND id = UNHEX(REPLACE(?, '-', ''))`,
           [displayName, connectionId, existing]
         )
       }
       for (const ident of clean) {
         await pool.execute(
           `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
-           VALUES (?, UUID_TO_BIN(?, 1), ?, ?)
+           VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?)
            ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
           [connectionId, existing, ident.type, ident.value]
         )
@@ -339,13 +339,13 @@ async function main() {
     const userId = randomUUID()
     await pool.execute(
       `INSERT INTO users (id, connection_id, display_name)
-       VALUES (UUID_TO_BIN(?, 1), ?, ?)`,
+       VALUES (UNHEX(REPLACE(?, '-', '')), ?, ?)`,
       [userId, connectionId, displayName ?? null]
     )
     for (const ident of clean) {
       await pool.execute(
         `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
-         VALUES (?, UUID_TO_BIN(?, 1), ?, ?)
+         VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?)
          ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
         [connectionId, userId, ident.type, ident.value]
       )
@@ -372,7 +372,7 @@ async function main() {
          user_id,
          role
        )
-       VALUES (?, ?, UUID_TO_BIN(?, 1), ?)
+       VALUES (?, ?, UNHEX(REPLACE(?, '-', '')), ?)
        ON DUPLICATE KEY UPDATE
          role = VALUES(role)`,
       [connectionId, normalizedChat, userId, resolvedRole]
@@ -386,7 +386,7 @@ async function main() {
     if (!userId) return
     await pool.execute(
       `INSERT INTO user_aliases (connection_id, user_id, alias_type, alias_value)
-       VALUES (?, UUID_TO_BIN(?, 1), ?, ?)
+       VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?)
        ON DUPLICATE KEY UPDATE last_seen = CURRENT_TIMESTAMP`,
       [connectionId, userId, type, normalized]
     )
@@ -439,7 +439,7 @@ async function main() {
       if (ownerUserId || subject !== null || announce !== null || restrict !== null || size !== null) {
         const [result] = await pool.execute<ResultSetHeader>(
           `UPDATE \`groups\`
-           SET owner_user_id = COALESCE(owner_user_id, IF(?, UUID_TO_BIN(?, 1), NULL)),
+           SET owner_user_id = COALESCE(owner_user_id, IF(?, UNHEX(REPLACE(?, '-', '')), NULL)),
                subject = IF(subject IS NULL OR subject = '', ?, subject),
                announce = COALESCE(announce, ?),
                \`restrict\` = COALESCE(\`restrict\`, ?),
@@ -472,7 +472,7 @@ async function main() {
                is_superadmin,
                data_json
              )
-             VALUES (?, ?, UUID_TO_BIN(?, 1), ?, ?, ?, ?, ?)
+             VALUES (?, ?, UNHEX(REPLACE(?, '-', '')), ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
                participant_jid = VALUES(participant_jid),
                role = VALUES(role),
@@ -561,7 +561,7 @@ async function main() {
       if (!userId) continue
       await pool.execute(
         `UPDATE lid_mappings
-         SET user_id = UUID_TO_BIN(?, 1)
+         SET user_id = UNHEX(REPLACE(?, '-', ''))
          WHERE connection_id = ?
            AND pn = ?
            AND user_id IS NULL`,
@@ -616,7 +616,7 @@ async function main() {
       if (contactUserId) {
         await pool.execute(
           `UPDATE wa_contacts_cache
-           SET user_id = IF(user_id IS NULL, UUID_TO_BIN(?, 1), user_id)
+           SET user_id = IF(user_id IS NULL, UNHEX(REPLACE(?, '-', '')), user_id)
            WHERE connection_id = ?
              AND jid = ?`,
           [contactUserId, connectionId, row.jid]
@@ -769,7 +769,7 @@ async function main() {
       if (!userId) continue
       await pool.execute(
         `UPDATE commands_log
-         SET actor_user_id = UUID_TO_BIN(?, 1)
+         SET actor_user_id = UNHEX(REPLACE(?, '-', ''))
          WHERE connection_id = ?
            AND id = ?
            AND actor_user_id IS NULL`,
@@ -889,7 +889,7 @@ async function main() {
           if (senderUserId) {
             const [updateResult] = await pool.execute<ResultSetHeader>(
               `UPDATE messages
-               SET sender_user_id = UUID_TO_BIN(?, 1)
+               SET sender_user_id = UNHEX(REPLACE(?, '-', ''))
                WHERE connection_id = ?
                  AND id = ?
                  AND sender_user_id IS NULL`,
@@ -913,7 +913,7 @@ async function main() {
                  user_id,
                  relation_type
                )
-               VALUES (?, ?, UUID_TO_BIN(?, 1), 'sender')`,
+               VALUES (?, ?, UNHEX(REPLACE(?, '-', '')), 'sender')`,
               [connectionId, row.id, senderUserId]
             )
           }
@@ -929,7 +929,7 @@ async function main() {
                  user_id,
                  relation_type
                )
-               VALUES (?, ?, UUID_TO_BIN(?, 1), 'mentioned')`,
+               VALUES (?, ?, UNHEX(REPLACE(?, '-', '')), 'mentioned')`,
               [connectionId, row.id, userId]
             )
           }
@@ -945,7 +945,7 @@ async function main() {
                user_id,
                relation_type
              )
-             VALUES (?, ?, UUID_TO_BIN(?, 1), 'quoted')`,
+             VALUES (?, ?, UNHEX(REPLACE(?, '-', '')), 'quoted')`,
               [connectionId, row.id, userId]
             )
           }
@@ -961,7 +961,7 @@ async function main() {
                user_id,
                relation_type
              )
-             VALUES (?, ?, UUID_TO_BIN(?, 1), 'participant')`,
+             VALUES (?, ?, UNHEX(REPLACE(?, '-', '')), 'participant')`,
               [connectionId, row.id, userId]
             )
           }
@@ -987,7 +987,7 @@ async function main() {
       if (selfUserId) {
         const [selfResult] = await pool.execute<ResultSetHeader>(
           `UPDATE messages
-           SET sender_user_id = UUID_TO_BIN(?, 1)
+           SET sender_user_id = UNHEX(REPLACE(?, '-', ''))
            WHERE connection_id = ?
              AND from_me = 1
              AND sender_user_id IS NULL`,
@@ -1077,7 +1077,7 @@ async function main() {
         if (actorUserId) {
           const [actorResult] = await pool.execute<ResultSetHeader>(
             `UPDATE message_events
-             SET actor_user_id = UUID_TO_BIN(?, 1)
+             SET actor_user_id = UNHEX(REPLACE(?, '-', ''))
              WHERE connection_id = ?
                AND id = ?
                AND actor_user_id IS NULL`,
@@ -1102,7 +1102,7 @@ async function main() {
         if (targetUserId) {
           const [targetResult] = await pool.execute<ResultSetHeader>(
             `UPDATE message_events
-             SET target_user_id = UUID_TO_BIN(?, 1)
+             SET target_user_id = UNHEX(REPLACE(?, '-', ''))
              WHERE connection_id = ?
                AND id = ?
                AND target_user_id IS NULL`,
@@ -1156,7 +1156,7 @@ async function main() {
       if (!actorUserId && !name && !color) continue
       await pool.execute(
         `UPDATE labels
-         SET actor_user_id = COALESCE(actor_user_id, IF(?, UUID_TO_BIN(?, 1), NULL)),
+         SET actor_user_id = COALESCE(actor_user_id, IF(?, UNHEX(REPLACE(?, '-', '')), NULL)),
              name = IF(name IS NULL OR name = '', ?, name),
              color = IF(color IS NULL OR color = '', ?, color)
          WHERE connection_id = ?
@@ -1236,7 +1236,7 @@ async function main() {
       if (!actorUserId && !messageDbId && !resolvedChatJid && !resolvedTargetJid) continue
       await pool.execute(
         `UPDATE label_associations
-         SET actor_user_id = COALESCE(actor_user_id, IF(?, UUID_TO_BIN(?, 1), NULL)),
+         SET actor_user_id = COALESCE(actor_user_id, IF(?, UNHEX(REPLACE(?, '-', '')), NULL)),
              chat_jid = IF(chat_jid IS NULL OR chat_jid = '', ?, chat_jid),
              message_db_id = COALESCE(message_db_id, ?),
              target_jid = IF(target_jid IS NULL OR target_jid = '', ?, target_jid)
@@ -1280,7 +1280,7 @@ async function main() {
       if (!userId) continue
       await pool.execute(
         `UPDATE blocklist
-         SET user_id = UUID_TO_BIN(?, 1)
+         SET user_id = UNHEX(REPLACE(?, '-', ''))
          WHERE connection_id = ?
            AND jid = ?
            AND user_id IS NULL`,
@@ -1420,7 +1420,7 @@ async function main() {
         if (actorUserId) {
           const [actorResult] = await pool.execute<ResultSetHeader>(
             `UPDATE events_log
-           SET actor_user_id = UUID_TO_BIN(?, 1)
+           SET actor_user_id = UNHEX(REPLACE(?, '-', ''))
            WHERE connection_id = ?
              AND id = ?
              AND actor_user_id IS NULL`,
@@ -1448,7 +1448,7 @@ async function main() {
         if (targetUserId) {
           const [targetResult] = await pool.execute<ResultSetHeader>(
             `UPDATE events_log
-           SET target_user_id = UUID_TO_BIN(?, 1)
+           SET target_user_id = UNHEX(REPLACE(?, '-', ''))
            WHERE connection_id = ?
              AND id = ?
              AND target_user_id IS NULL`,

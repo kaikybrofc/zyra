@@ -281,7 +281,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
     type UserRow = RowDataPacket & { user_id: string }
     for (const entry of cleanIdentifiers) {
       const [rows] = await pool.execute<UserRow[]>(
-        `SELECT BIN_TO_UUID(user_id, 1) AS user_id
+        `SELECT LOWER(CONCAT(HEX(SUBSTR(user_id, 1, 4)),'-',HEX(SUBSTR(user_id, 5, 2)),'-',HEX(SUBSTR(user_id, 7, 2)),'-',HEX(SUBSTR(user_id, 9, 2)),'-',HEX(SUBSTR(user_id, 11, 6)))) AS user_id
          FROM user_identifiers
          WHERE connection_id = ?
            AND id_type = ?
@@ -296,14 +296,14 @@ export function createSqlStore(connectionId?: string): SqlStore {
             `UPDATE users
              SET display_name = ?
              WHERE connection_id = ?
-               AND id = UUID_TO_BIN(?, 1)`,
+               AND id = UNHEX(REPLACE(?, '-', ''))`,
             [normalizedDisplayName, resolvedConnectionId, userId]
           )
         }
         for (const ident of cleanIdentifiers) {
           await pool.execute(
             `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
-             VALUES (?, UUID_TO_BIN(?, 1), ?, ?)
+             VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?)
              ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
             [resolvedConnectionId, userId, ident.type, ident.value]
           )
@@ -312,7 +312,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
           for (const alias of normalizedAliases) {
             await pool.execute(
               `INSERT INTO user_aliases (connection_id, user_id, alias_type, alias_value)
-               VALUES (?, UUID_TO_BIN(?, 1), ?, ?)
+               VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?)
                ON DUPLICATE KEY UPDATE last_seen = CURRENT_TIMESTAMP`,
               [resolvedConnectionId, userId, alias.type, alias.value]
             )
@@ -325,13 +325,13 @@ export function createSqlStore(connectionId?: string): SqlStore {
     const userId = randomUUID()
     await pool.execute(
       `INSERT INTO users (id, connection_id, display_name)
-       VALUES (UUID_TO_BIN(?, 1), ?, ?)`,
+       VALUES (UNHEX(REPLACE(?, '-', '')), ?, ?)`,
       [userId, resolvedConnectionId, normalizedDisplayName]
     )
     for (const ident of cleanIdentifiers) {
       await pool.execute(
         `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
-         VALUES (?, UUID_TO_BIN(?, 1), ?, ?)
+         VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?)
          ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
         [resolvedConnectionId, userId, ident.type, ident.value]
       )
@@ -340,7 +340,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
       for (const alias of normalizedAliases) {
         await pool.execute(
           `INSERT INTO user_aliases (connection_id, user_id, alias_type, alias_value)
-           VALUES (?, UUID_TO_BIN(?, 1), ?, ?)
+           VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?)
            ON DUPLICATE KEY UPDATE last_seen = CURRENT_TIMESTAMP`,
           [resolvedConnectionId, userId, alias.type, alias.value]
         )
@@ -435,7 +435,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
   const getMessageSenderUserId = async (pool: NonNullable<ReturnType<typeof getMysqlPool>>, messageDbId: number): Promise<string | null> => {
     type SenderRow = RowDataPacket & { sender_user_id: string | null }
     const [rows] = await pool.execute<SenderRow[]>(
-      `SELECT BIN_TO_UUID(sender_user_id, 1) AS sender_user_id
+      `SELECT LOWER(CONCAT(HEX(SUBSTR(sender_user_id, 1, 4)),'-',HEX(SUBSTR(sender_user_id, 5, 2)),'-',HEX(SUBSTR(sender_user_id, 7, 2)),'-',HEX(SUBSTR(sender_user_id, 9, 2)),'-',HEX(SUBSTR(sender_user_id, 11, 6)))) AS sender_user_id
        FROM messages
        WHERE connection_id = ?
          AND id = ?
@@ -503,7 +503,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
            user_id,
            relation_type
          )
-         VALUES (?, ?, UUID_TO_BIN(?, 1), 'sender')`,
+         VALUES (?, ?, UNHEX(REPLACE(?, '-', '')), 'sender')`,
         [resolvedConnectionId, messageDbId, senderUserId]
       )
     }
@@ -518,7 +518,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
            user_id,
            relation_type
          )
-         VALUES (?, ?, UUID_TO_BIN(?, 1), 'participant')`,
+         VALUES (?, ?, UNHEX(REPLACE(?, '-', '')), 'participant')`,
         [resolvedConnectionId, messageDbId, userId]
       )
     }
@@ -533,7 +533,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
            user_id,
            relation_type
          )
-         VALUES (?, ?, UUID_TO_BIN(?, 1), 'mentioned')`,
+         VALUES (?, ?, UNHEX(REPLACE(?, '-', '')), 'mentioned')`,
         [resolvedConnectionId, messageDbId, userId]
       )
     }
@@ -549,7 +549,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
              user_id,
              relation_type
            )
-           VALUES (?, ?, UUID_TO_BIN(?, 1), 'quoted')`,
+           VALUES (?, ?, UNHEX(REPLACE(?, '-', '')), 'quoted')`,
           [resolvedConnectionId, messageDbId, userId]
         )
       }
@@ -570,7 +570,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
           if (!userId) return
           await pool.execute(
             `UPDATE messages
-           SET sender_user_id = UUID_TO_BIN(?, 1)
+           SET sender_user_id = UNHEX(REPLACE(?, '-', ''))
            WHERE connection_id = ?
              AND from_me = 1
              AND sender_user_id IS NULL`,
@@ -630,7 +630,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
               `UPDATE users
              SET display_name = COALESCE(display_name, ?)
              WHERE connection_id = ?
-               AND id = UUID_TO_BIN(?, 1)`,
+               AND id = UNHEX(REPLACE(?, '-', ''))`,
               [pushName, resolvedConnectionId, senderUserId]
             )
           }
@@ -667,7 +667,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
              text_preview,
              data_json
            )
-           VALUES (?, ?, ?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?, ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, IF(?, UNHEX(REPLACE(?, '-', '')), NULL), ?, ?, ?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE
              timestamp = VALUES(timestamp),
              content_type = VALUES(content_type),
@@ -840,7 +840,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
                size,
                data_json
              )
-             VALUES (?, ?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?, ?, ?)
+             VALUES (?, ?, ?, IF(?, UNHEX(REPLACE(?, '-', '')), NULL), ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
                subject = VALUES(subject),
                owner_user_id = VALUES(owner_user_id),
@@ -918,7 +918,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
                is_superadmin,
                data_json
              )
-             VALUES (?, ?, UUID_TO_BIN(?, 1), ?, ?, ?, ?, ?)
+             VALUES (?, ?, UNHEX(REPLACE(?, '-', '')), ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
                participant_jid = VALUES(participant_jid),
                role = VALUES(role),
@@ -1056,7 +1056,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
              display_name,
              data_json
            )
-           VALUES (?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?)
+           VALUES (?, ?, IF(?, UNHEX(REPLACE(?, '-', '')), NULL), ?, ?)
            ON DUPLICATE KEY UPDATE
              user_id = VALUES(user_id),
              display_name = VALUES(display_name),
@@ -1097,7 +1097,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
              lid,
              user_id
            )
-           VALUES (?, ?, ?, IF(?, UUID_TO_BIN(?, 1), NULL))
+           VALUES (?, ?, ?, IF(?, UNHEX(REPLACE(?, '-', '')), NULL))
            ON DUPLICATE KEY UPDATE
              lid = VALUES(lid),
              user_id = VALUES(user_id)`,
@@ -1178,7 +1178,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
              message_db_id,
              data_json
            )
-           VALUES (?, ?, ?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?)`,
+           VALUES (?, ?, ?, ?, IF(?, UNHEX(REPLACE(?, '-', '')), NULL), IF(?, UNHEX(REPLACE(?, '-', '')), NULL), ?, ?)`,
             [resolvedConnectionId, chatJid, messageId, eventType, actorId ? 1 : 0, actorId, targetId ? 1 : 0, targetId, messageDbId, event.data ? serialize(event.data) : null]
           )
         },
@@ -1230,7 +1230,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
              message_db_id,
              data_json
            )
-           VALUES (?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?, ?, ?)`,
+           VALUES (?, ?, IF(?, UNHEX(REPLACE(?, '-', '')), NULL), IF(?, UNHEX(REPLACE(?, '-', '')), NULL), ?, ?, ?, ?)`,
             [resolvedConnectionId, eventType, actorId ? 1 : 0, actorId, targetId ? 1 : 0, targetId, resolvedChatJid, resolvedGroupJid, messageDbId, event.data ? serialize(event.data) : null]
           )
         },
@@ -1258,7 +1258,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
              is_blocked,
              reason
            )
-           VALUES (?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?, ?)
+           VALUES (?, IF(?, UNHEX(REPLACE(?, '-', '')), NULL), IF(?, UNHEX(REPLACE(?, '-', '')), NULL), ?, ?, ?)
            ON DUPLICATE KEY UPDATE
              user_id = VALUES(user_id),
              actor_user_id = VALUES(actor_user_id),
@@ -1289,7 +1289,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
              target_user_id,
              data_json
            )
-           VALUES (?, ?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?)`,
+           VALUES (?, ?, ?, IF(?, UNHEX(REPLACE(?, '-', '')), NULL), IF(?, UNHEX(REPLACE(?, '-', '')), NULL), ?)`,
             [resolvedConnectionId, groupJid, eventType, actorId ? 1 : 0, actorId, targetId ? 1 : 0, targetId, event.data ? serialize(event.data) : null]
           )
         },
@@ -1318,7 +1318,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
              method,
              data_json
            )
-           VALUES (?, ?, UUID_TO_BIN(?, 1), IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?, ?)`,
+           VALUES (?, ?, UNHEX(REPLACE(?, '-', '')), IF(?, UNHEX(REPLACE(?, '-', '')), NULL), ?, ?, ?)`,
             [resolvedConnectionId, groupJid, userId, actorId ? 1 : 0, actorId, action, method, entry.data ? serialize(entry.data) : null]
           )
         },
@@ -1362,7 +1362,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
              role,
              status
            )
-           VALUES (?, ?, UUID_TO_BIN(?, 1), ?, ?)
+           VALUES (?, ?, UNHEX(REPLACE(?, '-', '')), ?, ?)
            ON DUPLICATE KEY UPDATE
              role = VALUES(role),
              status = VALUES(status)`,
@@ -1391,7 +1391,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
              target_user_id,
              data_json
            )
-           VALUES (?, ?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?)`,
+           VALUES (?, ?, ?, IF(?, UNHEX(REPLACE(?, '-', '')), NULL), IF(?, UNHEX(REPLACE(?, '-', '')), NULL), ?)`,
             [resolvedConnectionId, newsletterId, eventType, actorId ? 1 : 0, actorId, targetId ? 1 : 0, targetId, event.data ? serialize(event.data) : null]
           )
         },
@@ -1422,7 +1422,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
              failure_reason,
              data_json
            )
-           VALUES (?, ?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?)`,
+           VALUES (?, ?, ?, IF(?, UNHEX(REPLACE(?, '-', '')), NULL), IF(?, UNHEX(REPLACE(?, '-', '')), NULL), ?, ?)`,
             [resolvedConnectionId, chatJid, messageId, senderId ? 1 : 0, senderId, actorId ? 1 : 0, actorId, reason, entry.data ? serialize(entry.data) : null]
           )
         },
@@ -1476,7 +1476,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
              duration_ms,
              data_json
            )
-           VALUES (?, IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, IF(?, UNHEX(REPLACE(?, '-', '')), NULL), ?, ?, ?, ?, ?, ?)`,
             [resolvedConnectionId, actorId ? 1 : 0, actorId, chatJid, commandName, entry.argsText ?? null, entry.success ? 1 : 0, durationMs, entry.data ? serialize(entry.data) : null]
           )
         },
@@ -1498,7 +1498,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
              device_id,
              data_json
            )
-           VALUES (?, UUID_TO_BIN(?, 1), ?, ?)
+           VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?)
            ON DUPLICATE KEY UPDATE
              data_json = VALUES(data_json)`,
             [resolvedConnectionId, userId, deviceId, entry.data ? serialize(entry.data) : null]
@@ -1523,7 +1523,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
              user_id,
              role
            )
-           VALUES (?, ?, UUID_TO_BIN(?, 1), ?)
+           VALUES (?, ?, UNHEX(REPLACE(?, '-', '')), ?)
            ON DUPLICATE KEY UPDATE
              role = VALUES(role)`,
             [resolvedConnectionId, normalizedChat, userId, resolvedRole]
@@ -1544,7 +1544,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
             `DELETE FROM chat_users
            WHERE connection_id = ?
              AND chat_jid = ?
-             AND user_id = UUID_TO_BIN(?, 1)`,
+             AND user_id = UNHEX(REPLACE(?, '-', ''))`,
             [resolvedConnectionId, normalizedChat, userId]
           )
         },
@@ -1572,7 +1572,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
              color,
              data_json
            )
-           VALUES (?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?, ?)
+           VALUES (?, ?, IF(?, UNHEX(REPLACE(?, '-', '')), NULL), ?, ?, ?)
            ON DUPLICATE KEY UPDATE
              actor_user_id = VALUES(actor_user_id),
              name = VALUES(name),
@@ -1617,7 +1617,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
              target_jid,
              data_json
            )
-           VALUES (?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?, ?, ?, ?)
+           VALUES (?, ?, IF(?, UNHEX(REPLACE(?, '-', '')), NULL), ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE
              actor_user_id = VALUES(actor_user_id),
              chat_jid = VALUES(chat_jid),
