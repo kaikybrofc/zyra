@@ -1,17 +1,4 @@
-import {
-  DEFAULT_CACHE_TTLS,
-  type BaileysEventEmitter,
-  type CacheStore,
-  type Chat,
-  type ChatUpdate,
-  type Contact,
-  type GroupMetadata,
-  type GroupParticipant,
-  type LIDMapping,
-  type PossiblyExtendedCacheStore,
-  type WAMessage,
-  type WAMessageKey,
-} from '@whiskeysockets/baileys'
+import { DEFAULT_CACHE_TTLS, type BaileysEventEmitter, type CacheStore, type Chat, type ChatUpdate, type Contact, type GroupMetadata, type GroupParticipant, type LIDMapping, type PossiblyExtendedCacheStore, type WAMessage, type WAMessageKey } from '@whiskeysockets/baileys'
 import { createCacheStore, createExtendedCacheStore } from './cache-store.js'
 import { createRedisStore } from './redis-store.js'
 import { createSqlStore } from './sql-store.js'
@@ -39,14 +26,11 @@ const normalizeJid = (value: unknown, maxLength = MAX_LENGTHS.jid): string | nul
   return jid
 }
 
-const normalizeMessageId = (value: unknown): string | null =>
-  normalizeString(value, MAX_LENGTHS.messageId)
+const normalizeMessageId = (value: unknown): string | null => normalizeString(value, MAX_LENGTHS.messageId)
 
-const normalizeLabelId = (value: unknown): string | null =>
-  normalizeString(value, MAX_LENGTHS.labelId)
+const normalizeLabelId = (value: unknown): string | null => normalizeString(value, MAX_LENGTHS.labelId)
 
-const normalizeLidOrPn = (value: unknown): string | null =>
-  normalizeString(value, MAX_LENGTHS.lidPn)
+const normalizeLidOrPn = (value: unknown): string | null => normalizeString(value, MAX_LENGTHS.lidPn)
 
 const toMessageKey = (key: WAMessageKey): string | null => {
   const remoteJid = normalizeJid(key.remoteJid)
@@ -74,10 +58,7 @@ const mergeDefined = <T extends object>(base: T, patch: Partial<T>): T => {
   return next
 }
 
-const upsertParticipants = (
-  existing: GroupParticipant[] | undefined,
-  updates: GroupParticipant[]
-): GroupParticipant[] => {
+const upsertParticipants = (existing: GroupParticipant[] | undefined, updates: GroupParticipant[]): GroupParticipant[] => {
   const byId = new Map<string, GroupParticipant>()
   for (const participant of existing ?? []) {
     const id = normalizeJid(participant.id)
@@ -139,26 +120,10 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
   const lidToPn = new Map<string, string>()
   let externalLidMapping: LidMappingStore | undefined
   let selfJid: string | null = null
-  const msgRetryCounterCache = createCacheStore(
-    'msg-retry',
-    DEFAULT_CACHE_TTLS.MSG_RETRY,
-    connectionId
-  )
-  const callOfferCache = createCacheStore(
-    'call-offer',
-    DEFAULT_CACHE_TTLS.CALL_OFFER,
-    connectionId
-  )
-  const placeholderResendCache = createCacheStore(
-    'placeholder-resend',
-    DEFAULT_CACHE_TTLS.MSG_RETRY,
-    connectionId
-  )
-  const userDevicesCache = createExtendedCacheStore(
-    'user-devices',
-    DEFAULT_CACHE_TTLS.USER_DEVICES,
-    connectionId
-  )
+  const msgRetryCounterCache = createCacheStore('msg-retry', DEFAULT_CACHE_TTLS.MSG_RETRY, connectionId)
+  const callOfferCache = createCacheStore('call-offer', DEFAULT_CACHE_TTLS.CALL_OFFER, connectionId)
+  const placeholderResendCache = createCacheStore('placeholder-resend', DEFAULT_CACHE_TTLS.MSG_RETRY, connectionId)
+  const userDevicesCache = createExtendedCacheStore('user-devices', DEFAULT_CACHE_TTLS.USER_DEVICES, connectionId)
   const mediaCache = createCacheStore('media', DEFAULT_CACHE_TTLS.MSG_RETRY, connectionId)
 
   const upsertMessage = (message: WAMessage) => {
@@ -198,12 +163,7 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
   }
 
   const upsertGroupLidMappings = (group: Partial<GroupMetadata>) => {
-    const pairs = [
-      toLidMappingPair(group.owner, group.ownerPn),
-      toLidMappingPair(group.subjectOwner, group.subjectOwnerPn),
-      toLidMappingPair(group.descOwner, group.descOwnerPn),
-      toLidMappingPair(group.author, group.authorPn),
-    ].filter((pair): pair is LIDMapping => Boolean(pair))
+    const pairs = [toLidMappingPair(group.owner, group.ownerPn), toLidMappingPair(group.subjectOwner, group.subjectOwnerPn), toLidMappingPair(group.descOwner, group.descOwnerPn), toLidMappingPair(group.author, group.authorPn)].filter((pair): pair is LIDMapping => Boolean(pair))
 
     if (!pairs.length) return
     for (const pair of pairs) {
@@ -335,10 +295,7 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
         .slice(0, 3)
         .map((group) => group.id ?? '')
         .filter(Boolean)
-      console.log(
-        '[groups.upsert]',
-        { count: groupList.length, idsPreview, hasId: groupList.some((g) => Boolean(g.id)) }
-      )
+      console.log('[groups.upsert]', { count: groupList.length, idsPreview, hasId: groupList.some((g) => Boolean(g.id)) })
       for (const group of groupList) {
         const groupId = normalizeJid(group.id)
         if (!groupId) continue
@@ -414,12 +371,7 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
       if (!group) return
       if (!participants?.length) return
       if (!['add', 'remove', 'promote', 'demote', 'modify'].includes(action)) return
-      const baseSize =
-        typeof group.size === 'number'
-          ? group.size
-          : Array.isArray(group.participants)
-            ? group.participants.length
-            : undefined
+      const baseSize = typeof group.size === 'number' ? group.size : Array.isArray(group.participants) ? group.participants.length : undefined
       let nextParticipants = group.participants ?? []
       const normalizedParticipants = participants
         .map((participant) => {
@@ -511,9 +463,7 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
           const chatJid = normalizeJid(key.remoteJid)
           const messageId = normalizeMessageId(key.id)
           if (chatJid && messageId) {
-            const actorJid = key.fromMe
-              ? selfJid
-              : (key.participant ?? key.remoteJid ?? null)
+            const actorJid = key.fromMe ? selfJid : (key.participant ?? key.remoteJid ?? null)
             void sqlStore.recordMessageEvent({
               key: { chatJid, messageId, fromMe: Boolean(key.fromMe) },
               type: 'update',
@@ -560,9 +510,7 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
             const chatJid = normalizeJid(key.remoteJid)
             const messageId = normalizeMessageId(key.id)
             if (chatJid && messageId) {
-              const actorJid = key.fromMe
-                ? selfJid
-                : (key.participant ?? key.remoteJid ?? null)
+              const actorJid = key.fromMe ? selfJid : (key.participant ?? key.remoteJid ?? null)
               void sqlStore.deleteMessage(chatJid, messageId, Boolean(key.fromMe))
               void sqlStore.recordMessageEvent({
                 key: { chatJid, messageId, fromMe: Boolean(key.fromMe) },
@@ -588,8 +536,7 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
         const chatJid = normalizeJid(key?.remoteJid)
         const messageId = normalizeMessageId(key?.id)
         if (!chatJid || !messageId) continue
-        const actorJid =
-          reactionAny.key?.participant ?? reactionAny.sender ?? reactionAny.reaction?.participant ?? null
+        const actorJid = reactionAny.key?.participant ?? reactionAny.sender ?? reactionAny.reaction?.participant ?? null
         const targetJid = reactionAny.key?.participant ?? null
         void sqlStore.recordMessageEvent({
           key: { chatJid, messageId, fromMe: Boolean(key?.fromMe) },
@@ -626,11 +573,7 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
       if (!sqlStore.enabled) return
       const labelId = normalizeLabelId(label.id)
       if (!labelId) return
-      const labelActor =
-        (label as { author?: string | null }).author ??
-        (label as { actor?: string | null }).actor ??
-        (label as { creator?: string | null }).creator ??
-        null
+      const labelActor = (label as { author?: string | null }).author ?? (label as { actor?: string | null }).actor ?? (label as { creator?: string | null }).creator ?? null
       const color = label.color == null ? null : String(label.color)
       void sqlStore.setLabel({
         id: labelId,
@@ -672,29 +615,14 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
       const rawGroupJid = assoc.groupJid ?? assoc.group_jid ?? null
       const groupJid = normalizeJid(rawGroupJid)
       if (rawGroupJid && !groupJid) return
-      const associationType =
-        messageId && chatJid
-          ? 'message'
-          : groupJid
-            ? 'group'
-            : contactJid
-              ? 'contact'
-              : 'chat'
+      const associationType = messageId && chatJid ? 'message' : groupJid ? 'group' : contactJid ? 'contact' : 'chat'
       const actorJid = normalizeJid(assoc.actor ?? assoc.author ?? null)
       void sqlStore.setLabelAssociation({
         labelId,
         associationType,
         chatJid: associationType === 'chat' ? chatJid : null,
-        targetJid:
-          associationType === 'contact'
-            ? contactJid
-            : associationType === 'group'
-              ? groupJid
-              : null,
-        messageKey:
-          associationType === 'message' && messageId && chatJid
-            ? { chatJid, messageId, fromMe: false }
-            : null,
+        targetJid: associationType === 'contact' ? contactJid : associationType === 'group' ? groupJid : null,
+        messageKey: associationType === 'message' && messageId && chatJid ? { chatJid, messageId, fromMe: false } : null,
         actorJid,
         data: association,
       })
@@ -805,9 +733,7 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
     },
     getLidsForPns: async (pns) => {
       if (externalLidMapping) {
-        const normalizedPns = pns
-          .map((pn) => normalizeLidOrPn(pn))
-          .filter((pn): pn is string => Boolean(pn))
+        const normalizedPns = pns.map((pn) => normalizeLidOrPn(pn)).filter((pn): pn is string => Boolean(pn))
         if (!normalizedPns.length) return null
         return externalLidMapping.getLIDsForPNs(normalizedPns)
       }
@@ -866,9 +792,7 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
     },
     getPnsForLids: async (lids) => {
       if (externalLidMapping) {
-        const normalizedLids = lids
-          .map((lid) => normalizeLidOrPn(lid))
-          .filter((lid): lid is string => Boolean(lid))
+        const normalizedLids = lids.map((lid) => normalizeLidOrPn(lid)).filter((lid): lid is string => Boolean(lid))
         if (!normalizedLids.length) return null
         return externalLidMapping.getPNsForLIDs(normalizedLids)
       }

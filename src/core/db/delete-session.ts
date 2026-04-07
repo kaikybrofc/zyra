@@ -69,14 +69,8 @@ async function main() {
     try {
       logger.info('apagando sessao no MySQL', { connectionId })
       await withTimeout('mysql.ensure', ensureMysqlConnection(pool))
-      await withTimeout(
-        'mysql.auth_creds',
-        pool.execute(`DELETE FROM auth_creds WHERE connection_id = ?`, [connectionId])
-      )
-      await withTimeout(
-        'mysql.signal_keys',
-        pool.execute(`DELETE FROM signal_keys WHERE connection_id = ?`, [connectionId])
-      )
+      await withTimeout('mysql.auth_creds', pool.execute(`DELETE FROM auth_creds WHERE connection_id = ?`, [connectionId]))
+      await withTimeout('mysql.signal_keys', pool.execute(`DELETE FROM signal_keys WHERE connection_id = ?`, [connectionId]))
       logger.info('sessao apagada no MySQL', { connectionId })
     } catch (error) {
       logger.warn('falha ao apagar sessao no MySQL', { err: error })
@@ -98,11 +92,7 @@ async function main() {
       for (const prefix of prefixes) {
         const credsKey = `${prefix}:creds`
         await withTimeout('redis.del', client.del(credsKey))
-        const deleted = await withTimeout(
-          'redis.scan',
-          scanAndDelete(client, `${prefix}:keys:*`),
-          REDIS_SCAN_MAX_MS + 5000
-        )
+        const deleted = await withTimeout('redis.scan', scanAndDelete(client, `${prefix}:keys:*`), REDIS_SCAN_MAX_MS + 5000)
         logger.info('sessao apagada no Redis', { prefix, deleted })
       }
     } catch (error) {

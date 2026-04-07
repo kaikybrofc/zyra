@@ -14,8 +14,7 @@ const createMemoryCacheStore = (ttlSeconds: number) => {
   const store = new Map<string, MemoryEntry<unknown>>()
   const ttlMs = ttlSeconds > 0 ? ttlSeconds * 1000 : 0
 
-  const isExpired = (entry: MemoryEntry<unknown>) =>
-    entry.expiresAt !== null && Date.now() >= entry.expiresAt
+  const isExpired = (entry: MemoryEntry<unknown>) => entry.expiresAt !== null && Date.now() >= entry.expiresAt
 
   return {
     get: <T>(key: string): T | undefined => {
@@ -89,10 +88,7 @@ const createRedisCacheStore = (prefix: string, ttlSeconds: number): CacheStore =
   }
 }
 
-const createRedisExtendedCacheStore = (
-  prefix: string,
-  ttlSeconds: number
-): PossiblyExtendedCacheStore => {
+const createRedisExtendedCacheStore = (prefix: string, ttlSeconds: number): PossiblyExtendedCacheStore => {
   const base = createRedisCacheStore(prefix, ttlSeconds)
   return {
     ...base,
@@ -139,11 +135,7 @@ const buildCachePrefix = (name: string, connectionId?: string): string => {
 /**
  * Cria um cache simples (Redis ou memoria) com TTL.
  */
-export const createCacheStore = (
-  name: string,
-  ttlSeconds: number,
-  connectionId?: string
-): CacheStore => {
+export const createCacheStore = (name: string, ttlSeconds: number, connectionId?: string): CacheStore => {
   const prefix = buildCachePrefix(name, connectionId)
   if (config.redisUrl) {
     return createRedisCacheStore(prefix, ttlSeconds)
@@ -154,11 +146,7 @@ export const createCacheStore = (
 /**
  * Cria um cache estendido (Redis ou memoria) com TTL e operacoes em lote.
  */
-export const createExtendedCacheStore = (
-  name: string,
-  ttlSeconds: number,
-  connectionId?: string
-): PossiblyExtendedCacheStore => {
+export const createExtendedCacheStore = (name: string, ttlSeconds: number, connectionId?: string): PossiblyExtendedCacheStore => {
   const prefix = buildCachePrefix(name, connectionId)
   if (config.redisUrl) {
     return createRedisExtendedCacheStore(prefix, ttlSeconds)

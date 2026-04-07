@@ -18,7 +18,7 @@ type AuthStateProvider =
 /**
  * Fábrica de Estratégias de Autenticação (Authentication Strategy Factory).
  * * @remarks
- * Esta função é o ponto central de decisão para a persistência do bot. 
+ * Esta função é o ponto central de decisão para a persistência do bot.
  * Ela avalia as configurações disponíveis e seleciona o driver mais robusto na seguinte ordem:
  * * 1. **MySQL**: Se `mysqlUrl` estiver presente, utiliza a persistência em banco de dados SQL (Recomendado para produção distribuída).
  * 2. **Redis**: Se `redisUrl` estiver presente (e MySQL não), utiliza o Redis para alta performance e volatilidade controlada.

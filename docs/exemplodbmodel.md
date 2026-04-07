@@ -3,6 +3,7 @@
 ![Diagrama do banco](diagrama-db.svg)
 
 Este arquivo contem o modelo completo proposto para persistencia do bot, com:
+
 - conexoes
 - usuarios internos (id unico)
 - identificadores (pn, lid, jid, username)
@@ -596,6 +597,7 @@ Data da analise: `2026-04-04T03:42:42.024Z`
 Banco analisado: `zyra` (via `MYSQL_URL`)
 
 Escopo da comparacao:
+
 - Tabelas e colunas
 - Tipos (base e tamanho quando especificado)
 - Nulidade, DEFAULT, ON UPDATE e AUTO_INCREMENT
@@ -604,6 +606,7 @@ Escopo da comparacao:
 - Engine e collation
 
 Resumo:
+
 - Tabelas esperadas: 31
 - Tabelas encontradas: 31
 - Tabelas faltando: nenhuma
@@ -621,6 +624,7 @@ Resumo:
 - Problemas de collation: nenhum
 
 Indices extras (provavel criacao automatica para FKs):
+
 - `blocklist`: `INDEX (actor_user_id)`
 - `blocklist`: `INDEX (user_id)`
 - `chat_users`: `INDEX (user_id)`

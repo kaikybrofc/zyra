@@ -17,35 +17,11 @@ type ColumnRow = RowDataPacket & {
 
 const escapeId = (value: string) => value.replace(/`/g, '``')
 
-const ignoredColumns = new Set<string>([
-  'message_media.local_path',
-  'message_media.file_name',
-  'message_media.file_length',
-])
+const ignoredColumns = new Set<string>(['message_media.local_path', 'message_media.file_name', 'message_media.file_length'])
 
-const optionalColumns = new Set<string>([
-  'messages.content_type',
-  'messages.text_preview',
-  'messages.is_forwarded',
-  'messages.status',
-  'messages.message_type',
-])
+const optionalColumns = new Set<string>(['messages.content_type', 'messages.text_preview', 'messages.is_forwarded', 'messages.status', 'messages.message_type'])
 
-const targetColumns = new Set<string>([
-  'groups.owner_user_id',
-  'lid_mappings.user_id',
-  'wa_contacts_cache.user_id',
-  'messages.sender_user_id',
-  'commands_log.actor_user_id',
-  'group_events.actor_user_id',
-  'message_events.actor_user_id',
-  'message_events.target_user_id',
-  'message_events.message_db_id',
-  'chats.display_name',
-  'users.display_name',
-  'chat_users.role',
-  'group_participants.role',
-])
+const targetColumns = new Set<string>(['groups.owner_user_id', 'lid_mappings.user_id', 'wa_contacts_cache.user_id', 'messages.sender_user_id', 'commands_log.actor_user_id', 'group_events.actor_user_id', 'message_events.actor_user_id', 'message_events.target_user_id', 'message_events.message_db_id', 'chats.display_name', 'users.display_name', 'chat_users.role', 'group_participants.role'])
 
 const classifyColumn = (table: string, column: string) => {
   if (column === 'deleted_at') return 'ignored'
@@ -110,27 +86,17 @@ async function main() {
     if (!nullables.length) continue
 
     const tableEscaped = escapeId(table)
-    const totalQuery = hasConnectionId
-      ? `SELECT COUNT(*) AS total FROM \`${tableEscaped}\` WHERE connection_id = ?`
-      : `SELECT COUNT(*) AS total FROM \`${tableEscaped}\``
+    const totalQuery = hasConnectionId ? `SELECT COUNT(*) AS total FROM \`${tableEscaped}\` WHERE connection_id = ?` : `SELECT COUNT(*) AS total FROM \`${tableEscaped}\``
     type TotalRow = RowDataPacket & { total: number }
-    const [totalRows] = await pool.execute<TotalRow[]>(
-      totalQuery,
-      hasConnectionId ? [connectionId] : []
-    )
+    const [totalRows] = await pool.execute<TotalRow[]>(totalQuery, hasConnectionId ? [connectionId] : [])
     const total = totalRows[0]?.total ?? 0
     if (!total) continue
 
     for (const column of nullables) {
       const columnEscaped = escapeId(column.column_name)
-      const nullQuery = hasConnectionId
-        ? `SELECT COUNT(*) AS count FROM \`${tableEscaped}\` WHERE connection_id = ? AND \`${columnEscaped}\` IS NULL`
-        : `SELECT COUNT(*) AS count FROM \`${tableEscaped}\` WHERE \`${columnEscaped}\` IS NULL`
+      const nullQuery = hasConnectionId ? `SELECT COUNT(*) AS count FROM \`${tableEscaped}\` WHERE connection_id = ? AND \`${columnEscaped}\` IS NULL` : `SELECT COUNT(*) AS count FROM \`${tableEscaped}\` WHERE \`${columnEscaped}\` IS NULL`
       type CountRow = RowDataPacket & { count: number }
-      const [nullRows] = await pool.execute<CountRow[]>(
-        nullQuery,
-        hasConnectionId ? [connectionId] : []
-      )
+      const [nullRows] = await pool.execute<CountRow[]>(nullQuery, hasConnectionId ? [connectionId] : [])
       const count = nullRows[0]?.count ?? 0
       if (!count) continue
       const percent = total ? Number(((count / total) * 100).toFixed(2)) : 0
@@ -167,27 +133,21 @@ async function main() {
   if (targets.length) {
     console.log('\n[ALVO <1%]')
     for (const item of targets) {
-      console.log(
-        `${item.table}.${item.column} -> ${item.count}/${item.total} (${item.percent}%)`
-      )
+      console.log(`${item.table}.${item.column} -> ${item.count}/${item.total} (${item.percent}%)`)
     }
   }
 
   if (optional.length) {
     console.log('\n[OPCIONAL]')
     for (const item of optional) {
-      console.log(
-        `${item.table}.${item.column} -> ${item.count}/${item.total} (${item.percent}%)`
-      )
+      console.log(`${item.table}.${item.column} -> ${item.count}/${item.total} (${item.percent}%)`)
     }
   }
 
   if (other.length) {
     console.log('\n[OUTROS]')
     for (const item of other) {
-      console.log(
-        `${item.table}.${item.column} -> ${item.count}/${item.total} (${item.percent}%)`
-      )
+      console.log(`${item.table}.${item.column} -> ${item.count}/${item.total} (${item.percent}%)`)
     }
   }
 }

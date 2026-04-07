@@ -3,8 +3,7 @@ import type { AppLogger } from './logger.js'
 
 type Meta = Record<string, unknown>
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 
 const mergeMeta = (base: Meta, extra?: Meta): Meta | undefined => {
   const merged = { ...base, ...(extra ?? {}) }

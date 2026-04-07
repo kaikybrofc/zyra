@@ -83,15 +83,10 @@ export const deleteData = async (folder: string, file: string): Promise<void> =>
  * Normaliza objetos do Signal para garantir que correspondam aos tipos do ProtoBuf.
  * @internal
  */
-export const normalizeKeyValue = <T extends keyof SignalDataTypeMap>(
-  type: T,
-  value: SignalDataTypeMap[T] | null
-): SignalDataTypeMap[T] | null => {
+export const normalizeKeyValue = <T extends keyof SignalDataTypeMap>(type: T, value: SignalDataTypeMap[T] | null): SignalDataTypeMap[T] | null => {
   if (!value) return null
   if (type === 'app-state-sync-key') {
-    const normalized = proto.Message.AppStateSyncKeyData.fromObject(
-      value as unknown as proto.Message.IAppStateSyncKeyData
-    )
+    const normalized = proto.Message.AppStateSyncKeyData.fromObject(value as unknown as proto.Message.IAppStateSyncKeyData)
     return normalized as unknown as SignalDataTypeMap[T]
   }
   return value

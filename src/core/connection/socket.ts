@@ -1,11 +1,4 @@
-import makeWASocket, {
-  Browsers,
-  DEFAULT_CONNECTION_CONFIG,
-  DisconnectReason,
-  fetchLatestBaileysVersion,
-  useMultiFileAuthState,
-  type SignalRepositoryWithLIDStore,
-} from '@whiskeysockets/baileys'
+import makeWASocket, { Browsers, DEFAULT_CONNECTION_CONFIG, DisconnectReason, fetchLatestBaileysVersion, useMultiFileAuthState, type SignalRepositoryWithLIDStore } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import { config } from '../../config/index.js'
 import type { AppLogger } from '../../observability/logger.js'
@@ -14,8 +7,8 @@ import { createBaileysStore } from '../../store/baileys-store.js'
 import { getAuthState } from '../auth/state.js'
 import { allowHistorySyncOnceForNewLogin, initHistorySyncPolicy, shouldSyncHistoryMessageOnce } from './history-sync.js'
 
-/** * Extensão de tipo para acessar repositórios internos de LID (Linked Identity) do Baileys. 
- * @internal 
+/** * Extensão de tipo para acessar repositórios internos de LID (Linked Identity) do Baileys.
+ * @internal
  */
 type SocketWithSignalRepository = {
   signalRepository?: SignalRepositoryWithLIDStore
@@ -55,7 +48,9 @@ async function resolveBaileysVersion(logger: AppLogger): Promise<SocketVersion> 
     }
 
     if (!latest.isLatest) {
-      logger.warn('versão do Baileys desatualizada detectada', { version: latest.version })
+      logger.warn('versão do Baileys desatualizada detectada', {
+        version: latest.version,
+      })
     }
 
     cachedVersion = { version: latest.version, fetchedAt: Date.now() }
@@ -69,7 +64,7 @@ async function resolveBaileysVersion(logger: AppLogger): Promise<SocketVersion> 
 /**
  * Inicializa o estado de autenticação com base nas configurações de infraestrutura.
  * @remarks
- * Tenta utilizar a estratégia centralizada (MySQL/Redis). 
+ * Tenta utilizar a estratégia centralizada (MySQL/Redis).
  * Em caso de erro crítico, regride para o sistema de arquivos local (Disco) para garantir a disponibilidade.
  * @param connectionId - ID único da conexão.
  * @param logger - Logger para rastro de falhas de autenticação.
@@ -78,7 +73,9 @@ async function resolveAuthState(connectionId: string, logger: AppLogger) {
   try {
     return await getAuthState(connectionId)
   } catch (error) {
-    logger.error('falha ao resolver auth state, ativando fallback local', { err: error })
+    logger.error('falha ao resolver auth state, ativando fallback local', {
+      err: error,
+    })
     const { state, saveCreds } = await useMultiFileAuthState(config.authDir)
     return { state, saveCreds }
   }
@@ -110,7 +107,7 @@ let shutdownInProgress = false
 /**
  * Registra os listeners de sinais do SO (SIGINT, SIGTERM) para encerramento limpo.
  * @remarks
- * Quando um sinal é recebido, a função percorre todos os sockets ativos, 
+ * Quando um sinal é recebido, a função percorre todos os sockets ativos,
  * persiste as credenciais pendentes e limpa as referências antes de fechar o processo.
  * @internal
  */
@@ -131,7 +128,9 @@ const registerGracefulShutdown = () => {
             if (baseLogger) {
               baseLogger.error('shutdown demorou demais, forçando encerramento', { signal })
             } else {
-              console.error('shutdown demorou demais, forçando encerramento', { signal })
+              console.error('shutdown demorou demais, forçando encerramento', {
+                signal,
+              })
             }
             process.exit(1)
           }, SHUTDOWN_TIMEOUT_MS)
@@ -140,7 +139,10 @@ const registerGracefulShutdown = () => {
     try {
       await Promise.all(
         targets.map(async ({ sock, saveCreds, logger, connectionId }) => {
-          logger.warn('executando shutdown gracioso do socket', { signal, connectionId })
+          logger.warn('executando shutdown gracioso do socket', {
+            signal,
+            connectionId,
+          })
           try {
             await saveCreds()
           } catch (error) {
@@ -187,12 +189,12 @@ const registerGracefulShutdown = () => {
 export async function createSocket(connectionId: string, logger: AppLogger) {
   const store = createBaileysStore(connectionId)
   const strategy = config.mysqlUrl ? 'mysql' : config.redisUrl ? 'redis' : 'disco'
-  
+
   logger.info('inicializando setup do socket', { strategy, connectionId })
-  
+
   const { state, saveCreds } = await resolveAuthState(connectionId, logger)
   const version = await resolveBaileysVersion(logger)
-  
+
   // Inicializa política de histórico (evita travamentos de buffer em logins antigos)
   initHistorySyncPolicy(state.creds)
 
@@ -222,17 +224,19 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
       store.setSelfJid(sock.user?.id ?? null)
       logger.info('status da conexao: aberta', { connectionId })
     }
-    
+
     if (update.isNewLogin) {
       allowHistorySyncOnceForNewLogin()
     }
-    
+
     if (update.connection === 'close') {
       const statusCode = (update.lastDisconnect?.error as Boom | undefined)?.output?.statusCode
       logger.warn('status da conexao: encerrada', { connectionId, statusCode })
-      
+
       if (statusCode === DisconnectReason.loggedOut) {
-        logger.error('sessao invalidada/removida, requer re-pareamento', { connectionId })
+        logger.error('sessao invalidada/removida, requer re-pareamento', {
+          connectionId,
+        })
         store.setSelfJid(null)
       }
     }
@@ -261,7 +265,9 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
     try {
       await saveCreds()
     } catch (error) {
-      logger.error('erro ao salvar credenciais durante ciclo de vida', { err: error })
+      logger.error('erro ao salvar credenciais durante ciclo de vida', {
+        err: error,
+      })
     } finally {
       credsSaveInFlight = false
     }

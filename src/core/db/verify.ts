@@ -51,25 +51,17 @@ async function main() {
       const hasConnectionId = (columns[0]?.count ?? 0) > 0
       if (hasConnectionId) {
         type CountRow = RowDataPacket & { count: number }
-        const [rows] = await pool.execute<CountRow[]>(
-          `SELECT COUNT(*) AS count FROM \`${table}\` WHERE connection_id = ?`,
-          [connectionId]
-        )
+        const [rows] = await pool.execute<CountRow[]>(`SELECT COUNT(*) AS count FROM \`${table}\` WHERE connection_id = ?`, [connectionId])
         const count = rows[0]?.count ?? 0
         logger.info(`tabela ${table}`, { count })
       } else if (table === 'connections') {
         type CountRow = RowDataPacket & { count: number }
-        const [rows] = await pool.execute<CountRow[]>(
-          `SELECT COUNT(*) AS count FROM \`connections\` WHERE id = ?`,
-          [connectionId]
-        )
+        const [rows] = await pool.execute<CountRow[]>(`SELECT COUNT(*) AS count FROM \`connections\` WHERE id = ?`, [connectionId])
         const count = rows[0]?.count ?? 0
         logger.info(`tabela ${table}`, { count })
       } else {
         type CountRow = RowDataPacket & { count: number }
-        const [rows] = await pool.execute<CountRow[]>(
-          `SELECT COUNT(*) AS count FROM \`${table}\``
-        )
+        const [rows] = await pool.execute<CountRow[]>(`SELECT COUNT(*) AS count FROM \`${table}\``)
         const count = rows[0]?.count ?? 0
         logger.info(`tabela ${table}`, { count })
       }

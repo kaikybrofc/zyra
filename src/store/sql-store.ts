@@ -1,13 +1,4 @@
-import {
-  BufferJSON,
-  type Chat,
-  type Contact,
-  type GroupMetadata,
-  type GroupParticipant,
-  type LIDMapping,
-  type WAMessage,
-  type proto,
-} from '@whiskeysockets/baileys'
+import { BufferJSON, type Chat, type Contact, type GroupMetadata, type GroupParticipant, type LIDMapping, type WAMessage, type proto } from '@whiskeysockets/baileys'
 import type { RowDataPacket } from 'mysql2/promise'
 import { randomUUID } from 'node:crypto'
 import { config } from '../config/index.js'
@@ -54,10 +45,7 @@ const MAX_LENGTHS = {
   color: 16,
 }
 
-const normalizeString = (
-  value: unknown,
-  options: { maxLength?: number; allowEmpty?: boolean; trim?: boolean; truncate?: boolean } = {}
-): string | null => {
+const normalizeString = (value: unknown, options: { maxLength?: number; allowEmpty?: boolean; trim?: boolean; truncate?: boolean } = {}): string | null => {
   if (typeof value !== 'string') return null
   const trimmed = options.trim === false ? value : value.trim()
   if (!trimmed && !options.allowEmpty) return null
@@ -68,11 +56,7 @@ const normalizeString = (
   return trimmed
 }
 
-const normalizeIdentifier = (
-  value: string | null | undefined,
-  options?: { maxLength?: number; allowEmpty?: boolean; trim?: boolean; truncate?: boolean }
-): string | null =>
-  normalizeString(value, { maxLength: options?.maxLength ?? MAX_LENGTHS.userIdentifier, ...options })
+const normalizeIdentifier = (value: string | null | undefined, options?: { maxLength?: number; allowEmpty?: boolean; trim?: boolean; truncate?: boolean }): string | null => normalizeString(value, { maxLength: options?.maxLength ?? MAX_LENGTHS.userIdentifier, ...options })
 
 const normalizeJid = (value: unknown): string | null => {
   const jid = normalizeString(value, { maxLength: MAX_LENGTHS.jid })
@@ -80,23 +64,17 @@ const normalizeJid = (value: unknown): string | null => {
   return jid
 }
 
-const normalizeMessageId = (value: unknown): string | null =>
-  normalizeString(value, { maxLength: MAX_LENGTHS.messageId })
+const normalizeMessageId = (value: unknown): string | null => normalizeString(value, { maxLength: MAX_LENGTHS.messageId })
 
-const normalizePnLid = (value: unknown): string | null =>
-  normalizeString(value, { maxLength: MAX_LENGTHS.lidPn })
+const normalizePnLid = (value: unknown): string | null => normalizeString(value, { maxLength: MAX_LENGTHS.lidPn })
 
-const normalizeLabelId = (value: unknown): string | null =>
-  normalizeString(value, { maxLength: MAX_LENGTHS.labelId })
+const normalizeLabelId = (value: unknown): string | null => normalizeString(value, { maxLength: MAX_LENGTHS.labelId })
 
-const normalizeEventType = (value: unknown, maxLength: number): string | null =>
-  normalizeString(value, { maxLength })
+const normalizeEventType = (value: unknown, maxLength: number): string | null => normalizeString(value, { maxLength })
 
-const normalizeDisplayName = (value: unknown): string | null =>
-  normalizeString(value, { maxLength: MAX_LENGTHS.displayName, truncate: true })
+const normalizeDisplayName = (value: unknown): string | null => normalizeString(value, { maxLength: MAX_LENGTHS.displayName, truncate: true })
 
-const normalizeRole = (value: unknown, maxLength: number): string | null =>
-  normalizeString(value, { maxLength, truncate: true })
+const normalizeRole = (value: unknown, maxLength: number): string | null => normalizeString(value, { maxLength, truncate: true })
 
 const normalizeJidList = (values: string[]): string[] => {
   const output: string[] = []
@@ -129,16 +107,11 @@ const toTinyInt = (value: boolean | null | undefined): number | null => {
   return value ? 1 : 0
 }
 
-const extractForwardedFlag = (
-  content: proto.IMessage | undefined,
-  type: keyof proto.IMessage | null
-): boolean | null => {
+const extractForwardedFlag = (content: proto.IMessage | undefined, type: keyof proto.IMessage | null): boolean | null => {
   if (!content || !type) return null
   const inner = content[type]
   if (!inner || typeof inner !== 'object') return null
-  const contextInfo = (
-    inner as { contextInfo?: { isForwarded?: boolean; forwardingScore?: number } }
-  ).contextInfo
+  const contextInfo = (inner as { contextInfo?: { isForwarded?: boolean; forwardingScore?: number } }).contextInfo
   if (!contextInfo) return null
   if (typeof contextInfo.isForwarded === 'boolean') return contextInfo.isForwarded
   if (typeof contextInfo.forwardingScore === 'number') {
@@ -150,12 +123,7 @@ const extractForwardedFlag = (
 const extractEphemeralFlag = (message: WAMessage): boolean | null => {
   const content = message.message
   if (!content) return null
-  return Boolean(
-    content.ephemeralMessage ||
-      content.viewOnceMessage ||
-      content.viewOnceMessageV2 ||
-      content.viewOnceMessageV2Extension
-  )
+  return Boolean(content.ephemeralMessage || content.viewOnceMessage || content.viewOnceMessageV2 || content.viewOnceMessageV2Extension)
 }
 
 type MessageKeyParts = {
@@ -189,11 +157,7 @@ export type SqlStore = {
   getGroup: (id: string) => Promise<GroupMetadata | undefined>
   setGroup: (id: string, group: GroupMetadata) => Promise<void>
   deleteGroup: (id: string) => Promise<void>
-  setGroupParticipants: (
-    groupJid: string,
-    participants: GroupParticipant[],
-    options?: { replace?: boolean }
-  ) => Promise<void>
+  setGroupParticipants: (groupJid: string, participants: GroupParticipant[], options?: { replace?: boolean }) => Promise<void>
   removeGroupParticipants: (groupJid: string, participantJids: string[]) => Promise<void>
   setChat: (id: string, chat: Chat) => Promise<void>
   deleteChat: (id: string) => Promise<void>
@@ -201,101 +165,22 @@ export type SqlStore = {
   setLidMapping: (mapping: LIDMapping) => Promise<void>
   getLidForPn: (pn: string) => Promise<string | null>
   getPnForLid: (lid: string) => Promise<string | null>
-  recordMessageEvent: (event: {
-    key: { chatJid: string; messageId: string; fromMe: boolean }
-    type: string
-    actorJid?: string | null
-    targetJid?: string | null
-    data?: unknown
-  }) => Promise<void>
-  recordEvent: (event: {
-    type: string
-    actorJid?: string | null
-    targetJid?: string | null
-    chatJid?: string | null
-    groupJid?: string | null
-    messageKey?: { chatJid: string; messageId: string; fromMe: boolean } | null
-    data?: unknown
-  }) => Promise<void>
-  setBlocklist: (entry: {
-    jid: string
-    isBlocked: boolean
-    actorJid?: string | null
-    reason?: string | null
-    data?: unknown
-  }) => Promise<void>
-  recordGroupEvent: (event: {
-    groupJid: string
-    eventType: string
-    actorJid?: string | null
-    targetJid?: string | null
-    data?: unknown
-  }) => Promise<void>
-  recordGroupJoinRequest: (entry: {
-    groupJid: string
-    userJid: string
-    actorJid?: string | null
-    action: string
-    method?: string | null
-    data?: unknown
-  }) => Promise<void>
+  recordMessageEvent: (event: { key: { chatJid: string; messageId: string; fromMe: boolean }; type: string; actorJid?: string | null; targetJid?: string | null; data?: unknown }) => Promise<void>
+  recordEvent: (event: { type: string; actorJid?: string | null; targetJid?: string | null; chatJid?: string | null; groupJid?: string | null; messageKey?: { chatJid: string; messageId: string; fromMe: boolean } | null; data?: unknown }) => Promise<void>
+  setBlocklist: (entry: { jid: string; isBlocked: boolean; actorJid?: string | null; reason?: string | null; data?: unknown }) => Promise<void>
+  recordGroupEvent: (event: { groupJid: string; eventType: string; actorJid?: string | null; targetJid?: string | null; data?: unknown }) => Promise<void>
+  recordGroupJoinRequest: (entry: { groupJid: string; userJid: string; actorJid?: string | null; action: string; method?: string | null; data?: unknown }) => Promise<void>
   recordNewsletter: (entry: { newsletterId: string; data?: unknown }) => Promise<void>
-  recordNewsletterParticipant: (entry: {
-    newsletterId: string
-    userJid: string
-    role?: string | null
-    status?: string | null
-  }) => Promise<void>
-  recordNewsletterEvent: (event: {
-    newsletterId: string
-    eventType: string
-    actorJid?: string | null
-    targetJid?: string | null
-    data?: unknown
-  }) => Promise<void>
-  recordMessageFailure: (entry: {
-    chatJid: string
-    messageId?: string | null
-    senderJid?: string | null
-    actorJid?: string | null
-    reason?: string | null
-    data?: unknown
-  }) => Promise<void>
-  recordBotSession: (entry: {
-    deviceLabel?: string | null
-    platform?: string | null
-    appVersion?: string | null
-    lastLogin?: Date | null
-    data?: unknown
-  }) => Promise<void>
-  recordCommandLog: (entry: {
-    actorJid?: string | null
-    chatJid: string
-    commandName: string
-    argsText?: string | null
-    success: boolean
-    durationMs?: number | null
-    data?: unknown
-  }) => Promise<void>
+  recordNewsletterParticipant: (entry: { newsletterId: string; userJid: string; role?: string | null; status?: string | null }) => Promise<void>
+  recordNewsletterEvent: (event: { newsletterId: string; eventType: string; actorJid?: string | null; targetJid?: string | null; data?: unknown }) => Promise<void>
+  recordMessageFailure: (entry: { chatJid: string; messageId?: string | null; senderJid?: string | null; actorJid?: string | null; reason?: string | null; data?: unknown }) => Promise<void>
+  recordBotSession: (entry: { deviceLabel?: string | null; platform?: string | null; appVersion?: string | null; lastLogin?: Date | null; data?: unknown }) => Promise<void>
+  recordCommandLog: (entry: { actorJid?: string | null; chatJid: string; commandName: string; argsText?: string | null; success: boolean; durationMs?: number | null; data?: unknown }) => Promise<void>
   setUserDevice: (entry: { userJid: string; deviceId: string; data?: unknown }) => Promise<void>
   setChatUser: (chatJid: string, userJid: string, role?: string | null) => Promise<void>
   deleteChatUser: (chatJid: string, userJid: string) => Promise<void>
-  setLabel: (label: {
-    id: string
-    name?: string | null
-    color?: string | null
-    data?: unknown
-    actorJid?: string | null
-  }) => Promise<void>
-  setLabelAssociation: (association: {
-    labelId: string
-    associationType: 'chat' | 'message' | 'contact' | 'group'
-    chatJid?: string | null
-    messageKey?: { chatJid: string; messageId: string; fromMe: boolean } | null
-    targetJid?: string | null
-    actorJid?: string | null
-    data?: unknown
-  }) => Promise<void>
+  setLabel: (label: { id: string; name?: string | null; color?: string | null; data?: unknown; actorJid?: string | null }) => Promise<void>
+  setLabelAssociation: (association: { labelId: string; associationType: 'chat' | 'message' | 'contact' | 'group'; chatJid?: string | null; messageKey?: { chatJid: string; messageId: string; fromMe: boolean } | null; targetJid?: string | null; actorJid?: string | null; data?: unknown }) => Promise<void>
 }
 
 /**
@@ -341,11 +226,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
     }
   }
 
-  const safe = async <T>(
-    fn: (pool: NonNullable<ReturnType<typeof getMysqlPool>>) => Promise<T>,
-    fallback: T,
-    options?: { ensureConnection?: boolean }
-  ): Promise<T> => {
+  const safe = async <T>(fn: (pool: NonNullable<ReturnType<typeof getMysqlPool>>) => Promise<T>, fallback: T, options?: { ensureConnection?: boolean }): Promise<T> => {
     try {
       const pool = getMysqlPool()
       if (!pool) return fallback
@@ -361,9 +242,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
   const resolvedConnectionId = connectionId ?? config.connectionId ?? 'default'
 
   type UserIdentifierType = 'pn' | 'lid' | 'jid' | 'username'
-  const normalizeUserIdentifier = (
-    entry: { type: UserIdentifierType; value: string }
-  ): { type: UserIdentifierType; value: string } | null => {
+  const normalizeUserIdentifier = (entry: { type: UserIdentifierType; value: string }): { type: UserIdentifierType; value: string } | null => {
     switch (entry.type) {
       case 'jid': {
         const jid = normalizeJid(entry.value)
@@ -383,15 +262,8 @@ export function createSqlStore(connectionId?: string): SqlStore {
     }
   }
 
-  const ensureUserByIdentifiers = async (
-    pool: NonNullable<ReturnType<typeof getMysqlPool>>,
-    identifiers: Array<{ type: UserIdentifierType; value: string }>,
-    displayName?: string | null,
-    aliases?: Array<{ type: 'pushName' | 'notify' | 'username' | 'display_name'; value: string }>
-  ): Promise<string | null> => {
-    const cleanIdentifiers = identifiers
-      .map((entry) => normalizeUserIdentifier(entry))
-      .filter((entry): entry is { type: UserIdentifierType; value: string } => Boolean(entry))
+  const ensureUserByIdentifiers = async (pool: NonNullable<ReturnType<typeof getMysqlPool>>, identifiers: Array<{ type: UserIdentifierType; value: string }>, displayName?: string | null, aliases?: Array<{ type: 'pushName' | 'notify' | 'username' | 'display_name'; value: string }>): Promise<string | null> => {
+    const cleanIdentifiers = identifiers.map((entry) => normalizeUserIdentifier(entry)).filter((entry): entry is { type: UserIdentifierType; value: string } => Boolean(entry))
     if (!cleanIdentifiers.length) return null
     const normalizedDisplayName = normalizeDisplayName(displayName)
     const normalizedAliases =
@@ -404,10 +276,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
           if (!value) return null
           return { type: alias.type, value }
         })
-        .filter(
-          (alias): alias is { type: 'pushName' | 'notify' | 'username' | 'display_name'; value: string } =>
-            Boolean(alias)
-        ) ?? null
+        .filter((alias): alias is { type: 'pushName' | 'notify' | 'username' | 'display_name'; value: string } => Boolean(alias)) ?? null
 
     type UserRow = RowDataPacket & { user_id: string }
     for (const entry of cleanIdentifiers) {
@@ -495,26 +364,17 @@ export function createSqlStore(connectionId?: string): SqlStore {
   const extractMediaInfo = (
     content: proto.IMessage | undefined,
     type: keyof proto.IMessage | null
-  ):
-    | {
-        mediaType: string
-        mimeType: string | null
-        fileSha256: string | null
-        fileLength: number | null
-        fileName: string | null
-        url: string | null
-        data: unknown
-      }
-    | null => {
+  ): {
+    mediaType: string
+    mimeType: string | null
+    fileSha256: string | null
+    fileLength: number | null
+    fileName: string | null
+    url: string | null
+    data: unknown
+  } | null => {
     if (!content || !type) return null
-    const mediaTypes = new Set([
-      'imageMessage',
-      'videoMessage',
-      'audioMessage',
-      'documentMessage',
-      'stickerMessage',
-      'ptvMessage',
-    ])
+    const mediaTypes = new Set(['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage', 'ptvMessage'])
     if (!mediaTypes.has(type)) return null
     const inner = (content as proto.IMessage)[type] as
       | {
@@ -553,10 +413,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
     }
   }
 
-  const getMessageDbId = async (
-    pool: NonNullable<ReturnType<typeof getMysqlPool>>,
-    key: { chatJid: string; messageId: string; fromMe: number }
-  ): Promise<number | null> => {
+  const getMessageDbId = async (pool: NonNullable<ReturnType<typeof getMysqlPool>>, key: { chatJid: string; messageId: string; fromMe: number }): Promise<number | null> => {
     const chatJid = normalizeJid(key.chatJid)
     const messageId = normalizeMessageId(key.messageId)
     if (!chatJid || !messageId || messageId === '*') return null
@@ -575,10 +432,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
     return rows[0]?.id ?? null
   }
 
-  const getMessageSenderUserId = async (
-    pool: NonNullable<ReturnType<typeof getMysqlPool>>,
-    messageDbId: number
-  ): Promise<string | null> => {
+  const getMessageSenderUserId = async (pool: NonNullable<ReturnType<typeof getMysqlPool>>, messageDbId: number): Promise<string | null> => {
     type SenderRow = RowDataPacket & { sender_user_id: string | null }
     const [rows] = await pool.execute<SenderRow[]>(
       `SELECT BIN_TO_UUID(sender_user_id, 1) AS sender_user_id
@@ -591,10 +445,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
     return rows[0]?.sender_user_id ?? null
   }
 
-  const ensureMessageDbId = async (
-    pool: NonNullable<ReturnType<typeof getMysqlPool>>,
-    key: { chatJid: string; messageId: string; fromMe: number }
-  ): Promise<number | null> => {
+  const ensureMessageDbId = async (pool: NonNullable<ReturnType<typeof getMysqlPool>>, key: { chatJid: string; messageId: string; fromMe: number }): Promise<number | null> => {
     const chatJid = normalizeJid(key.chatJid)
     const messageId = normalizeMessageId(key.messageId)
     if (!chatJid || !messageId || messageId === '*') return null
@@ -632,10 +483,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
     return getMessageDbId(pool, { ...key, chatJid, messageId })
   }
 
-  const getContextInfo = (
-    content: proto.IMessage | undefined,
-    type: keyof proto.IMessage | null
-  ): proto.IContextInfo | null => {
+  const getContextInfo = (content: proto.IMessage | undefined, type: keyof proto.IMessage | null): proto.IContextInfo | null => {
     if (!content || !type) return null
     const inner = (content as proto.IMessage)[type] as { contextInfo?: proto.IContextInfo } | null
     return inner?.contextInfo ?? null
@@ -646,14 +494,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
     return context.mentionedJid.filter((jid): jid is string => typeof jid === 'string')
   }
 
-  const setMessageUsers = async (
-    pool: NonNullable<ReturnType<typeof getMysqlPool>>,
-    messageDbId: number,
-    senderUserId: string | null,
-    mentionedJids: string[],
-    quotedJid: string | null,
-    participantJids: string[]
-  ) => {
+  const setMessageUsers = async (pool: NonNullable<ReturnType<typeof getMysqlPool>>, messageDbId: number, senderUserId: string | null, mentionedJids: string[], quotedJid: string | null, participantJids: string[]) => {
     if (senderUserId) {
       await pool.execute(
         `INSERT IGNORE INTO message_users (
@@ -723,22 +564,22 @@ export function createSqlStore(connectionId?: string): SqlStore {
       selfJid = normalized
       if (!selfJid) return
       const currentSelfJid = selfJid
-      void safe(async (pool) => {
-        const userId = await ensureUserByIdentifiers(
-          pool,
-          [{ type: 'jid', value: currentSelfJid }],
-          null
-        )
-        if (!userId) return
-        await pool.execute(
-          `UPDATE messages
+      void safe(
+        async (pool) => {
+          const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: currentSelfJid }], null)
+          if (!userId) return
+          await pool.execute(
+            `UPDATE messages
            SET sender_user_id = UUID_TO_BIN(?, 1)
            WHERE connection_id = ?
              AND from_me = 1
              AND sender_user_id IS NULL`,
-          [userId, resolvedConnectionId]
-        )
-      }, undefined, { ensureConnection: true })
+            [userId, resolvedConnectionId]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      )
     },
     getMessage: async (key) =>
       safe(async (pool) => {
@@ -764,58 +605,54 @@ export function createSqlStore(connectionId?: string): SqlStore {
         return row ? deserialize<WAMessage>(row.data_json) : undefined
       }, undefined),
     setMessage: async (message) =>
-      safe(async (pool) => {
-        const key = message.key
-        const chatJid = normalizeJid(key?.remoteJid)
-        const messageId = normalizeMessageId(key?.id)
-        if (!chatJid || !messageId) return
-        const senderJid = key.fromMe
-          ? (selfJid ?? key.participant ?? null)
-          : (key.participant ?? key.remoteJid ?? null)
-        const normalizedSender = normalizeJid(senderJid)
-        const senderUserId = normalizedSender
-          ? await ensureUserByIdentifiers(
-              pool,
-              [{ type: 'jid', value: normalizedSender }],
-              null,
-              (() => {
-                const pushName = normalizeDisplayName(message.pushName)
-                return pushName ? [{ type: 'pushName', value: pushName }] : undefined
-              })()
-            )
-          : null
-        const pushName = normalizeDisplayName(message.pushName)
-        if (senderUserId && pushName) {
-          await pool.execute(
-            `UPDATE users
+      safe(
+        async (pool) => {
+          const key = message.key
+          const chatJid = normalizeJid(key?.remoteJid)
+          const messageId = normalizeMessageId(key?.id)
+          if (!chatJid || !messageId) return
+          const senderJid = key.fromMe ? (selfJid ?? key.participant ?? null) : (key.participant ?? key.remoteJid ?? null)
+          const normalizedSender = normalizeJid(senderJid)
+          const senderUserId = normalizedSender
+            ? await ensureUserByIdentifiers(
+                pool,
+                [{ type: 'jid', value: normalizedSender }],
+                null,
+                (() => {
+                  const pushName = normalizeDisplayName(message.pushName)
+                  return pushName ? [{ type: 'pushName', value: pushName }] : undefined
+                })()
+              )
+            : null
+          const pushName = normalizeDisplayName(message.pushName)
+          if (senderUserId && pushName) {
+            await pool.execute(
+              `UPDATE users
              SET display_name = COALESCE(display_name, ?)
              WHERE connection_id = ?
                AND id = UUID_TO_BIN(?, 1)`,
-            [pushName, resolvedConnectionId, senderUserId]
-          )
-        }
-        const { content, type } = getNormalizedMessage(message)
-        const textPreview = getMessageText(message)
-        const timestamp = toNumber(message.messageTimestamp)
-        const contentType = normalizeString(type ? String(type) : null, {
-          maxLength: MAX_LENGTHS.contentType,
-        })
-        const messageType =
-          message.messageStubType !== undefined && message.messageStubType !== null
-            ? normalizeString(String(message.messageStubType), {
-                maxLength: MAX_LENGTHS.messageType,
-              })
-            : null
-        const status =
-          message.status !== undefined && message.status !== null
-            ? normalizeString(String(message.status), { maxLength: MAX_LENGTHS.status })
-            : null
-        const isForwarded = extractForwardedFlag(content, type)
-        const isEphemeral = extractEphemeralFlag(message)
-        const payload = serialize(message)
+              [pushName, resolvedConnectionId, senderUserId]
+            )
+          }
+          const { content, type } = getNormalizedMessage(message)
+          const textPreview = getMessageText(message)
+          const timestamp = toNumber(message.messageTimestamp)
+          const contentType = normalizeString(type ? String(type) : null, {
+            maxLength: MAX_LENGTHS.contentType,
+          })
+          const messageType =
+            message.messageStubType !== undefined && message.messageStubType !== null
+              ? normalizeString(String(message.messageStubType), {
+                  maxLength: MAX_LENGTHS.messageType,
+                })
+              : null
+          const status = message.status !== undefined && message.status !== null ? normalizeString(String(message.status), { maxLength: MAX_LENGTHS.status }) : null
+          const isForwarded = extractForwardedFlag(content, type)
+          const isEphemeral = extractEphemeralFlag(message)
+          const payload = serialize(message)
 
-        await pool.execute(
-          `INSERT INTO messages (
+          await pool.execute(
+            `INSERT INTO messages (
              connection_id,
              chat_jid,
              message_id,
@@ -841,57 +678,34 @@ export function createSqlStore(connectionId?: string): SqlStore {
              text_preview = VALUES(text_preview),
              data_json = VALUES(data_json),
              deleted_at = NULL`,
-          [
-            resolvedConnectionId,
-            chatJid,
-            messageId,
-            key.fromMe ? 1 : 0,
-            senderUserId ? 1 : 0,
-            senderUserId,
-            timestamp,
-            contentType,
-            messageType,
-            status,
-            toTinyInt(isForwarded),
-            toTinyInt(isEphemeral),
-            textPreview ? textPreview.slice(0, 512) : null,
-            payload,
-          ]
-        )
+            [resolvedConnectionId, chatJid, messageId, key.fromMe ? 1 : 0, senderUserId ? 1 : 0, senderUserId, timestamp, contentType, messageType, status, toTinyInt(isForwarded), toTinyInt(isEphemeral), textPreview ? textPreview.slice(0, 512) : null, payload]
+          )
 
-        const normalized = getNormalizedMessage(message)
-        const mediaInfo = extractMediaInfo(normalized.content, normalized.type)
-        const messageText = getMessageText(message)
-        if (mediaInfo || messageText || senderUserId) {
-          const messageDbId = await getMessageDbId(pool, {
-            chatJid,
-            messageId,
-            fromMe: key.fromMe ? 1 : 0,
-          })
-          if (messageDbId) {
-            const contextInfo = getContextInfo(normalized.content, normalized.type)
-            const mentionedJids = collectMentionedJids(contextInfo)
-            const quotedJid =
-              typeof contextInfo?.participant === 'string' ? contextInfo.participant : null
-            const participantJids = contextInfo?.participant ? [contextInfo.participant] : []
-            await setMessageUsers(
-              pool,
-              messageDbId,
-              senderUserId,
-              mentionedJids,
-              quotedJid,
-              participantJids
-            )
+          const normalized = getNormalizedMessage(message)
+          const mediaInfo = extractMediaInfo(normalized.content, normalized.type)
+          const messageText = getMessageText(message)
+          if (mediaInfo || messageText || senderUserId) {
+            const messageDbId = await getMessageDbId(pool, {
+              chatJid,
+              messageId,
+              fromMe: key.fromMe ? 1 : 0,
+            })
+            if (messageDbId) {
+              const contextInfo = getContextInfo(normalized.content, normalized.type)
+              const mentionedJids = collectMentionedJids(contextInfo)
+              const quotedJid = typeof contextInfo?.participant === 'string' ? contextInfo.participant : null
+              const participantJids = contextInfo?.participant ? [contextInfo.participant] : []
+              await setMessageUsers(pool, messageDbId, senderUserId, mentionedJids, quotedJid, participantJids)
 
-            if (mediaInfo) {
-              await pool.execute(
-                `DELETE FROM message_media
+              if (mediaInfo) {
+                await pool.execute(
+                  `DELETE FROM message_media
                  WHERE connection_id = ?
                    AND message_db_id = ?`,
-                [resolvedConnectionId, messageDbId]
-              )
-              await pool.execute(
-                `INSERT INTO message_media (
+                  [resolvedConnectionId, messageDbId]
+                )
+                await pool.execute(
+                  `INSERT INTO message_media (
                    connection_id,
                    message_db_id,
                    media_type,
@@ -905,22 +719,12 @@ export function createSqlStore(connectionId?: string): SqlStore {
                  )
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
                 `,
-                [
-                  resolvedConnectionId,
-                  messageDbId,
-                  mediaInfo.mediaType,
-                  mediaInfo.mimeType,
-                  mediaInfo.fileSha256,
-                  mediaInfo.fileLength,
-                  mediaInfo.fileName,
-                  mediaInfo.url,
-                  serialize(mediaInfo.data),
-                ]
-              )
-            }
-            if (messageText && messageText.trim().length) {
-              await pool.execute(
-                `INSERT INTO message_text_index (
+                  [resolvedConnectionId, messageDbId, mediaInfo.mediaType, mediaInfo.mimeType, mediaInfo.fileSha256, mediaInfo.fileLength, mediaInfo.fileName, mediaInfo.url, serialize(mediaInfo.data)]
+                )
+              }
+              if (messageText && messageText.trim().length) {
+                await pool.execute(
+                  `INSERT INTO message_text_index (
                    connection_id,
                    message_db_id,
                    text_content
@@ -928,39 +732,50 @@ export function createSqlStore(connectionId?: string): SqlStore {
                  VALUES (?, ?, ?)
                  ON DUPLICATE KEY UPDATE
                    text_content = VALUES(text_content)`,
-                [resolvedConnectionId, messageDbId, messageText]
-              )
+                  [resolvedConnectionId, messageDbId, messageText]
+                )
+              }
             }
           }
-        }
-      }, undefined, { ensureConnection: true }),
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     deleteMessage: async (chatJid, messageId, fromMe) =>
-      safe(async (pool) => {
-        const normalizedChat = normalizeJid(chatJid)
-        const normalizedMessageId = normalizeMessageId(messageId)
-        if (!normalizedChat || !normalizedMessageId) return
-        await pool.execute(
-          `UPDATE messages
+      safe(
+        async (pool) => {
+          const normalizedChat = normalizeJid(chatJid)
+          const normalizedMessageId = normalizeMessageId(messageId)
+          if (!normalizedChat || !normalizedMessageId) return
+          await pool.execute(
+            `UPDATE messages
            SET deleted_at = CURRENT_TIMESTAMP
            WHERE connection_id = ?
              AND chat_jid = ?
              AND message_id = ?
              AND from_me = ?`,
-          [resolvedConnectionId, normalizedChat, normalizedMessageId, fromMe ? 1 : 0]
-        )
-      }, undefined, { ensureConnection: true }),
+            [resolvedConnectionId, normalizedChat, normalizedMessageId, fromMe ? 1 : 0]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     deleteMessagesByJid: async (jid) =>
-      safe(async (pool) => {
-        const normalizedJid = normalizeJid(jid)
-        if (!normalizedJid) return
-        await pool.execute(
-          `UPDATE messages
+      safe(
+        async (pool) => {
+          const normalizedJid = normalizeJid(jid)
+          if (!normalizedJid) return
+          await pool.execute(
+            `UPDATE messages
            SET deleted_at = CURRENT_TIMESTAMP
            WHERE connection_id = ?
              AND chat_jid = ?`,
-          [resolvedConnectionId, normalizedJid]
-        )
-      }, undefined, { ensureConnection: true }),
+            [resolvedConnectionId, normalizedJid]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     getGroup: async (id) =>
       safe(async (pool) => {
         const normalizedId = normalizeJid(id)
@@ -978,44 +793,44 @@ export function createSqlStore(connectionId?: string): SqlStore {
         return row ? deserialize<GroupMetadata>(row.data_json) : undefined
       }, undefined),
     setGroup: async (id, group) =>
-      safe(async (pool) => {
-        try {
-          const normalizedId = normalizeJid(id)
-          if (!normalizedId) return
-          const payload = serialize(group)
-          const subject = normalizeString(group.subject ?? null, {
-            maxLength: MAX_LENGTHS.displayName,
-            truncate: true,
-          })
-          let ownerUserId: string | null = null
-          const ownerCandidates: Array<{ type: UserIdentifierType; value: string }> = []
-          const pushOwnerCandidate = (type: UserIdentifierType, value: string | null | undefined) => {
-            const normalized =
-              type === 'jid' ? normalizeJid(value) : normalizePnLid(value)
-            if (normalized) ownerCandidates.push({ type, value: normalized })
-          }
-          pushOwnerCandidate('jid', group.owner)
-          const ownerMeta = group as {
-            ownerPn?: string | null
-            subjectOwner?: string | null
-            subjectOwnerPn?: string | null
-            descOwner?: string | null
-            descOwnerPn?: string | null
-            author?: string | null
-            authorPn?: string | null
-          }
-          pushOwnerCandidate('pn', ownerMeta.ownerPn)
-          pushOwnerCandidate('jid', ownerMeta.subjectOwner)
-          pushOwnerCandidate('pn', ownerMeta.subjectOwnerPn)
-          pushOwnerCandidate('jid', ownerMeta.descOwner)
-          pushOwnerCandidate('pn', ownerMeta.descOwnerPn)
-          pushOwnerCandidate('jid', ownerMeta.author)
-          pushOwnerCandidate('pn', ownerMeta.authorPn)
-          if (ownerCandidates.length) {
-            ownerUserId = await ensureUserByIdentifiers(pool, ownerCandidates, null)
-          }
-          await pool.execute(
-            `INSERT INTO \`groups\` (
+      safe(
+        async (pool) => {
+          try {
+            const normalizedId = normalizeJid(id)
+            if (!normalizedId) return
+            const payload = serialize(group)
+            const subject = normalizeString(group.subject ?? null, {
+              maxLength: MAX_LENGTHS.displayName,
+              truncate: true,
+            })
+            let ownerUserId: string | null = null
+            const ownerCandidates: Array<{ type: UserIdentifierType; value: string }> = []
+            const pushOwnerCandidate = (type: UserIdentifierType, value: string | null | undefined) => {
+              const normalized = type === 'jid' ? normalizeJid(value) : normalizePnLid(value)
+              if (normalized) ownerCandidates.push({ type, value: normalized })
+            }
+            pushOwnerCandidate('jid', group.owner)
+            const ownerMeta = group as {
+              ownerPn?: string | null
+              subjectOwner?: string | null
+              subjectOwnerPn?: string | null
+              descOwner?: string | null
+              descOwnerPn?: string | null
+              author?: string | null
+              authorPn?: string | null
+            }
+            pushOwnerCandidate('pn', ownerMeta.ownerPn)
+            pushOwnerCandidate('jid', ownerMeta.subjectOwner)
+            pushOwnerCandidate('pn', ownerMeta.subjectOwnerPn)
+            pushOwnerCandidate('jid', ownerMeta.descOwner)
+            pushOwnerCandidate('pn', ownerMeta.descOwnerPn)
+            pushOwnerCandidate('jid', ownerMeta.author)
+            pushOwnerCandidate('pn', ownerMeta.authorPn)
+            if (ownerCandidates.length) {
+              ownerUserId = await ensureUserByIdentifiers(pool, ownerCandidates, null)
+            }
+            await pool.execute(
+              `INSERT INTO \`groups\` (
                connection_id,
                jid,
                subject,
@@ -1033,72 +848,67 @@ export function createSqlStore(connectionId?: string): SqlStore {
                \`restrict\` = VALUES(\`restrict\`),
                size = VALUES(size),
                data_json = VALUES(data_json)`,
-            [
-              resolvedConnectionId,
-              normalizedId,
-              subject,
-              ownerUserId ? 1 : 0,
-              ownerUserId,
-              toTinyInt(group.announce),
-              toTinyInt(group.restrict),
-              typeof group.size === 'number' ? group.size : null,
-              payload,
-            ]
-          )
-        } catch (error) {
-          console.error('[sql-store] falha ao salvar groups', {
-            id,
-            subjectLen: group.subject ? group.subject.length : 0,
-            err: error,
-          })
-        }
-      }, undefined, { ensureConnection: true }),
+              [resolvedConnectionId, normalizedId, subject, ownerUserId ? 1 : 0, ownerUserId, toTinyInt(group.announce), toTinyInt(group.restrict), typeof group.size === 'number' ? group.size : null, payload]
+            )
+          } catch (error) {
+            console.error('[sql-store] falha ao salvar groups', {
+              id,
+              subjectLen: group.subject ? group.subject.length : 0,
+              err: error,
+            })
+          }
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     deleteGroup: async (id) =>
-      safe(async (pool) => {
-        const normalizedId = normalizeJid(id)
-        if (!normalizedId) return
-        await pool.execute(
-          `DELETE FROM \`groups\` WHERE connection_id = ? AND jid = ?`,
-          [resolvedConnectionId, normalizedId]
-        )
-      }, undefined, { ensureConnection: true }),
+      safe(
+        async (pool) => {
+          const normalizedId = normalizeJid(id)
+          if (!normalizedId) return
+          await pool.execute(`DELETE FROM \`groups\` WHERE connection_id = ? AND jid = ?`, [resolvedConnectionId, normalizedId])
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     setGroupParticipants: async (groupJid, participants, options) =>
-      safe(async (pool) => {
-        const normalizedGroupJid = normalizeJid(groupJid)
-        if (!normalizedGroupJid) return
-        const normalizedParticipants = participants
-          .map((participant) => {
-            const jid = normalizeJid(participant.id)
-            if (!jid) return null
-            return participant.id === jid ? participant : { ...participant, id: jid }
-          })
-          .filter((participant): participant is GroupParticipant => Boolean(participant))
-        if (!normalizedParticipants.length) {
-          if (options?.replace) {
-            await pool.execute(
-              `DELETE FROM group_participants
+      safe(
+        async (pool) => {
+          const normalizedGroupJid = normalizeJid(groupJid)
+          if (!normalizedGroupJid) return
+          const normalizedParticipants = participants
+            .map((participant) => {
+              const jid = normalizeJid(participant.id)
+              if (!jid) return null
+              return participant.id === jid ? participant : { ...participant, id: jid }
+            })
+            .filter((participant): participant is GroupParticipant => Boolean(participant))
+          if (!normalizedParticipants.length) {
+            if (options?.replace) {
+              await pool.execute(
+                `DELETE FROM group_participants
                WHERE connection_id = ?
                  AND group_jid = ?`,
-              [resolvedConnectionId, normalizedGroupJid]
-            )
+                [resolvedConnectionId, normalizedGroupJid]
+              )
+            }
+            return
           }
-          return
-        }
 
-        const participantJids: string[] = []
-        const participantSet = new Set<string>()
-        for (const participant of normalizedParticipants) {
-          const jid = participant.id
-          if (participantSet.has(jid)) continue
-          participantSet.add(jid)
-          participantJids.push(jid)
-          const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: jid }], null)
-          if (!userId) continue
-          const role = normalizeRole(participant.admin ?? 'member', MAX_LENGTHS.groupRole) ?? 'member'
-          const isSuper = role === 'superadmin'
-          const isAdmin = role === 'admin' || isSuper
-          await pool.execute(
-            `INSERT INTO group_participants (
+          const participantJids: string[] = []
+          const participantSet = new Set<string>()
+          for (const participant of normalizedParticipants) {
+            const jid = participant.id
+            if (participantSet.has(jid)) continue
+            participantSet.add(jid)
+            participantJids.push(jid)
+            const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: jid }], null)
+            if (!userId) continue
+            const role = normalizeRole(participant.admin ?? 'member', MAX_LENGTHS.groupRole) ?? 'member'
+            const isSuper = role === 'superadmin'
+            const isAdmin = role === 'admin' || isSuper
+            await pool.execute(
+              `INSERT INTO group_participants (
                connection_id,
                group_jid,
                user_id,
@@ -1115,80 +925,60 @@ export function createSqlStore(connectionId?: string): SqlStore {
                is_admin = VALUES(is_admin),
                is_superadmin = VALUES(is_superadmin),
                data_json = VALUES(data_json)`,
-            [
-              resolvedConnectionId,
-              normalizedGroupJid,
-              userId,
-              jid,
-              role,
-              toTinyInt(isAdmin),
-              toTinyInt(isSuper),
-              serialize(participant),
-            ]
-          )
-        }
+              [resolvedConnectionId, normalizedGroupJid, userId, jid, role, toTinyInt(isAdmin), toTinyInt(isSuper), serialize(participant)]
+            )
+          }
 
-        if (options?.replace) {
-          const placeholders = participantJids.map(() => '?').join(', ')
-          if (participantJids.length) {
-            await pool.execute(
-              `DELETE FROM group_participants
+          if (options?.replace) {
+            const placeholders = participantJids.map(() => '?').join(', ')
+            if (participantJids.length) {
+              await pool.execute(
+                `DELETE FROM group_participants
                WHERE connection_id = ?
                  AND group_jid = ?
                  AND participant_jid NOT IN (${placeholders})`,
-              [resolvedConnectionId, normalizedGroupJid, ...participantJids]
-            )
+                [resolvedConnectionId, normalizedGroupJid, ...participantJids]
+              )
+            }
           }
-        }
-      }, undefined, { ensureConnection: true }),
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     removeGroupParticipants: async (groupJid, participantJids) =>
-      safe(async (pool) => {
-        const normalizedGroupJid = normalizeJid(groupJid)
-        const normalizedJids = normalizeJidList(participantJids)
-        if (!normalizedGroupJid || !normalizedJids.length) return
-        const placeholders = normalizedJids.map(() => '?').join(', ')
-        await pool.execute(
-          `DELETE FROM group_participants
+      safe(
+        async (pool) => {
+          const normalizedGroupJid = normalizeJid(groupJid)
+          const normalizedJids = normalizeJidList(participantJids)
+          if (!normalizedGroupJid || !normalizedJids.length) return
+          const placeholders = normalizedJids.map(() => '?').join(', ')
+          await pool.execute(
+            `DELETE FROM group_participants
            WHERE connection_id = ?
              AND group_jid = ?
              AND participant_jid IN (${placeholders})`,
-          [resolvedConnectionId, normalizedGroupJid, ...normalizedJids]
-        )
-      }, undefined, { ensureConnection: true }),
-    setChat: async (id, chat) =>
-      safe(async (pool) => {
-        const payload = serialize(chat)
-        const displayName = normalizeDisplayName(
-          chat.name ?? (chat as { subject?: string | null }).subject ?? null
-        )
-        const normalizedJid = normalizeJid(id)
-        if (!normalizedJid) return
-        if (normalizedJid) {
-          await ensureUserByIdentifiers(
-            pool,
-            [{ type: 'jid', value: normalizedJid }],
-            displayName,
-            displayName ? [{ type: 'display_name', value: displayName }] : undefined
+            [resolvedConnectionId, normalizedGroupJid, ...normalizedJids]
           )
-        }
-        const lastMessageTs: number | null = toNumber(
-          (chat as { conversationTimestamp?: unknown }).conversationTimestamp
-        )
-        const rawUnreadCount = (chat as { unreadCount?: number }).unreadCount
-        const unreadCount: number | null =
-          typeof rawUnreadCount === 'number' && Number.isFinite(rawUnreadCount) && rawUnreadCount >= 0
-            ? rawUnreadCount
-            : null
-        const values: Array<string | number | null> = [
-          resolvedConnectionId,
-          normalizedJid,
-          displayName,
-          lastMessageTs,
-          unreadCount,
-          payload,
-        ]
-        await pool.execute(
-          `INSERT INTO chats (
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
+    setChat: async (id, chat) =>
+      safe(
+        async (pool) => {
+          const payload = serialize(chat)
+          const displayName = normalizeDisplayName(chat.name ?? (chat as { subject?: string | null }).subject ?? null)
+          const normalizedJid = normalizeJid(id)
+          if (!normalizedJid) return
+          if (normalizedJid) {
+            await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedJid }], displayName, displayName ? [{ type: 'display_name', value: displayName }] : undefined)
+          }
+          const lastMessageTs: number | null = toNumber((chat as { conversationTimestamp?: unknown }).conversationTimestamp)
+          const rawUnreadCount = (chat as { unreadCount?: number }).unreadCount
+          const unreadCount: number | null = typeof rawUnreadCount === 'number' && Number.isFinite(rawUnreadCount) && rawUnreadCount >= 0 ? rawUnreadCount : null
+          const values: Array<string | number | null> = [resolvedConnectionId, normalizedJid, displayName, lastMessageTs, unreadCount, payload]
+          await pool.execute(
+            `INSERT INTO chats (
              connection_id,
              jid,
              display_name,
@@ -1203,60 +993,63 @@ export function createSqlStore(connectionId?: string): SqlStore {
              unread_count = VALUES(unread_count),
              data_json = VALUES(data_json),
              deleted_at = NULL`,
-          values
-        )
-      }, undefined, { ensureConnection: true }),
+            values
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     deleteChat: async (id) =>
-      safe(async (pool) => {
-        const normalizedJid = normalizeJid(id)
-        if (!normalizedJid) return
-        await pool.execute(
-          `UPDATE chats
+      safe(
+        async (pool) => {
+          const normalizedJid = normalizeJid(id)
+          if (!normalizedJid) return
+          await pool.execute(
+            `UPDATE chats
            SET deleted_at = CURRENT_TIMESTAMP
            WHERE connection_id = ?
              AND jid = ?`,
-          [resolvedConnectionId, normalizedJid]
-        )
-      }, undefined, { ensureConnection: true }),
+            [resolvedConnectionId, normalizedJid]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     setContact: async (id, contact) =>
-      safe(async (pool) => {
-        const payload = serialize(contact)
-        const displayName = normalizeDisplayName(contact.name ?? contact.notify ?? null)
-        const normalizedJid = normalizeJid(id)
-        if (!normalizedJid) return
-        const aliases: Array<{
-          type: 'pushName' | 'notify' | 'username' | 'display_name'
-          value: string
-        }> = []
-        const normalizedNotify = normalizeString(contact.notify ?? null, {
-          maxLength: MAX_LENGTHS.alias,
-          truncate: true,
-        })
-        if (normalizedNotify) aliases.push({ type: 'notify', value: normalizedNotify })
-        const normalizedName = normalizeString(contact.name ?? null, {
-          maxLength: MAX_LENGTHS.alias,
-          truncate: true,
-        })
-        if (normalizedName) aliases.push({ type: 'display_name', value: normalizedName })
-        const pushNameRaw = (contact as { pushName?: string }).pushName ?? null
-        const normalizedPushName = normalizeString(pushNameRaw, {
-          maxLength: MAX_LENGTHS.alias,
-          truncate: true,
-        })
-        if (normalizedPushName) {
-          aliases.push({
-            type: 'pushName',
-            value: normalizedPushName,
+      safe(
+        async (pool) => {
+          const payload = serialize(contact)
+          const displayName = normalizeDisplayName(contact.name ?? contact.notify ?? null)
+          const normalizedJid = normalizeJid(id)
+          if (!normalizedJid) return
+          const aliases: Array<{
+            type: 'pushName' | 'notify' | 'username' | 'display_name'
+            value: string
+          }> = []
+          const normalizedNotify = normalizeString(contact.notify ?? null, {
+            maxLength: MAX_LENGTHS.alias,
+            truncate: true,
           })
-        }
-        const userId = await ensureUserByIdentifiers(
-          pool,
-          [{ type: 'jid', value: normalizedJid }],
-          displayName,
-          aliases.length ? aliases : undefined
-        )
-        await pool.execute(
-          `INSERT INTO wa_contacts_cache (
+          if (normalizedNotify) aliases.push({ type: 'notify', value: normalizedNotify })
+          const normalizedName = normalizeString(contact.name ?? null, {
+            maxLength: MAX_LENGTHS.alias,
+            truncate: true,
+          })
+          if (normalizedName) aliases.push({ type: 'display_name', value: normalizedName })
+          const pushNameRaw = (contact as { pushName?: string }).pushName ?? null
+          const normalizedPushName = normalizeString(pushNameRaw, {
+            maxLength: MAX_LENGTHS.alias,
+            truncate: true,
+          })
+          if (normalizedPushName) {
+            aliases.push({
+              type: 'pushName',
+              value: normalizedPushName,
+            })
+          }
+          const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedJid }], displayName, aliases.length ? aliases : undefined)
+          await pool.execute(
+            `INSERT INTO wa_contacts_cache (
              connection_id,
              jid,
              user_id,
@@ -1268,33 +1061,37 @@ export function createSqlStore(connectionId?: string): SqlStore {
              user_id = VALUES(user_id),
              display_name = VALUES(display_name),
              data_json = VALUES(data_json)`,
-          [resolvedConnectionId, normalizedJid, userId ? 1 : 0, userId, displayName, payload]
-        )
-        if (displayName && !normalizedJid.endsWith('@g.us')) {
-          await pool.execute(
-            `UPDATE chats
+            [resolvedConnectionId, normalizedJid, userId ? 1 : 0, userId, displayName, payload]
+          )
+          if (displayName && !normalizedJid.endsWith('@g.us')) {
+            await pool.execute(
+              `UPDATE chats
              SET display_name = COALESCE(display_name, ?)
              WHERE connection_id = ?
                AND jid = ?
                AND display_name IS NULL`,
-            [displayName, resolvedConnectionId, normalizedJid]
-          )
-        }
-      }, undefined, { ensureConnection: true }),
+              [displayName, resolvedConnectionId, normalizedJid]
+            )
+          }
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     setLidMapping: async ({ lid, pn }) =>
-      safe(async (pool) => {
-        const normalizedPn = normalizePnLid(pn)
-        const normalizedLid = normalizePnLid(lid)
-        if (!normalizedPn || !normalizedLid) return
-        let userId: string | null = null
-        if (normalizedPn || normalizedLid) {
-          const identifiers: Array<{ type: UserIdentifierType; value: string }> = []
-          if (normalizedPn) identifiers.push({ type: 'pn', value: normalizedPn })
-          if (normalizedLid) identifiers.push({ type: 'lid', value: normalizedLid })
-          userId = await ensureUserByIdentifiers(pool, identifiers, null)
-        }
-        await pool.execute(
-          `INSERT INTO lid_mappings (
+      safe(
+        async (pool) => {
+          const normalizedPn = normalizePnLid(pn)
+          const normalizedLid = normalizePnLid(lid)
+          if (!normalizedPn || !normalizedLid) return
+          let userId: string | null = null
+          if (normalizedPn || normalizedLid) {
+            const identifiers: Array<{ type: UserIdentifierType; value: string }> = []
+            if (normalizedPn) identifiers.push({ type: 'pn', value: normalizedPn })
+            if (normalizedLid) identifiers.push({ type: 'lid', value: normalizedLid })
+            userId = await ensureUserByIdentifiers(pool, identifiers, null)
+          }
+          await pool.execute(
+            `INSERT INTO lid_mappings (
              connection_id,
              pn,
              lid,
@@ -1304,9 +1101,12 @@ export function createSqlStore(connectionId?: string): SqlStore {
            ON DUPLICATE KEY UPDATE
              lid = VALUES(lid),
              user_id = VALUES(user_id)`,
-          [resolvedConnectionId, normalizedPn, normalizedLid, userId ? 1 : 0, userId]
-        )
-      }, undefined, { ensureConnection: true }),
+            [resolvedConnectionId, normalizedPn, normalizedLid, userId ? 1 : 0, userId]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     getLidForPn: async (pn) =>
       safe(async (pool) => {
         const normalizedPn = normalizePnLid(pn)
@@ -1340,39 +1140,35 @@ export function createSqlStore(connectionId?: string): SqlStore {
         return row?.pn ?? null
       }, null),
     recordMessageEvent: async (event) =>
-      safe(async (pool) => {
-        const chatJid = normalizeJid(event.key.chatJid)
-        const messageId = normalizeMessageId(event.key.messageId)
-        const eventType = normalizeEventType(event.type, MAX_LENGTHS.eventTypeShort)
-        if (!chatJid || !messageId || !eventType) return
-        const messageDbId = await ensureMessageDbId(pool, {
-          chatJid,
-          messageId,
-          fromMe: event.key.fromMe ? 1 : 0,
-        })
-        const normalizedActor = normalizeJid(event.actorJid)
-        const normalizedTarget = normalizeJid(event.targetJid)
-        let actorId = normalizedActor
-          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null)
-          : null
-        let targetId = normalizedTarget
-          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedTarget }], null)
-          : null
-        if (messageDbId && (!targetId || !actorId)) {
-          const senderUserId = await getMessageSenderUserId(pool, messageDbId)
-          const isMessageEvent =
-            eventType.startsWith('messages.') || eventType === 'message-receipt.update'
-          if (senderUserId) {
-            if (!targetId) {
-              targetId = senderUserId
-            }
-            if (!actorId && isMessageEvent) {
-              actorId = senderUserId
+      safe(
+        async (pool) => {
+          const chatJid = normalizeJid(event.key.chatJid)
+          const messageId = normalizeMessageId(event.key.messageId)
+          const eventType = normalizeEventType(event.type, MAX_LENGTHS.eventTypeShort)
+          if (!chatJid || !messageId || !eventType) return
+          const messageDbId = await ensureMessageDbId(pool, {
+            chatJid,
+            messageId,
+            fromMe: event.key.fromMe ? 1 : 0,
+          })
+          const normalizedActor = normalizeJid(event.actorJid)
+          const normalizedTarget = normalizeJid(event.targetJid)
+          let actorId = normalizedActor ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null) : null
+          let targetId = normalizedTarget ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedTarget }], null) : null
+          if (messageDbId && (!targetId || !actorId)) {
+            const senderUserId = await getMessageSenderUserId(pool, messageDbId)
+            const isMessageEvent = eventType.startsWith('messages.') || eventType === 'message-receipt.update'
+            if (senderUserId) {
+              if (!targetId) {
+                targetId = senderUserId
+              }
+              if (!actorId && isMessageEvent) {
+                actorId = senderUserId
+              }
             }
           }
-        }
-        await pool.execute(
-          `INSERT INTO message_events (
+          await pool.execute(
+            `INSERT INTO message_events (
              connection_id,
              chat_jid,
              message_id,
@@ -1383,63 +1179,48 @@ export function createSqlStore(connectionId?: string): SqlStore {
              data_json
            )
            VALUES (?, ?, ?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?)`,
-          [
-            resolvedConnectionId,
-            chatJid,
-            messageId,
-            eventType,
-            actorId ? 1 : 0,
-            actorId,
-            targetId ? 1 : 0,
-            targetId,
-            messageDbId,
-            event.data ? serialize(event.data) : null,
-          ]
-        )
-      }, undefined, { ensureConnection: true }),
+            [resolvedConnectionId, chatJid, messageId, eventType, actorId ? 1 : 0, actorId, targetId ? 1 : 0, targetId, messageDbId, event.data ? serialize(event.data) : null]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     recordEvent: async (event) =>
-      safe(async (pool) => {
-        const eventType = normalizeEventType(event.type, MAX_LENGTHS.eventTypeLong)
-        if (!eventType) return
-        const normalizedActor = normalizeJid(event.actorJid)
-        const normalizedTarget = normalizeJid(event.targetJid)
-        let actorId = normalizedActor
-          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null)
-          : null
-        let targetId = normalizedTarget
-          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedTarget }], null)
-          : null
-        const messageKey = event.messageKey ?? null
-        const messageChatJid = normalizeJid(messageKey?.chatJid ?? null)
-        const messageId = normalizeMessageId(messageKey?.messageId ?? null)
-        const messageDbId =
-          messageChatJid && messageId
-            ? await ensureMessageDbId(pool, {
-                chatJid: messageChatJid,
-                messageId,
-                fromMe: messageKey?.fromMe ? 1 : 0,
-              })
-            : null
-        const resolvedChatJid = normalizeJid(event.chatJid ?? messageChatJid ?? event.groupJid ?? null)
-        const resolvedGroupJid = normalizeJid(
-          event.groupJid ??
-            (resolvedChatJid && resolvedChatJid.endsWith('@g.us') ? resolvedChatJid : null)
-        )
-        if (messageDbId && (!targetId || !actorId)) {
-          const senderUserId = await getMessageSenderUserId(pool, messageDbId)
-          const isMessageEvent =
-            eventType.startsWith('messages.') || eventType === 'message-receipt.update'
-          if (senderUserId) {
-            if (!targetId) {
-              targetId = senderUserId
-            }
-            if (!actorId && isMessageEvent) {
-              actorId = senderUserId
+      safe(
+        async (pool) => {
+          const eventType = normalizeEventType(event.type, MAX_LENGTHS.eventTypeLong)
+          if (!eventType) return
+          const normalizedActor = normalizeJid(event.actorJid)
+          const normalizedTarget = normalizeJid(event.targetJid)
+          let actorId = normalizedActor ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null) : null
+          let targetId = normalizedTarget ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedTarget }], null) : null
+          const messageKey = event.messageKey ?? null
+          const messageChatJid = normalizeJid(messageKey?.chatJid ?? null)
+          const messageId = normalizeMessageId(messageKey?.messageId ?? null)
+          const messageDbId =
+            messageChatJid && messageId
+              ? await ensureMessageDbId(pool, {
+                  chatJid: messageChatJid,
+                  messageId,
+                  fromMe: messageKey?.fromMe ? 1 : 0,
+                })
+              : null
+          const resolvedChatJid = normalizeJid(event.chatJid ?? messageChatJid ?? event.groupJid ?? null)
+          const resolvedGroupJid = normalizeJid(event.groupJid ?? (resolvedChatJid && resolvedChatJid.endsWith('@g.us') ? resolvedChatJid : null))
+          if (messageDbId && (!targetId || !actorId)) {
+            const senderUserId = await getMessageSenderUserId(pool, messageDbId)
+            const isMessageEvent = eventType.startsWith('messages.') || eventType === 'message-receipt.update'
+            if (senderUserId) {
+              if (!targetId) {
+                targetId = senderUserId
+              }
+              if (!actorId && isMessageEvent) {
+                actorId = senderUserId
+              }
             }
           }
-        }
-        await pool.execute(
-          `INSERT INTO events_log (
+          await pool.execute(
+            `INSERT INTO events_log (
              connection_id,
              event_type,
              actor_user_id,
@@ -1450,35 +1231,26 @@ export function createSqlStore(connectionId?: string): SqlStore {
              data_json
            )
            VALUES (?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?, ?, ?)`,
-          [
-            resolvedConnectionId,
-            eventType,
-            actorId ? 1 : 0,
-            actorId,
-            targetId ? 1 : 0,
-            targetId,
-            resolvedChatJid,
-            resolvedGroupJid,
-            messageDbId,
-            event.data ? serialize(event.data) : null,
-          ]
-        )
-      }, undefined, { ensureConnection: true }),
+            [resolvedConnectionId, eventType, actorId ? 1 : 0, actorId, targetId ? 1 : 0, targetId, resolvedChatJid, resolvedGroupJid, messageDbId, event.data ? serialize(event.data) : null]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     setBlocklist: async (entry) =>
-      safe(async (pool) => {
-        const jid = normalizeJid(entry.jid)
-        if (!jid) return
-        const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: jid }], null)
-        const normalizedActor = normalizeJid(entry.actorJid)
-        const actorId = normalizedActor
-          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null)
-          : null
-        const reason = normalizeString(entry.reason ?? null, {
-          maxLength: MAX_LENGTHS.reason,
-          truncate: true,
-        })
-        await pool.execute(
-          `INSERT INTO blocklist (
+      safe(
+        async (pool) => {
+          const jid = normalizeJid(entry.jid)
+          if (!jid) return
+          const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: jid }], null)
+          const normalizedActor = normalizeJid(entry.actorJid)
+          const actorId = normalizedActor ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null) : null
+          const reason = normalizeString(entry.reason ?? null, {
+            maxLength: MAX_LENGTHS.reason,
+            truncate: true,
+          })
+          await pool.execute(
+            `INSERT INTO blocklist (
              connection_id,
              user_id,
              actor_user_id,
@@ -1492,33 +1264,24 @@ export function createSqlStore(connectionId?: string): SqlStore {
              actor_user_id = VALUES(actor_user_id),
              is_blocked = VALUES(is_blocked),
              reason = VALUES(reason)`,
-          [
-            resolvedConnectionId,
-            userId ? 1 : 0,
-            userId,
-            actorId ? 1 : 0,
-            actorId,
-            jid,
-            entry.isBlocked ? 1 : 0,
-            reason,
-          ]
-        )
-      }, undefined, { ensureConnection: true }),
+            [resolvedConnectionId, userId ? 1 : 0, userId, actorId ? 1 : 0, actorId, jid, entry.isBlocked ? 1 : 0, reason]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     recordGroupEvent: async (event) =>
-      safe(async (pool) => {
-        const groupJid = normalizeJid(event.groupJid)
-        const eventType = normalizeEventType(event.eventType, MAX_LENGTHS.eventTypeShort)
-        if (!groupJid || !eventType) return
-        const normalizedActor = normalizeJid(event.actorJid)
-        const normalizedTarget = normalizeJid(event.targetJid)
-        const actorId = normalizedActor
-          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null)
-          : null
-        const targetId = normalizedTarget
-          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedTarget }], null)
-          : null
-        await pool.execute(
-          `INSERT INTO group_events (
+      safe(
+        async (pool) => {
+          const groupJid = normalizeJid(event.groupJid)
+          const eventType = normalizeEventType(event.eventType, MAX_LENGTHS.eventTypeShort)
+          if (!groupJid || !eventType) return
+          const normalizedActor = normalizeJid(event.actorJid)
+          const normalizedTarget = normalizeJid(event.targetJid)
+          const actorId = normalizedActor ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null) : null
+          const targetId = normalizedTarget ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedTarget }], null) : null
+          await pool.execute(
+            `INSERT INTO group_events (
              connection_id,
              group_jid,
              event_type,
@@ -1527,33 +1290,26 @@ export function createSqlStore(connectionId?: string): SqlStore {
              data_json
            )
            VALUES (?, ?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?)`,
-          [
-            resolvedConnectionId,
-            groupJid,
-            eventType,
-            actorId ? 1 : 0,
-            actorId,
-            targetId ? 1 : 0,
-            targetId,
-            event.data ? serialize(event.data) : null,
-          ]
-        )
-      }, undefined, { ensureConnection: true }),
+            [resolvedConnectionId, groupJid, eventType, actorId ? 1 : 0, actorId, targetId ? 1 : 0, targetId, event.data ? serialize(event.data) : null]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     recordGroupJoinRequest: async (entry) =>
-      safe(async (pool) => {
-        const groupJid = normalizeJid(entry.groupJid)
-        const userJid = normalizeJid(entry.userJid)
-        const action = normalizeString(entry.action, { maxLength: MAX_LENGTHS.action })
-        const method = normalizeString(entry.method ?? null, { maxLength: MAX_LENGTHS.method })
-        if (!groupJid || !userJid || !action) return
-        const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: userJid }], null)
-        if (!userId) return
-        const normalizedActor = normalizeJid(entry.actorJid)
-        const actorId = normalizedActor
-          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null)
-          : null
-        await pool.execute(
-          `INSERT INTO group_join_requests (
+      safe(
+        async (pool) => {
+          const groupJid = normalizeJid(entry.groupJid)
+          const userJid = normalizeJid(entry.userJid)
+          const action = normalizeString(entry.action, { maxLength: MAX_LENGTHS.action })
+          const method = normalizeString(entry.method ?? null, { maxLength: MAX_LENGTHS.method })
+          if (!groupJid || !userJid || !action) return
+          const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: userJid }], null)
+          if (!userId) return
+          const normalizedActor = normalizeJid(entry.actorJid)
+          const actorId = normalizedActor ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null) : null
+          await pool.execute(
+            `INSERT INTO group_join_requests (
              connection_id,
              group_jid,
              user_id,
@@ -1563,44 +1319,43 @@ export function createSqlStore(connectionId?: string): SqlStore {
              data_json
            )
            VALUES (?, ?, UUID_TO_BIN(?, 1), IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?, ?)`,
-          [
-            resolvedConnectionId,
-            groupJid,
-            userId,
-            actorId ? 1 : 0,
-            actorId,
-            action,
-            method,
-            entry.data ? serialize(entry.data) : null,
-          ]
-        )
-      }, undefined, { ensureConnection: true }),
+            [resolvedConnectionId, groupJid, userId, actorId ? 1 : 0, actorId, action, method, entry.data ? serialize(entry.data) : null]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     recordNewsletter: async (entry) =>
-      safe(async (pool) => {
-        const newsletterId = normalizeString(entry.newsletterId, { maxLength: MAX_LENGTHS.newsletterId })
-        if (!newsletterId) return
-        await pool.execute(
-          `INSERT INTO newsletters (
+      safe(
+        async (pool) => {
+          const newsletterId = normalizeString(entry.newsletterId, { maxLength: MAX_LENGTHS.newsletterId })
+          if (!newsletterId) return
+          await pool.execute(
+            `INSERT INTO newsletters (
              connection_id,
              newsletter_id,
              data_json
            )
            VALUES (?, ?, ?)
            ON DUPLICATE KEY UPDATE data_json = VALUES(data_json)`,
-          [resolvedConnectionId, newsletterId, serialize(entry.data ?? {})]
-        )
-      }, undefined, { ensureConnection: true }),
+            [resolvedConnectionId, newsletterId, serialize(entry.data ?? {})]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     recordNewsletterParticipant: async (entry) =>
-      safe(async (pool) => {
-        const newsletterId = normalizeString(entry.newsletterId, { maxLength: MAX_LENGTHS.newsletterId })
-        const userJid = normalizeJid(entry.userJid)
-        if (!newsletterId || !userJid) return
-        const role = normalizeRole(entry.role ?? null, MAX_LENGTHS.role)
-        const status = normalizeRole(entry.status ?? null, MAX_LENGTHS.role)
-        const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: userJid }], null)
-        if (!userId) return
-        await pool.execute(
-          `INSERT INTO newsletter_participants (
+      safe(
+        async (pool) => {
+          const newsletterId = normalizeString(entry.newsletterId, { maxLength: MAX_LENGTHS.newsletterId })
+          const userJid = normalizeJid(entry.userJid)
+          if (!newsletterId || !userJid) return
+          const role = normalizeRole(entry.role ?? null, MAX_LENGTHS.role)
+          const status = normalizeRole(entry.status ?? null, MAX_LENGTHS.role)
+          const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: userJid }], null)
+          if (!userId) return
+          await pool.execute(
+            `INSERT INTO newsletter_participants (
              connection_id,
              newsletter_id,
              user_id,
@@ -1611,24 +1366,24 @@ export function createSqlStore(connectionId?: string): SqlStore {
            ON DUPLICATE KEY UPDATE
              role = VALUES(role),
              status = VALUES(status)`,
-          [resolvedConnectionId, newsletterId, userId, role, status]
-        )
-      }, undefined, { ensureConnection: true }),
+            [resolvedConnectionId, newsletterId, userId, role, status]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     recordNewsletterEvent: async (event) =>
-      safe(async (pool) => {
-        const newsletterId = normalizeString(event.newsletterId, { maxLength: MAX_LENGTHS.newsletterId })
-        const eventType = normalizeEventType(event.eventType, MAX_LENGTHS.eventTypeShort)
-        if (!newsletterId || !eventType) return
-        const normalizedActor = normalizeJid(event.actorJid)
-        const normalizedTarget = normalizeJid(event.targetJid)
-        const actorId = normalizedActor
-          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null)
-          : null
-        const targetId = normalizedTarget
-          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedTarget }], null)
-          : null
-        await pool.execute(
-          `INSERT INTO newsletter_events (
+      safe(
+        async (pool) => {
+          const newsletterId = normalizeString(event.newsletterId, { maxLength: MAX_LENGTHS.newsletterId })
+          const eventType = normalizeEventType(event.eventType, MAX_LENGTHS.eventTypeShort)
+          if (!newsletterId || !eventType) return
+          const normalizedActor = normalizeJid(event.actorJid)
+          const normalizedTarget = normalizeJid(event.targetJid)
+          const actorId = normalizedActor ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null) : null
+          const targetId = normalizedTarget ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedTarget }], null) : null
+          await pool.execute(
+            `INSERT INTO newsletter_events (
              connection_id,
              newsletter_id,
              event_type,
@@ -1637,37 +1392,28 @@ export function createSqlStore(connectionId?: string): SqlStore {
              data_json
            )
            VALUES (?, ?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?)`,
-          [
-            resolvedConnectionId,
-            newsletterId,
-            eventType,
-            actorId ? 1 : 0,
-            actorId,
-            targetId ? 1 : 0,
-            targetId,
-            event.data ? serialize(event.data) : null,
-          ]
-        )
-      }, undefined, { ensureConnection: true }),
+            [resolvedConnectionId, newsletterId, eventType, actorId ? 1 : 0, actorId, targetId ? 1 : 0, targetId, event.data ? serialize(event.data) : null]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     recordMessageFailure: async (entry) =>
-      safe(async (pool) => {
-        const chatJid = normalizeJid(entry.chatJid)
-        const messageId = normalizeMessageId(entry.messageId ?? null)
-        if (!chatJid) return
-        const normalizedSender = normalizeJid(entry.senderJid)
-        const senderId = normalizedSender
-          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedSender }], null)
-          : null
-        const normalizedActor = normalizeJid(entry.actorJid)
-        const actorId = normalizedActor
-          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null)
-          : null
-        const reason = normalizeString(entry.reason ?? null, {
-          maxLength: MAX_LENGTHS.reason,
-          truncate: true,
-        })
-        await pool.execute(
-          `INSERT INTO message_failures (
+      safe(
+        async (pool) => {
+          const chatJid = normalizeJid(entry.chatJid)
+          const messageId = normalizeMessageId(entry.messageId ?? null)
+          if (!chatJid) return
+          const normalizedSender = normalizeJid(entry.senderJid)
+          const senderId = normalizedSender ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedSender }], null) : null
+          const normalizedActor = normalizeJid(entry.actorJid)
+          const actorId = normalizedActor ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null) : null
+          const reason = normalizeString(entry.reason ?? null, {
+            maxLength: MAX_LENGTHS.reason,
+            truncate: true,
+          })
+          await pool.execute(
+            `INSERT INTO message_failures (
              connection_id,
              chat_jid,
              message_id,
@@ -1677,31 +1423,25 @@ export function createSqlStore(connectionId?: string): SqlStore {
              data_json
            )
            VALUES (?, ?, ?, IF(?, UUID_TO_BIN(?, 1), NULL), IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?)`,
-          [
-            resolvedConnectionId,
-            chatJid,
-            messageId,
-            senderId ? 1 : 0,
-            senderId,
-            actorId ? 1 : 0,
-            actorId,
-            reason,
-            entry.data ? serialize(entry.data) : null,
-          ]
-        )
-      }, undefined, { ensureConnection: true }),
+            [resolvedConnectionId, chatJid, messageId, senderId ? 1 : 0, senderId, actorId ? 1 : 0, actorId, reason, entry.data ? serialize(entry.data) : null]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     recordBotSession: async (entry) =>
-      safe(async (pool) => {
-        const deviceLabel = normalizeString(entry.deviceLabel ?? null, {
-          maxLength: MAX_LENGTHS.displayName,
-          truncate: true,
-        })
-        const platform = normalizeString(entry.platform ?? null, { maxLength: MAX_LENGTHS.platform })
-        const appVersion = normalizeString(entry.appVersion ?? null, {
-          maxLength: MAX_LENGTHS.appVersion,
-        })
-        await pool.execute(
-          `INSERT INTO bot_sessions (
+      safe(
+        async (pool) => {
+          const deviceLabel = normalizeString(entry.deviceLabel ?? null, {
+            maxLength: MAX_LENGTHS.displayName,
+            truncate: true,
+          })
+          const platform = normalizeString(entry.platform ?? null, { maxLength: MAX_LENGTHS.platform })
+          const appVersion = normalizeString(entry.appVersion ?? null, {
+            maxLength: MAX_LENGTHS.appVersion,
+          })
+          await pool.execute(
+            `INSERT INTO bot_sessions (
              connection_id,
              device_label,
              platform,
@@ -1710,31 +1450,23 @@ export function createSqlStore(connectionId?: string): SqlStore {
              data_json
            )
            VALUES (?, ?, ?, ?, ?, ?)`,
-          [
-            resolvedConnectionId,
-            deviceLabel,
-            platform,
-            appVersion,
-            entry.lastLogin ?? null,
-            entry.data ? serialize(entry.data) : null,
-          ]
-        )
-      }, undefined, { ensureConnection: true }),
+            [resolvedConnectionId, deviceLabel, platform, appVersion, entry.lastLogin ?? null, entry.data ? serialize(entry.data) : null]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     recordCommandLog: async (entry) =>
-      safe(async (pool) => {
-        const chatJid = normalizeJid(entry.chatJid)
-        const commandName = normalizeString(entry.commandName, { maxLength: MAX_LENGTHS.commandName })
-        if (!chatJid || !commandName) return
-        const normalizedActor = normalizeJid(entry.actorJid)
-        const actorId = normalizedActor
-          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null)
-          : null
-        const durationMs =
-          typeof entry.durationMs === 'number' && Number.isFinite(entry.durationMs) && entry.durationMs >= 0
-            ? entry.durationMs
-            : null
-        await pool.execute(
-          `INSERT INTO commands_log (
+      safe(
+        async (pool) => {
+          const chatJid = normalizeJid(entry.chatJid)
+          const commandName = normalizeString(entry.commandName, { maxLength: MAX_LENGTHS.commandName })
+          if (!chatJid || !commandName) return
+          const normalizedActor = normalizeJid(entry.actorJid)
+          const actorId = normalizedActor ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null) : null
+          const durationMs = typeof entry.durationMs === 'number' && Number.isFinite(entry.durationMs) && entry.durationMs >= 0 ? entry.durationMs : null
+          await pool.execute(
+            `INSERT INTO commands_log (
              connection_id,
              actor_user_id,
              chat_jid,
@@ -1745,28 +1477,22 @@ export function createSqlStore(connectionId?: string): SqlStore {
              data_json
            )
            VALUES (?, IF(?, UUID_TO_BIN(?, 1), NULL), ?, ?, ?, ?, ?, ?)`,
-          [
-            resolvedConnectionId,
-            actorId ? 1 : 0,
-            actorId,
-            chatJid,
-            commandName,
-            entry.argsText ?? null,
-            entry.success ? 1 : 0,
-            durationMs,
-            entry.data ? serialize(entry.data) : null,
-          ]
-        )
-      }, undefined, { ensureConnection: true }),
+            [resolvedConnectionId, actorId ? 1 : 0, actorId, chatJid, commandName, entry.argsText ?? null, entry.success ? 1 : 0, durationMs, entry.data ? serialize(entry.data) : null]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     setUserDevice: async (entry) =>
-      safe(async (pool) => {
-        const userJid = normalizeJid(entry.userJid)
-        const deviceId = normalizeString(entry.deviceId, { maxLength: MAX_LENGTHS.deviceId })
-        if (!userJid || !deviceId) return
-        const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: userJid }], null)
-        if (!userId) return
-        await pool.execute(
-          `INSERT INTO user_devices (
+      safe(
+        async (pool) => {
+          const userJid = normalizeJid(entry.userJid)
+          const deviceId = normalizeString(entry.deviceId, { maxLength: MAX_LENGTHS.deviceId })
+          if (!userJid || !deviceId) return
+          const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: userJid }], null)
+          if (!userId) return
+          await pool.execute(
+            `INSERT INTO user_devices (
              connection_id,
              user_id,
              device_id,
@@ -1775,19 +1501,23 @@ export function createSqlStore(connectionId?: string): SqlStore {
            VALUES (?, UUID_TO_BIN(?, 1), ?, ?)
            ON DUPLICATE KEY UPDATE
              data_json = VALUES(data_json)`,
-          [resolvedConnectionId, userId, deviceId, entry.data ? serialize(entry.data) : null]
-        )
-      }, undefined, { ensureConnection: true }),
+            [resolvedConnectionId, userId, deviceId, entry.data ? serialize(entry.data) : null]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     setChatUser: async (chatJid, userJid, role) =>
-      safe(async (pool) => {
-        const normalizedChat = normalizeJid(chatJid)
-        const normalizedUser = normalizeJid(userJid)
-        if (!normalizedChat || !normalizedUser) return
-        const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedUser }], null)
-        if (!userId) return
-        const resolvedRole = normalizeRole(role ?? 'member', MAX_LENGTHS.role) ?? 'member'
-        await pool.execute(
-          `INSERT INTO chat_users (
+      safe(
+        async (pool) => {
+          const normalizedChat = normalizeJid(chatJid)
+          const normalizedUser = normalizeJid(userJid)
+          if (!normalizedChat || !normalizedUser) return
+          const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedUser }], null)
+          if (!userId) return
+          const resolvedRole = normalizeRole(role ?? 'member', MAX_LENGTHS.role) ?? 'member'
+          await pool.execute(
+            `INSERT INTO chat_users (
              connection_id,
              chat_jid,
              user_id,
@@ -1796,39 +1526,45 @@ export function createSqlStore(connectionId?: string): SqlStore {
            VALUES (?, ?, UUID_TO_BIN(?, 1), ?)
            ON DUPLICATE KEY UPDATE
              role = VALUES(role)`,
-          [resolvedConnectionId, normalizedChat, userId, resolvedRole]
-        )
-      }, undefined, { ensureConnection: true }),
+            [resolvedConnectionId, normalizedChat, userId, resolvedRole]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     deleteChatUser: async (chatJid, userJid) =>
-      safe(async (pool) => {
-        const normalizedChat = normalizeJid(chatJid)
-        const normalizedUser = normalizeJid(userJid)
-        if (!normalizedChat || !normalizedUser) return
-        const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedUser }], null)
-        if (!userId) return
-        await pool.execute(
-          `DELETE FROM chat_users
+      safe(
+        async (pool) => {
+          const normalizedChat = normalizeJid(chatJid)
+          const normalizedUser = normalizeJid(userJid)
+          if (!normalizedChat || !normalizedUser) return
+          const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedUser }], null)
+          if (!userId) return
+          await pool.execute(
+            `DELETE FROM chat_users
            WHERE connection_id = ?
              AND chat_jid = ?
              AND user_id = UUID_TO_BIN(?, 1)`,
-          [resolvedConnectionId, normalizedChat, userId]
-        )
-      }, undefined, { ensureConnection: true }),
+            [resolvedConnectionId, normalizedChat, userId]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     setLabel: async (label) =>
-      safe(async (pool) => {
-        const labelId = normalizeLabelId(label.id)
-        if (!labelId) return
-        const normalizedActor = normalizeJid(label.actorJid)
-        const actorId = normalizedActor
-          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null)
-          : null
-        const name = normalizeString(label.name ?? null, {
-          maxLength: MAX_LENGTHS.displayName,
-          truncate: true,
-        })
-        const color = normalizeString(label.color ?? null, { maxLength: MAX_LENGTHS.color })
-        await pool.execute(
-          `INSERT INTO labels (
+      safe(
+        async (pool) => {
+          const labelId = normalizeLabelId(label.id)
+          if (!labelId) return
+          const normalizedActor = normalizeJid(label.actorJid)
+          const actorId = normalizedActor ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null) : null
+          const name = normalizeString(label.name ?? null, {
+            maxLength: MAX_LENGTHS.displayName,
+            truncate: true,
+          })
+          const color = normalizeString(label.color ?? null, { maxLength: MAX_LENGTHS.color })
+          await pool.execute(
+            `INSERT INTO labels (
              connection_id,
              label_id,
              actor_user_id,
@@ -1842,42 +1578,36 @@ export function createSqlStore(connectionId?: string): SqlStore {
              name = VALUES(name),
              color = VALUES(color),
              data_json = VALUES(data_json)`,
-          [
-            resolvedConnectionId,
-            labelId,
-            actorId ? 1 : 0,
-            actorId,
-            name,
-            color,
-            label.data ? serialize(label.data) : null,
-          ]
-        )
-      }, undefined, { ensureConnection: true }),
+            [resolvedConnectionId, labelId, actorId ? 1 : 0, actorId, name, color, label.data ? serialize(label.data) : null]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
     setLabelAssociation: async (association) =>
-      safe(async (pool) => {
-        const labelId = normalizeLabelId(association.labelId)
-        if (!labelId) return
-        const normalizedActor = normalizeJid(association.actorJid)
-        const actorId = normalizedActor
-          ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null)
-          : null
-        const normalizedTarget = normalizeJid(association.targetJid ?? null)
-        if (normalizedTarget) {
-          await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedTarget }], null)
-        }
-        const messageChatJid = normalizeJid(association.messageKey?.chatJid ?? null)
-        const messageId = normalizeMessageId(association.messageKey?.messageId ?? null)
-        const messageDbId =
-          messageChatJid && messageId
-            ? await getMessageDbId(pool, {
-                chatJid: messageChatJid,
-                messageId,
-                fromMe: association.messageKey?.fromMe ? 1 : 0,
-              })
-            : null
-        const chatJid = normalizeJid(association.chatJid ?? null)
-        await pool.execute(
-          `INSERT INTO label_associations (
+      safe(
+        async (pool) => {
+          const labelId = normalizeLabelId(association.labelId)
+          if (!labelId) return
+          const normalizedActor = normalizeJid(association.actorJid)
+          const actorId = normalizedActor ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null) : null
+          const normalizedTarget = normalizeJid(association.targetJid ?? null)
+          if (normalizedTarget) {
+            await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedTarget }], null)
+          }
+          const messageChatJid = normalizeJid(association.messageKey?.chatJid ?? null)
+          const messageId = normalizeMessageId(association.messageKey?.messageId ?? null)
+          const messageDbId =
+            messageChatJid && messageId
+              ? await getMessageDbId(pool, {
+                  chatJid: messageChatJid,
+                  messageId,
+                  fromMe: association.messageKey?.fromMe ? 1 : 0,
+                })
+              : null
+          const chatJid = normalizeJid(association.chatJid ?? null)
+          await pool.execute(
+            `INSERT INTO label_associations (
              connection_id,
              label_id,
              actor_user_id,
@@ -1894,18 +1624,11 @@ export function createSqlStore(connectionId?: string): SqlStore {
              message_db_id = VALUES(message_db_id),
              target_jid = VALUES(target_jid),
              data_json = VALUES(data_json)`,
-          [
-            resolvedConnectionId,
-            labelId,
-            actorId ? 1 : 0,
-            actorId,
-            association.associationType,
-            chatJid,
-            messageDbId,
-            normalizedTarget,
-            association.data ? serialize(association.data) : null,
-          ]
-        )
-      }, undefined, { ensureConnection: true }),
+            [resolvedConnectionId, labelId, actorId ? 1 : 0, actorId, association.associationType, chatJid, messageDbId, normalizedTarget, association.data ? serialize(association.data) : null]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
   }
 }

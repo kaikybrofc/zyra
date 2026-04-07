@@ -1,10 +1,4 @@
-import {
-  type AuthenticationCreds,
-  type AuthenticationState,
-  type SignalDataSet,
-  type SignalDataTypeMap,
-  type SignalKeyStore,
-} from '@whiskeysockets/baileys'
+import { type AuthenticationCreds, type AuthenticationState, type SignalDataSet, type SignalDataTypeMap, type SignalKeyStore } from '@whiskeysockets/baileys'
 import type { RowDataPacket } from 'mysql2/promise'
 import { config } from '../../config/index.js'
 import { ensureMysqlConnection } from '../db/connection.js'
@@ -12,15 +6,7 @@ import { getMysqlPool } from '../db/mysql.js'
 import { getRedisClient } from '../redis/client.js'
 import { getLegacyRedisNamespace, getRedisNamespace } from '../redis/prefix.js'
 import { selectBestCreds } from './creds-utils.js'
-import {
-  deleteData,
-  deserialize,
-  ensureAuthFolder,
-  normalizeKeyValue,
-  readData,
-  serialize,
-  writeData,
-} from './storage-utils.js'
+import { deleteData, deserialize, ensureAuthFolder, normalizeKeyValue, readData, serialize, writeData } from './storage-utils.js'
 
 /**
  * Representa o estado de autenticação multicamadas com foco em persistência SQL.
@@ -51,14 +37,8 @@ type MysqlAuthState = {
 
 let mysqlUnavailableLogged = false
 
-const MYSQL_SIGNAL_KEYS_CHUNK_SIZE = Math.max(
-  1,
-  Number(process.env.WA_SIGNAL_KEYS_CHUNK ?? 500)
-)
-const DISK_READ_CONCURRENCY = Math.max(
-  1,
-  Number(process.env.WA_AUTH_DISK_CONCURRENCY ?? 50)
-)
+const MYSQL_SIGNAL_KEYS_CHUNK_SIZE = Math.max(1, Number(process.env.WA_SIGNAL_KEYS_CHUNK ?? 500))
+const DISK_READ_CONCURRENCY = Math.max(1, Number(process.env.WA_AUTH_DISK_CONCURRENCY ?? 50))
 
 const chunkArray = <T>(items: T[], size: number): T[][] => {
   const chunks: T[][] = []
@@ -68,11 +48,7 @@ const chunkArray = <T>(items: T[], size: number): T[][] => {
   return chunks
 }
 
-const runWithConcurrency = async <T>(
-  items: T[],
-  concurrency: number,
-  handler: (item: T) => Promise<void>
-) => {
+const runWithConcurrency = async <T>(items: T[], concurrency: number, handler: (item: T) => Promise<void>) => {
   let index = 0
   const workers = new Array(Math.min(concurrency, items.length)).fill(null).map(async () => {
     while (index < items.length) {
@@ -95,8 +71,7 @@ const buildRedisKeys = (connectionId?: string) => {
     redisCredsKey: `${redisKeyPrefix}:creds`,
     legacyRedisCredsKey: legacyRedisKeyPrefix ? `${legacyRedisKeyPrefix}:creds` : null,
     redisKeysKey: (type: string) => `${redisKeyPrefix}:keys:${type}`,
-    legacyRedisKeysKey: (type: string) =>
-      legacyRedisKeyPrefix ? `${legacyRedisKeyPrefix}:keys:${type}` : null,
+    legacyRedisKeysKey: (type: string) => (legacyRedisKeyPrefix ? `${legacyRedisKeyPrefix}:keys:${type}` : null),
   }
 }
 
@@ -124,7 +99,7 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
   let lastMysqlFailureAt = 0
   const mysqlRetryIntervalMs = Math.max(0, config.mysqlRetryIntervalMs)
   const persistKeysOnDisk = config.authPersistKeysOnDisk
-  
+
   if (!pool && !mysqlUnavailableLogged) {
     mysqlUnavailableLogged = true
     console.warn('[auth] mysql indisponivel, usando redis/disco como fallback')
@@ -164,10 +139,7 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
    * @internal
    */
   type MysqlPool = NonNullable<ReturnType<typeof getMysqlPool>>
-  const withMysql = async <T>(
-    fn: (client: MysqlPool) => Promise<T>,
-    fallback: T
-  ): Promise<T> => {
+  const withMysql = async <T>(fn: (client: MysqlPool) => Promise<T>, fallback: T): Promise<T> => {
     if (!pool) return fallback
     if (!mysqlHealthy && Date.now() - lastMysqlFailureAt < mysqlRetryIntervalMs) return fallback
     try {
@@ -183,10 +155,7 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
   const fetchCredsFromMysql = async (): Promise<AuthenticationCreds | null> =>
     withMysql(async (client) => {
       type CredsRow = RowDataPacket & { creds_json: unknown }
-      const [rows] = await client.execute<CredsRow[]>(
-        `SELECT creds_json FROM auth_creds WHERE connection_id = ? LIMIT 1`,
-        [resolvedConnectionId]
-      )
+      const [rows] = await client.execute<CredsRow[]>(`SELECT creds_json FROM auth_creds WHERE connection_id = ? LIMIT 1`, [resolvedConnectionId])
       const row = rows[0]
       return row ? deserialize<AuthenticationCreds>(row.creds_json) : null
     }, null)
@@ -206,15 +175,10 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
   // --- Recuperação das Credenciais ---
   const credsFromMysql = await fetchCredsFromMysql()
   const credsFromRedisRaw = redisClient ? await redisClient.get(redisCredsKey) : null
-  const credsFromLegacyRaw =
-    redisClient && legacyRedisCredsKey ? await redisClient.get(legacyRedisCredsKey) : null
-  
-  const credsFromRedis = credsFromRedisRaw
-    ? deserialize<AuthenticationCreds>(credsFromRedisRaw)
-    : credsFromLegacyRaw
-      ? deserialize<AuthenticationCreds>(credsFromLegacyRaw)
-      : null
-      
+  const credsFromLegacyRaw = redisClient && legacyRedisCredsKey ? await redisClient.get(legacyRedisCredsKey) : null
+
+  const credsFromRedis = credsFromRedisRaw ? deserialize<AuthenticationCreds>(credsFromRedisRaw) : credsFromLegacyRaw ? deserialize<AuthenticationCreds>(credsFromLegacyRaw) : null
+
   const credsFromDisk = await readData<AuthenticationCreds>(config.authDir, 'creds.json')
 
   const selection = selectBestCreds(
@@ -272,17 +236,14 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
         const idsToFetch = Array.from(remaining)
         const placeholders = idsToFetch.map(() => '?').join(', ')
         type KeyRow = RowDataPacket & { key_id: string; value_json: unknown }
-        const rows = await withMysql<KeyRow[] | null>(
-          async (client) => {
-            const [mysqlRows] = await client.execute<KeyRow[]>(
-              `SELECT key_id, value_json FROM signal_keys 
+        const rows = await withMysql<KeyRow[] | null>(async (client) => {
+          const [mysqlRows] = await client.execute<KeyRow[]>(
+            `SELECT key_id, value_json FROM signal_keys 
                WHERE connection_id = ? AND key_type = ? AND key_id IN (${placeholders})`,
-              [resolvedConnectionId, type, ...idsToFetch]
-            )
-            return mysqlRows
-          },
-          null
-        )
+            [resolvedConnectionId, type, ...idsToFetch]
+          )
+          return mysqlRows
+        }, null)
 
         if (rows) {
           for (const row of rows) {
@@ -301,26 +262,20 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
       if (remaining.size) {
         const remainingIds = Array.from(remaining)
         await runWithConcurrency(remainingIds, DISK_READ_CONCURRENCY, async (id) => {
-            const diskValue = await readData<SignalDataTypeMap[typeof type]>(
-              config.authDir,
-              `${type}-${id}.json`
-            )
-            if (diskValue) {
-              const normalized = normalizeKeyValue(type, diskValue)
-              if (normalized) data[id] = normalized
-              toWarm[id] = serialize(diskValue)
+          const diskValue = await readData<SignalDataTypeMap[typeof type]>(config.authDir, `${type}-${id}.json`)
+          if (diskValue) {
+            const normalized = normalizeKeyValue(type, diskValue)
+            if (normalized) data[id] = normalized
+            toWarm[id] = serialize(diskValue)
 
-              await withMysql(
-                async (client) => {
-                  await client.execute(
-                    `INSERT INTO signal_keys (connection_id, key_type, key_id, value_json)
+            await withMysql(async (client) => {
+              await client.execute(
+                `INSERT INTO signal_keys (connection_id, key_type, key_id, value_json)
                      VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE value_json = VALUES(value_json)`,
-                    [resolvedConnectionId, type, id, serialize(diskValue)]
-                  )
-                },
-                undefined
+                [resolvedConnectionId, type, id, serialize(diskValue)]
               )
-            }
+            }, undefined)
+          }
         })
       }
 
@@ -352,12 +307,7 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
           const chunks = chunkArray(toSet, MYSQL_SIGNAL_KEYS_CHUNK_SIZE)
           for (const chunk of chunks) {
             const values = chunk.map(() => '(?, ?, ?, ?)').join(', ')
-            const params = chunk.flatMap((entry) => [
-              resolvedConnectionId,
-              category,
-              entry.id,
-              entry.value,
-            ])
+            const params = chunk.flatMap((entry) => [resolvedConnectionId, category, entry.id, entry.value])
             await withMysql(async (client) => {
               await client.execute(
                 `INSERT INTO signal_keys (connection_id, key_type, key_id, value_json)
@@ -366,7 +316,7 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
               )
             }, undefined)
           }
-          
+
           if (redisPipeline) {
             const payload: Record<string, string> = {}
             for (const entry of toSet) payload[entry.id] = entry.value
@@ -379,10 +329,7 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
           for (const chunk of chunks) {
             const placeholders = chunk.map(() => '?').join(', ')
             await withMysql(async (client) => {
-              await client.execute(
-                `DELETE FROM signal_keys WHERE connection_id = ? AND key_type = ? AND key_id IN (${placeholders})`,
-                [resolvedConnectionId, category, ...chunk]
-              )
+              await client.execute(`DELETE FROM signal_keys WHERE connection_id = ? AND key_type = ? AND key_id IN (${placeholders})`, [resolvedConnectionId, category, ...chunk])
             }, undefined)
           }
           if (redisPipeline) redisPipeline.hDel(redisKeysKey(category), toDelete)
@@ -391,9 +338,7 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
         if (persistKeysOnDisk) {
           const diskOperations: Array<() => Promise<void>> = []
           for (const entry of toSet) {
-            diskOperations.push(() =>
-              writeData(config.authDir, `${category}-${entry.id}.json`, entry.raw)
-            )
+            diskOperations.push(() => writeData(config.authDir, `${category}-${entry.id}.json`, entry.raw))
           }
           for (const id of toDelete) {
             diskOperations.push(() => deleteData(config.authDir, `${category}-${id}.json`))

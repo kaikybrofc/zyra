@@ -13,8 +13,7 @@ const ANSI_GREEN = '\x1b[32m'
 const ANSI_MAGENTA = '\x1b[35m'
 const ANSI_GRAY = '\x1b[90m'
 
-const colorize = (value: string, color: string): string =>
-  process.stdout.isTTY ? `${color}${value}${ANSI_RESET}` : value
+const colorize = (value: string, color: string): string => (process.stdout.isTTY ? `${color}${value}${ANSI_RESET}` : value)
 
 let defaultSqlStore: SqlStore | null = null
 
@@ -36,10 +35,7 @@ export type IncomingMessageContext = {
   commandArgs: string[]
 }
 
-const buildContext = (
-  sock: WASocket,
-  message: proto.IWebMessageInfo
-): IncomingMessageContext | null => {
+const buildContext = (sock: WASocket, message: proto.IWebMessageInfo): IncomingMessageContext | null => {
   if (!message.message) return null
   const messageKey = message.key
   if (!messageKey) return null
@@ -51,9 +47,7 @@ const buildContext = (
   const text = getMessageText(message)
   const trimmed = text?.trim() ?? ''
   const isCommand = trimmed.startsWith(COMMAND_PREFIX)
-  const [commandName, ...commandArgs] = isCommand
-    ? trimmed.slice(COMMAND_PREFIX.length).split(/\s+/)
-    : []
+  const [commandName, ...commandArgs] = isCommand ? trimmed.slice(COMMAND_PREFIX.length).split(/\s+/) : []
 
   return {
     sock,
@@ -66,65 +60,26 @@ const buildContext = (
   }
 }
 
-const processIncomingMessage = async (
-  context: IncomingMessageContext,
-  logger: AppLogger
-): Promise<void> => {
+const processIncomingMessage = async (context: IncomingMessageContext, logger: AppLogger): Promise<void> => {
   const { type: messageType } = getNormalizedMessage(context.message)
-  const mediaTypes = new Set([
-    'imageMessage',
-    'videoMessage',
-    'audioMessage',
-    'documentMessage',
-    'stickerMessage',
-    'ptvMessage',
-    'contactMessage',
-    'contactsArrayMessage',
-    'locationMessage',
-    'liveLocationMessage',
-  ])
+  const mediaTypes = new Set(['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage', 'ptvMessage', 'contactMessage', 'contactsArrayMessage', 'locationMessage', 'liveLocationMessage'])
 
   const messageKey = context.message.key
   const sender = messageKey?.participant ?? messageKey?.remoteJid ?? null
   const rawTimestamp = context.message.messageTimestamp
-  const timestampSeconds =
-    typeof rawTimestamp === 'number'
-      ? rawTimestamp
-      : typeof (rawTimestamp as { toNumber?: () => number } | null)?.toNumber === 'function'
-        ? (rawTimestamp as { toNumber: () => number }).toNumber()
-        : rawTimestamp
-          ? Number(rawTimestamp)
-          : null
+  const timestampSeconds = typeof rawTimestamp === 'number' ? rawTimestamp : typeof (rawTimestamp as { toNumber?: () => number } | null)?.toNumber === 'function' ? (rawTimestamp as { toNumber: () => number }).toNumber() : rawTimestamp ? Number(rawTimestamp) : null
   const timestampMs = timestampSeconds ? timestampSeconds * 1000 : null
   const timestampIso = timestampMs ? new Date(timestampMs).toISOString() : null
   const rawText = context.text?.trim()
-  const text =
-    rawText && rawText.length > 200 ? `${rawText.slice(0, 200)}...` : rawText ?? null
+  const text = rawText && rawText.length > 200 ? `${rawText.slice(0, 200)}...` : (rawText ?? null)
   const compactText = text ? text.replace(/\s+/g, ' ').trim() : null
   const hasMedia = messageType ? mediaTypes.has(messageType) : false
-  const logParts = [
-    `chatId=${context.chatId}`,
-    `messageId=${messageKey?.id ?? ''}`,
-    `fromMe=${messageKey?.fromMe ?? ''}`,
-    `sender=${sender ?? ''}`,
-    `pushName=${context.message.pushName ?? ''}`,
-    `isGroup=${context.chatId.endsWith('@g.us')}`,
-    `messageType=${messageType ? colorize(messageType, ANSI_MAGENTA) : ''}`,
-    `hasMedia=${hasMedia}`,
-    `text=${compactText ? JSON.stringify(compactText) : ''}`,
-    `isCommand=${colorize(String(context.isCommand), context.isCommand ? ANSI_GREEN : ANSI_GRAY)}`,
-    `commandName=${context.commandName ? colorize(context.commandName, ANSI_CYAN) : ''}`,
-    `timestamp=${timestampIso ?? ''}`,
-  ]
+  const logParts = [`chatId=${context.chatId}`, `messageId=${messageKey?.id ?? ''}`, `fromMe=${messageKey?.fromMe ?? ''}`, `sender=${sender ?? ''}`, `pushName=${context.message.pushName ?? ''}`, `isGroup=${context.chatId.endsWith('@g.us')}`, `messageType=${messageType ? colorize(messageType, ANSI_MAGENTA) : ''}`, `hasMedia=${hasMedia}`, `text=${compactText ? JSON.stringify(compactText) : ''}`, `isCommand=${colorize(String(context.isCommand), context.isCommand ? ANSI_GREEN : ANSI_GRAY)}`, `commandName=${context.commandName ? colorize(context.commandName, ANSI_CYAN) : ''}`, `timestamp=${timestampIso ?? ''}`]
   const title = colorize('mensagem recebida', `${ANSI_BOLD}${ANSI_CYAN}`)
   logger.info(`\n\n${title} | ${logParts.join(' ')}`)
 }
 
-const handleCommand = async (
-  context: IncomingMessageContext,
-  logger: AppLogger,
-  sqlStore: SqlStore
-) => {
+const handleCommand = async (context: IncomingMessageContext, logger: AppLogger, sqlStore: SqlStore) => {
   if (!context.isCommand || !context.commandName) return
 
   const command = commands[context.commandName.toLowerCase()]
@@ -147,12 +102,8 @@ const handleCommand = async (
   } finally {
     if (sqlStore.enabled) {
       const messageKey = context.message.key
-      const selfJid =
-        messageKey?.fromMe ? (context.sock.user?.id ?? null) : null
-      const actorJid =
-        selfJid ??
-        messageKey?.participant ??
-        (!context.chatId.endsWith('@g.us') ? context.chatId : null)
+      const selfJid = messageKey?.fromMe ? (context.sock.user?.id ?? null) : null
+      const actorJid = selfJid ?? messageKey?.participant ?? (!context.chatId.endsWith('@g.us') ? context.chatId : null)
       const durationMs = Date.now() - startedAt
       void sqlStore.recordCommandLog({
         actorJid,
@@ -171,12 +122,7 @@ const handleCommand = async (
  * Processa mensagens recebidas e executa comandos quando aplicavel.
  * Permite injetar a store SQL para multi-tenant.
  */
-export async function handleIncomingMessages(
-  sock: WASocket,
-  messages: proto.IWebMessageInfo[],
-  logger: AppLogger,
-  sqlStore?: SqlStore
-): Promise<void> {
+export async function handleIncomingMessages(sock: WASocket, messages: proto.IWebMessageInfo[], logger: AppLogger, sqlStore?: SqlStore): Promise<void> {
   const resolvedSqlStore = resolveSqlStore(sqlStore)
   if (!messages.length) {
     logger.info('messages.upsert sem mensagens')

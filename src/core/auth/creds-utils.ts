@@ -19,7 +19,7 @@ type CredsCandidate = {
  * Objeto resultante da avaliação de saúde e integridade de uma sessão.
  */
 type CredsScore = {
-  /** * Pontuação total de integridade. 
+  /** * Pontuação total de integridade.
    * Valores maiores indicam sessões mais completas. Score -1 indica falha total.
    */
   score: number
@@ -30,8 +30,7 @@ type CredsScore = {
 // --- Validações Internas ---
 
 /** @internal */
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
 
 /** @internal */
 const isBinary = (value: unknown): value is Uint8Array => value instanceof Uint8Array
@@ -40,19 +39,13 @@ const isBinary = (value: unknown): value is Uint8Array => value instanceof Uint8
 const hasBinaryData = (value: unknown): boolean => isBinary(value) && value.length > 0
 
 /** @internal */
-const isKeyPair = (value: unknown): boolean =>
-  isRecord(value) && hasBinaryData(value.public) && hasBinaryData(value.private)
+const isKeyPair = (value: unknown): boolean => isRecord(value) && hasBinaryData(value.public) && hasBinaryData(value.private)
 
 /** @internal */
-const isSignedPreKey = (value: unknown): boolean =>
-  isRecord(value) &&
-  isRecord(value.keyPair) &&
-  isKeyPair(value.keyPair) &&
-  hasBinaryData(value.signature)
+const isSignedPreKey = (value: unknown): boolean => isRecord(value) && isRecord(value.keyPair) && isKeyPair(value.keyPair) && hasBinaryData(value.signature)
 
 /** @internal */
-const isNumber = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isFinite(value)
+const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
 
 /** @internal */
 const isNonNegativeNumber = (value: unknown): boolean => isNumber(value) && value >= 0
@@ -61,8 +54,7 @@ const isNonNegativeNumber = (value: unknown): boolean => isNumber(value) && valu
 const isBoolean = (value: unknown): boolean => typeof value === 'boolean'
 
 /** @internal */
-const isNonEmptyString = (value: unknown): boolean =>
-  typeof value === 'string' && value.trim().length > 0
+const isNonEmptyString = (value: unknown): boolean => typeof value === 'string' && value.trim().length > 0
 
 /** @internal */
 const isArray = (value: unknown): boolean => Array.isArray(value)
@@ -71,8 +63,7 @@ const isArray = (value: unknown): boolean => Array.isArray(value)
 const isObject = (value: unknown): boolean => isRecord(value)
 
 /** @internal */
-const hasId = (value: unknown): boolean =>
-  isRecord(value) && isNonEmptyString((value as { id?: unknown }).id)
+const hasId = (value: unknown): boolean => isRecord(value) && isNonEmptyString((value as { id?: unknown }).id)
 
 type CredsCheck = {
   key: string
@@ -81,8 +72,7 @@ type CredsCheck = {
   shouldCheck?: (creds: AuthenticationCreds) => boolean
 }
 
-const shouldRequireAdvSecretKey = (creds: AuthenticationCreds): boolean =>
-  isObject((creds as Record<string, unknown>).account)
+const shouldRequireAdvSecretKey = (creds: AuthenticationCreds): boolean => isObject((creds as Record<string, unknown>).account)
 
 /**
  * Definição de campos cujo preenchimento correto é obrigatório para o funcionamento do socket.
@@ -137,12 +127,8 @@ export const normalizeCreds = (input: AuthenticationCreds | null | undefined): A
     pairingEphemeralKeyPair: creds.pairingEphemeralKeyPair ?? base.pairingEphemeralKeyPair,
     signedIdentityKey: creds.signedIdentityKey ?? base.signedIdentityKey,
     signedPreKey: creds.signedPreKey ?? base.signedPreKey,
-    processedHistoryMessages: Array.isArray(creds.processedHistoryMessages)
-      ? creds.processedHistoryMessages
-      : base.processedHistoryMessages,
-    signalIdentities: Array.isArray(creds.signalIdentities)
-      ? creds.signalIdentities
-      : base.signalIdentities,
+    processedHistoryMessages: Array.isArray(creds.processedHistoryMessages) ? creds.processedHistoryMessages : base.processedHistoryMessages,
+    signalIdentities: Array.isArray(creds.signalIdentities) ? creds.signalIdentities : base.signalIdentities,
     accountSettings: {
       ...base.accountSettings,
       ...(creds.accountSettings ?? {}),
@@ -204,10 +190,7 @@ export const scoreCreds = (creds: AuthenticationCreds | null | undefined): Creds
  * @param priority - Lista de fontes em ordem decrescente de confiabilidade manual.
  * @returns O melhor objeto {@link AuthenticationCreds} e metadados sobre a escolha.
  */
-export const selectBestCreds = (
-  candidates: CredsCandidate[],
-  priority: CredsSource[]
-): { creds: AuthenticationCreds; meta: { source: string; score: number; missingCritical: string[] } } => {
+export const selectBestCreds = (candidates: CredsCandidate[], priority: CredsSource[]): { creds: AuthenticationCreds; meta: { source: string; score: number; missingCritical: string[] } } => {
   const scored = candidates.map((candidate) => {
     const { score, missingCritical } = scoreCreds(candidate.creds)
     const priorityIndex = priority.indexOf(candidate.source)

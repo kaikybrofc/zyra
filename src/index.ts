@@ -23,25 +23,17 @@ const validateEnvironment = (): ValidationResult => {
     if (!raw) return
     const normalized = raw.trim().toLowerCase()
     if (!BOOLEAN_VALUES.has(normalized)) {
-      warnings.push(
-        `${key} deve ser "true" ou "false" (valor atual: "${raw}").`
-      )
+      warnings.push(`${key} deve ser "true" ou "false" (valor atual: "${raw}").`)
     }
   }
 
-  const ensureUrl = (
-    key: string,
-    value: string | undefined,
-    options: { requireDatabase?: boolean; allowedProtocols?: string[] } = {}
-  ) => {
+  const ensureUrl = (key: string, value: string | undefined, options: { requireDatabase?: boolean; allowedProtocols?: string[] } = {}) => {
     if (!value) return
     try {
       const url = new URL(value)
       const allowed = options.allowedProtocols ?? []
       if (allowed.length && !allowed.includes(url.protocol)) {
-        errors.push(
-          `${key} deve utilizar o protocolo ${allowed.join(' ou ')} (valor atual: "${value}").`
-        )
+        errors.push(`${key} deve utilizar o protocolo ${allowed.join(' ou ')} (valor atual: "${value}").`)
       }
       if (options.requireDatabase) {
         const dbName = url.pathname.replace(/^\//, '').trim()
@@ -59,11 +51,7 @@ const validateEnvironment = (): ValidationResult => {
   }
 
   if (!LOG_LEVELS.has(config.logLevel)) {
-    warnings.push(
-      `LOG_LEVEL inválido ("${config.logLevel}"). Valores aceitos: ${[
-        ...LOG_LEVELS,
-      ].join(', ')}.`
-    )
+    warnings.push(`LOG_LEVEL inválido ("${config.logLevel}"). Valores aceitos: ${[...LOG_LEVELS].join(', ')}.`)
   }
 
   ensureBoolean('WA_PRINT_QR')

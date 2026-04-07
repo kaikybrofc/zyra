@@ -20,9 +20,7 @@ const mockConfig = {
 }
 
 vi.mock('@whiskeysockets/baileys', async () => {
-  const actual = await vi.importActual<typeof import('@whiskeysockets/baileys')>(
-    '@whiskeysockets/baileys'
-  )
+  const actual = await vi.importActual<typeof import('@whiskeysockets/baileys')>('@whiskeysockets/baileys')
   return {
     ...actual,
     default: (...args: unknown[]) => makeWASocketMock(...args),
@@ -42,8 +40,7 @@ vi.mock('../src/core/auth/state.js', () => ({
   getAuthState: (...args: unknown[]) => getAuthStateMock(...args),
 }))
 vi.mock('../src/core/connection/history-sync.js', () => ({
-  allowHistorySyncOnceForNewLogin: (...args: unknown[]) =>
-    allowHistorySyncOnceForNewLoginMock(...args),
+  allowHistorySyncOnceForNewLogin: (...args: unknown[]) => allowHistorySyncOnceForNewLoginMock(...args),
   initHistorySyncPolicy: (...args: unknown[]) => initHistorySyncPolicyMock(...args),
   shouldSyncHistoryMessageOnce: (...args: unknown[]) => shouldSyncHistoryMessageOnceMock(...args),
 }))
@@ -127,10 +124,7 @@ describe('socket', () => {
       lastDisconnect: { error: { output: { statusCode: DisconnectReason.loggedOut } } },
     })
     expect(store.setSelfJid).toHaveBeenCalledWith(null)
-    expect(logger.error).toHaveBeenCalledWith(
-      'sessao invalidada/removida, requer re-pareamento',
-      { connectionId: 'conn' }
-    )
+    expect(logger.error).toHaveBeenCalledWith('sessao invalidada/removida, requer re-pareamento', { connectionId: 'conn' })
 
     ev.emit('creds.update')
     await Promise.resolve()
@@ -206,10 +200,7 @@ describe('socket', () => {
     await createSocket('conn', logger)
 
     expect(store.bindLidMappingStore).not.toHaveBeenCalled()
-    expect(logger.warn).toHaveBeenCalledWith(
-      'falha ao buscar a última versão do Baileys, usando fallback',
-      { err: versionError }
-    )
+    expect(logger.warn).toHaveBeenCalledWith('falha ao buscar a última versão do Baileys, usando fallback', { err: versionError })
 
     ev.emit('creds.update')
     await Promise.resolve()

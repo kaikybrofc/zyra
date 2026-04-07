@@ -1,11 +1,4 @@
-import {
-  BufferJSON,
-  type Chat,
-  type Contact,
-  type GroupMetadata,
-  type LIDMapping,
-  type WAMessage,
-} from '@whiskeysockets/baileys'
+import { BufferJSON, type Chat, type Contact, type GroupMetadata, type LIDMapping, type WAMessage } from '@whiskeysockets/baileys'
 import { config } from '../config/index.js'
 import { getRedisClient } from '../core/redis/client.js'
 import { getRedisNamespace } from '../core/redis/prefix.js'
@@ -63,10 +56,7 @@ export function createRedisStore(connectionId?: string): RedisStore {
     pnByLid: `${storePrefix}:lid:lid`,
   }
 
-  const safe = async <T>(
-    fn: (client: Awaited<ReturnType<typeof getRedisClient>>) => Promise<T>,
-    fallback: T
-  ): Promise<T> => {
+  const safe = async <T>(fn: (client: Awaited<ReturnType<typeof getRedisClient>>) => Promise<T>, fallback: T): Promise<T> => {
     try {
       const client = await getRedisClient()
       return await fn(client)

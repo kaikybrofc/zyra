@@ -13,48 +13,13 @@ type RegisterOptions = {
   connectionId: string
 }
 
-const ALL_EVENTS = [
-  'connection.update',
-  'creds.update',
-  'messaging-history.set',
-  'chats.upsert',
-  'chats.update',
-  'lid-mapping.update',
-  'chats.delete',
-  'presence.update',
-  'contacts.upsert',
-  'contacts.update',
-  'messages.delete',
-  'messages.update',
-  'messages.media-update',
-  'messages.upsert',
-  'messages.reaction',
-  'message-receipt.update',
-  'groups.upsert',
-  'groups.update',
-  'group-participants.update',
-  'group.join-request',
-  'group.member-tag.update',
-  'blocklist.set',
-  'blocklist.update',
-  'call',
-  'labels.edit',
-  'labels.association',
-  'newsletter.reaction',
-  'newsletter.view',
-  'newsletter-participants.update',
-  'newsletter-settings.update',
-  'chats.lock',
-  'settings.update',
-] as const satisfies readonly (keyof BaileysEventMap)[]
+const ALL_EVENTS = ['connection.update', 'creds.update', 'messaging-history.set', 'chats.upsert', 'chats.update', 'lid-mapping.update', 'chats.delete', 'presence.update', 'contacts.upsert', 'contacts.update', 'messages.delete', 'messages.update', 'messages.media-update', 'messages.upsert', 'messages.reaction', 'message-receipt.update', 'groups.upsert', 'groups.update', 'group-participants.update', 'group.join-request', 'group.member-tag.update', 'blocklist.set', 'blocklist.update', 'call', 'labels.edit', 'labels.association', 'newsletter.reaction', 'newsletter.view', 'newsletter-participants.update', 'newsletter-settings.update', 'chats.lock', 'settings.update'] as const satisfies readonly (keyof BaileysEventMap)[]
 
 type MissingEvents = Exclude<keyof BaileysEventMap, (typeof ALL_EVENTS)[number]>
 const _allEventsCovered: MissingEvents extends never ? true : never = true
 void _allEventsCovered
 
-type EventHandler<K extends keyof BaileysEventMap> = (
-  data: BaileysEventMap[K]
-) => void | Promise<void>
+type EventHandler<K extends keyof BaileysEventMap> = (data: BaileysEventMap[K]) => void | Promise<void>
 
 /**
  * Registra os listeners de eventos do Baileys e integra persistencia/logs por connection_id.
@@ -69,33 +34,20 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
     groupJid?: string | null
     messageKey?: { chatJid: string; messageId: string; fromMe: boolean } | null
   }
-  const recordEvent = (
-    event: keyof BaileysEventMap,
-    meta: Record<string, unknown>,
-    context?: EventContext
-  ) => {
+  const recordEvent = (event: keyof BaileysEventMap, meta: Record<string, unknown>, context?: EventContext) => {
     if (!sqlStore.enabled) return
     void sqlStore.recordEvent({ type: String(event), data: meta, ...context })
   }
-  const logEvent = (
-    event: keyof BaileysEventMap,
-    meta: Record<string, unknown>,
-    context?: EventContext
-  ) => {
+  const logEvent = (event: keyof BaileysEventMap, meta: Record<string, unknown>, context?: EventContext) => {
     logger.debug('evento do Baileys recebido', { event, ...meta })
     recordEvent(event, meta, context)
   }
   const resolveSelfJid = () => sock.user?.id ?? null
-  const toEventMessageKey = (key?: {
-    remoteJid?: string | null
-    id?: string | null
-    fromMe?: boolean | null
-  }) => {
+  const toEventMessageKey = (key?: { remoteJid?: string | null; id?: string | null; fromMe?: boolean | null }) => {
     if (!key?.remoteJid || !key.id) return null
     return { chatJid: key.remoteJid, messageId: key.id, fromMe: Boolean(key.fromMe) }
   }
-  const toGroupJid = (jid?: string | null) =>
-    jid && jid.endsWith('@g.us') ? jid : null
+  const toGroupJid = (jid?: string | null) => (jid && jid.endsWith('@g.us') ? jid : null)
 
   const syncGroupsOnConnect = async (): Promise<GroupMetadata[]> => {
     try {
@@ -133,11 +85,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
         logger.info('comunidades sincronizadas', { count: communities.length })
       } else {
         const communityGroups = groupsSnapshot.filter((group) => group.isCommunity)
-        const linkedParents = new Set(
-          groupsSnapshot
-            .map((group) => group.linkedParent)
-            .filter((jid): jid is string => Boolean(jid))
-        )
+        const linkedParents = new Set(groupsSnapshot.map((group) => group.linkedParent).filter((jid): jid is string => Boolean(jid)))
         if (communityGroups.length || linkedParents.size) {
           logger.info('comunidades detectadas via grupos', {
             communities: communityGroups.length,
@@ -168,12 +116,16 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
         hasLastDisconnect: Boolean(lastDisconnect),
       })
 
-      logEvent('connection.update', {
-        connection,
-        hasQr: Boolean(qr),
-        receivedPendingNotifications,
-        isNewLogin,
-      }, { actorJid: resolveSelfJid() })
+      logEvent(
+        'connection.update',
+        {
+          connection,
+          hasQr: Boolean(qr),
+          receivedPendingNotifications,
+          isNewLogin,
+        },
+        { actorJid: resolveSelfJid() }
+      )
 
       if (connection === 'close') {
         const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode
@@ -223,14 +175,18 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
       logEvent('creds.update', {}, { actorJid: resolveSelfJid() })
     },
     'messaging-history.set': ({ chats, contacts, messages, isLatest, progress, syncType }) => {
-      logEvent('messaging-history.set', {
-        chats: chats.length,
-        contacts: contacts.length,
-        messages: messages.length,
-        isLatest,
-        progress,
-        syncType,
-      }, { actorJid: resolveSelfJid() })
+      logEvent(
+        'messaging-history.set',
+        {
+          chats: chats.length,
+          contacts: contacts.length,
+          messages: messages.length,
+          isLatest,
+          progress,
+          syncType,
+        },
+        { actorJid: resolveSelfJid() }
+      )
     },
     'chats.upsert': (chats) => {
       logger.debug('evento do Baileys recebido', { event: 'chats.upsert', count: chats.length })
@@ -249,8 +205,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
         recordEvent('chats.update', { id }, { chatJid: id, actorJid })
       }
     },
-    'lid-mapping.update': ({ lid, pn }) =>
-      logEvent('lid-mapping.update', { lid, pn }, { actorJid: resolveSelfJid() }),
+    'lid-mapping.update': ({ lid, pn }) => logEvent('lid-mapping.update', { lid, pn }, { actorJid: resolveSelfJid() }),
     'chats.delete': (ids) => {
       logger.debug('evento do Baileys recebido', { event: 'chats.delete', count: ids.length })
       const actorJid = resolveSelfJid()
@@ -258,12 +213,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
         recordEvent('chats.delete', { id }, { chatJid: id, actorJid })
       }
     },
-    'presence.update': ({ id, presences }) =>
-      logEvent(
-        'presence.update',
-        { id, count: Object.keys(presences).length },
-        { chatJid: id, actorJid: resolveSelfJid() }
-      ),
+    'presence.update': ({ id, presences }) => logEvent('presence.update', { id, count: Object.keys(presences).length }, { chatJid: id, actorJid: resolveSelfJid() }),
     'contacts.upsert': (contacts) => {
       logger.debug('evento do Baileys recebido', { event: 'contacts.upsert', count: contacts.length })
       const actorJid = resolveSelfJid()
@@ -284,11 +234,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
     'messages.delete': (data) => {
       const selfJid = resolveSelfJid()
       if ('all' in data && data.all) {
-        logEvent(
-          'messages.delete',
-          { jid: data.jid, all: true },
-          { chatJid: data.jid ?? null, actorJid: selfJid }
-        )
+        logEvent('messages.delete', { jid: data.jid, all: true }, { chatJid: data.jid ?? null, actorJid: selfJid })
         return
       }
       if ('keys' in data) {
@@ -298,14 +244,8 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
           if (!messageKey) continue
           const chatJid = messageKey.chatJid
           const groupJid = toGroupJid(chatJid)
-          const actorJid = key.fromMe
-            ? selfJid
-            : (key.participant ?? (groupJid ? null : chatJid))
-          recordEvent(
-            'messages.delete',
-            { id: key.id ?? null },
-            { chatJid, groupJid, messageKey, actorJid }
-          )
+          const actorJid = key.fromMe ? selfJid : (key.participant ?? (groupJid ? null : chatJid))
+          recordEvent('messages.delete', { id: key.id ?? null }, { chatJid, groupJid, messageKey, actorJid })
         }
         return
       }
@@ -319,14 +259,8 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
         if (!messageKey) continue
         const chatJid = messageKey.chatJid
         const groupJid = toGroupJid(chatJid)
-        const actorJid = key.fromMe
-          ? selfJid
-          : (key.participant ?? (groupJid ? null : chatJid))
-        recordEvent(
-          'messages.update',
-          { update },
-          { chatJid, groupJid, messageKey, actorJid }
-        )
+        const actorJid = key.fromMe ? selfJid : (key.participant ?? (groupJid ? null : chatJid))
+        recordEvent('messages.update', { update }, { chatJid, groupJid, messageKey, actorJid })
       }
     },
     'messages.media-update': (updates) => {
@@ -339,14 +273,8 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
         if (!messageKey) continue
         const chatJid = messageKey.chatJid
         const groupJid = toGroupJid(chatJid)
-        const actorJid = key?.fromMe
-          ? selfJid
-          : (key?.participant ?? (groupJid ? null : chatJid))
-        recordEvent(
-          'messages.media-update',
-          { update },
-          { chatJid, groupJid, messageKey, actorJid }
-        )
+        const actorJid = key?.fromMe ? selfJid : (key?.participant ?? (groupJid ? null : chatJid))
+        recordEvent('messages.media-update', { update }, { chatJid, groupJid, messageKey, actorJid })
       }
     },
     'messages.upsert': async (event) => {
@@ -369,14 +297,8 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
             if (!messageKey) continue
             const chatJid = messageKey.chatJid
             const groupJid = toGroupJid(chatJid)
-            const actorJid = key?.fromMe
-              ? selfJid
-              : (key?.participant ?? (groupJid ? null : chatJid))
-            recordEvent(
-              'messages.upsert',
-              { type: event.type },
-              { chatJid, groupJid, messageKey, actorJid }
-            )
+            const actorJid = key?.fromMe ? selfJid : (key?.participant ?? (groupJid ? null : chatJid))
+            recordEvent('messages.upsert', { type: event.type }, { chatJid, groupJid, messageKey, actorJid })
           }
         }
       } catch (error) {
@@ -413,14 +335,9 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
         if (!messageKey) continue
         const chatJid = messageKey.chatJid
         const groupJid = toGroupJid(chatJid)
-        const actorJid =
-          reactionAny.key?.participant ?? reactionAny.sender ?? reactionAny.reaction?.participant ?? null
+        const actorJid = reactionAny.key?.participant ?? reactionAny.sender ?? reactionAny.reaction?.participant ?? null
         const targetJid = reactionAny.key?.participant ?? null
-        recordEvent(
-          'messages.reaction',
-          { id: key?.id ?? null },
-          { chatJid, groupJid, messageKey, actorJid, targetJid }
-        )
+        recordEvent('messages.reaction', { id: key?.id ?? null }, { chatJid, groupJid, messageKey, actorJid, targetJid })
       }
     },
     'message-receipt.update': (updates) => {
@@ -437,11 +354,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
         const chatJid = messageKey.chatJid
         const groupJid = toGroupJid(chatJid)
         const actorJid = updateAny.participant ?? updateAny.key?.participant ?? null
-        recordEvent(
-          'message-receipt.update',
-          { receipt: updateAny.receipt ?? null },
-          { chatJid, groupJid, messageKey, actorJid }
-        )
+        recordEvent('message-receipt.update', { receipt: updateAny.receipt ?? null }, { chatJid, groupJid, messageKey, actorJid })
       }
     },
     'groups.upsert': (groups) => {
@@ -470,11 +383,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
       })
       const actorJid = author ?? resolveSelfJid()
       for (const participant of participants) {
-        recordEvent(
-          'group-participants.update',
-          { id, action, participant: participant.id },
-          { groupJid: id, actorJid, targetJid: participant.id }
-        )
+        recordEvent('group-participants.update', { id, action, participant: participant.id }, { groupJid: id, actorJid, targetJid: participant.id })
         if (sqlStore.enabled) {
           void sqlStore.recordGroupEvent({
             groupJid: id,
@@ -488,11 +397,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
     },
     'group.join-request': ({ id, action, method, participant, author }) => {
       const actorJid = author ?? resolveSelfJid()
-      logEvent(
-        'group.join-request',
-        { id, action, method, participant },
-        { groupJid: id, actorJid, targetJid: participant }
-      )
+      logEvent('group.join-request', { id, action, method, participant }, { groupJid: id, actorJid, targetJid: participant })
       if (sqlStore.enabled) {
         void sqlStore.recordGroupJoinRequest({
           groupJid: id,
@@ -511,12 +416,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
         })
       }
     },
-    'group.member-tag.update': ({ groupId, participant, label }) =>
-      logEvent(
-        'group.member-tag.update',
-        { groupId, participant, label },
-        { groupJid: groupId, targetJid: participant, actorJid: resolveSelfJid() }
-      ),
+    'group.member-tag.update': ({ groupId, participant, label }) => logEvent('group.member-tag.update', { groupId, participant, label }, { groupJid: groupId, targetJid: participant, actorJid: resolveSelfJid() }),
     'blocklist.set': ({ blocklist }) => {
       logger.debug('evento do Baileys recebido', { event: 'blocklist.set', count: blocklist.length })
       const actorJid = resolveSelfJid()
@@ -549,11 +449,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
       }
     },
     'labels.edit': (label) => {
-      const actorJid =
-        (label as { author?: string | null }).author ??
-        (label as { actor?: string | null }).actor ??
-        (label as { creator?: string | null }).creator ??
-        null
+      const actorJid = (label as { author?: string | null }).author ?? (label as { actor?: string | null }).actor ?? (label as { creator?: string | null }).creator ?? null
       logEvent('labels.edit', { id: label.id, deleted: label.deleted }, { actorJid })
     },
     'labels.association': ({ association, type }) => {
@@ -576,18 +472,8 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
       const groupJid = assoc.groupJid ?? assoc.group_jid ?? null
       const contactJid = assoc.contactJid ?? assoc.contact_jid ?? null
       const actorJid = assoc.actor ?? assoc.author ?? null
-      const associationType =
-        messageId && chatJid
-          ? 'message'
-          : groupJid
-            ? 'group'
-            : contactJid
-              ? 'contact'
-              : 'chat'
-      const messageKey =
-        associationType === 'message' && messageId && chatJid
-          ? { chatJid, messageId, fromMe: false }
-          : null
+      const associationType = messageId && chatJid ? 'message' : groupJid ? 'group' : contactJid ? 'contact' : 'chat'
+      const messageKey = associationType === 'message' && messageId && chatJid ? { chatJid, messageId, fromMe: false } : null
       logEvent(
         'labels.association',
         { action: type, associationType, association },
@@ -601,11 +487,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
       )
     },
     'newsletter.reaction': ({ id, server_id }) => {
-      logEvent(
-        'newsletter.reaction',
-        { id, serverId: server_id },
-        { actorJid: resolveSelfJid() }
-      )
+      logEvent('newsletter.reaction', { id, serverId: server_id }, { actorJid: resolveSelfJid() })
       if (sqlStore.enabled) {
         void sqlStore.recordNewsletter({ newsletterId: id, data: { id, server_id } })
         void sqlStore.recordNewsletterEvent({
@@ -616,11 +498,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
       }
     },
     'newsletter.view': ({ id, server_id, count }) => {
-      logEvent(
-        'newsletter.view',
-        { id, serverId: server_id, count },
-        { actorJid: resolveSelfJid() }
-      )
+      logEvent('newsletter.view', { id, serverId: server_id, count }, { actorJid: resolveSelfJid() })
       if (sqlStore.enabled) {
         void sqlStore.recordNewsletter({ newsletterId: id, data: { id, server_id, count } })
         void sqlStore.recordNewsletterEvent({
@@ -631,11 +509,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
       }
     },
     'newsletter-participants.update': ({ id, author, user, new_role, action }) => {
-      logEvent(
-        'newsletter-participants.update',
-        { id, author, user, newRole: new_role, action },
-        { actorJid: author ?? null, targetJid: user ?? null }
-      )
+      logEvent('newsletter-participants.update', { id, author, user, newRole: new_role, action }, { actorJid: author ?? null, targetJid: user ?? null })
       if (sqlStore.enabled) {
         if (user) {
           void sqlStore.recordNewsletterParticipant({
@@ -655,11 +529,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
       }
     },
     'newsletter-settings.update': ({ id }) => {
-      logEvent(
-        'newsletter-settings.update',
-        { id },
-        { actorJid: resolveSelfJid() }
-      )
+      logEvent('newsletter-settings.update', { id }, { actorJid: resolveSelfJid() })
       if (sqlStore.enabled) {
         void sqlStore.recordNewsletterEvent({
           newsletterId: id,
@@ -668,10 +538,8 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
         })
       }
     },
-    'chats.lock': ({ id, locked }) =>
-      logEvent('chats.lock', { id, locked }, { chatJid: id, actorJid: resolveSelfJid() }),
-    'settings.update': (update) =>
-      logEvent('settings.update', { setting: update.setting }, { actorJid: resolveSelfJid() }),
+    'chats.lock': ({ id, locked }) => logEvent('chats.lock', { id, locked }, { chatJid: id, actorJid: resolveSelfJid() }),
+    'settings.update': (update) => logEvent('settings.update', { setting: update.setting }, { actorJid: resolveSelfJid() }),
   }
 
   for (const event of ALL_EVENTS) {

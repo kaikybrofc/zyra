@@ -1,13 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import {
-  type AuthenticationCreds,
-  BufferJSON,
-  type Chat,
-  type Contact,
-  type GroupMetadata,
-  type WAMessage,
-  type proto,
-} from '@whiskeysockets/baileys'
+import { type AuthenticationCreds, BufferJSON, type Chat, type Contact, type GroupMetadata, type WAMessage, type proto } from '@whiskeysockets/baileys'
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
 import { loadEnv } from '../../bootstrap/env.js'
 import { config } from '../../config/index.js'
@@ -77,8 +69,7 @@ const logAffected = (label: string, result: ResultSetHeader) => {
   }
 }
 
-const shouldLogProgress = (every: number, count: number) =>
-  Number.isFinite(every) && every > 0 && count % every === 0
+const shouldLogProgress = (every: number, count: number) => Number.isFinite(every) && every > 0 && count % every === 0
 
 const serialize = (value: unknown) => JSON.stringify(value, BufferJSON.replacer)
 const deserialize = <T>(value: unknown) => {
@@ -89,10 +80,7 @@ const deserialize = <T>(value: unknown) => {
   return JSON.parse(JSON.stringify(value), BufferJSON.reviver) as T
 }
 
-const normalizeString = (
-  value: unknown,
-  options: { maxLength?: number; allowEmpty?: boolean; trim?: boolean; truncate?: boolean } = {}
-): string | null => {
+const normalizeString = (value: unknown, options: { maxLength?: number; allowEmpty?: boolean; trim?: boolean; truncate?: boolean } = {}): string | null => {
   if (typeof value !== 'string') return null
   const trimmed = options.trim === false ? value : value.trim()
   if (!trimmed && !options.allowEmpty) return null
@@ -109,14 +97,11 @@ const normalizeJid = (value: unknown): string | null => {
   return jid
 }
 
-const normalizeMessageId = (value: unknown): string | null =>
-  normalizeString(value, { maxLength: MAX_LENGTHS.messageId })
+const normalizeMessageId = (value: unknown): string | null => normalizeString(value, { maxLength: MAX_LENGTHS.messageId })
 
-const normalizePnLid = (value: unknown): string | null =>
-  normalizeString(value, { maxLength: MAX_LENGTHS.lidPn })
+const normalizePnLid = (value: unknown): string | null => normalizeString(value, { maxLength: MAX_LENGTHS.lidPn })
 
-const normalizeDisplayName = (value: unknown): string | null =>
-  normalizeString(value, { maxLength: MAX_LENGTHS.displayName, truncate: true })
+const normalizeDisplayName = (value: unknown): string | null => normalizeString(value, { maxLength: MAX_LENGTHS.displayName, truncate: true })
 
 const toNumber = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -137,16 +122,11 @@ const toTinyInt = (value: boolean | null | undefined): number | null => {
   return value ? 1 : 0
 }
 
-const extractForwardedFlag = (
-  content: proto.IMessage | undefined,
-  type: keyof proto.IMessage | null
-): boolean | null => {
+const extractForwardedFlag = (content: proto.IMessage | undefined, type: keyof proto.IMessage | null): boolean | null => {
   if (!content || !type) return null
   const inner = content[type]
   if (!inner || typeof inner !== 'object') return null
-  const contextInfo = (
-    inner as { contextInfo?: { isForwarded?: boolean; forwardingScore?: number } }
-  ).contextInfo
+  const contextInfo = (inner as { contextInfo?: { isForwarded?: boolean; forwardingScore?: number } }).contextInfo
   if (!contextInfo) return null
   if (typeof contextInfo.isForwarded === 'boolean') return contextInfo.isForwarded
   if (typeof contextInfo.forwardingScore === 'number') {
@@ -158,12 +138,7 @@ const extractForwardedFlag = (
 const extractEphemeralFlag = (message: WAMessage): boolean | null => {
   const content = message.message
   if (!content) return null
-  return Boolean(
-    content.ephemeralMessage ||
-      content.viewOnceMessage ||
-      content.viewOnceMessageV2 ||
-      content.viewOnceMessageV2Extension
-  )
+  return Boolean(content.ephemeralMessage || content.viewOnceMessage || content.viewOnceMessageV2 || content.viewOnceMessageV2Extension)
 }
 
 const toBase64 = (value: unknown): string | null => {
@@ -179,26 +154,17 @@ const toBase64 = (value: unknown): string | null => {
 const extractMediaInfo = (
   content: proto.IMessage | undefined,
   type: keyof proto.IMessage | null
-):
-  | {
-      mediaType: string
-      mimeType: string | null
-      fileSha256: string | null
-      fileLength: number | null
-      fileName: string | null
-      url: string | null
-      data: unknown
-    }
-  | null => {
+): {
+  mediaType: string
+  mimeType: string | null
+  fileSha256: string | null
+  fileLength: number | null
+  fileName: string | null
+  url: string | null
+  data: unknown
+} | null => {
   if (!content || !type) return null
-  const mediaTypes = new Set([
-    'imageMessage',
-    'videoMessage',
-    'audioMessage',
-    'documentMessage',
-    'stickerMessage',
-    'ptvMessage',
-  ])
+  const mediaTypes = new Set(['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage', 'ptvMessage'])
   if (!mediaTypes.has(type)) return null
   const inner = (content as proto.IMessage)[type] as
     | {
@@ -223,17 +189,13 @@ const extractMediaInfo = (
   }
 }
 
-const getContextInfo = (
-  content: proto.IMessage | undefined,
-  type: keyof proto.IMessage | null
-): proto.IContextInfo | null => {
+const getContextInfo = (content: proto.IMessage | undefined, type: keyof proto.IMessage | null): proto.IContextInfo | null => {
   if (!content || !type) return null
   const inner = (content as proto.IMessage)[type] as { contextInfo?: proto.IContextInfo } | null
   return inner?.contextInfo ?? null
 }
 
-const normalizeIdentifier = (value: string | null | undefined): string | null =>
-  normalizeString(value, { maxLength: MAX_LENGTHS.userIdentifier, truncate: true })
+const normalizeIdentifier = (value: string | null | undefined): string | null => normalizeString(value, { maxLength: MAX_LENGTHS.userIdentifier, truncate: true })
 
 const pickString = (obj: Record<string, unknown> | null, keys: string[]) => {
   if (!obj) return null
@@ -256,10 +218,7 @@ const isUserJid = (jid: string) => jid.includes('@') && !jid.endsWith('@g.us')
 
 const userIdCache = new Map<string, string>()
 const cacheKey = (type: string, value: string) => `${type}:${value}`
-const cacheUserId = (
-  userId: string,
-  identifiers: Array<{ type: string; value: string }>
-) => {
+const cacheUserId = (userId: string, identifiers: Array<{ type: string; value: string }>) => {
   for (const ident of identifiers) {
     userIdCache.set(cacheKey(ident.type, ident.value), userId)
   }
@@ -293,9 +252,7 @@ async function main() {
        LIMIT 1`,
       [connectionId]
     )
-    const creds = rows[0]?.creds_json
-      ? deserialize<AuthenticationCreds>(rows[0].creds_json)
-      : null
+    const creds = rows[0]?.creds_json ? deserialize<AuthenticationCreds>(rows[0].creds_json) : null
     const jid = normalizeIdentifier((creds as { me?: { id?: string | null } } | null)?.me?.id ?? null)
     if (!jid) {
       logger.warn('nao foi possivel resolver o JID da conta para backfill')
@@ -307,28 +264,16 @@ async function main() {
 
   type UserIdentifierType = 'jid' | 'pn' | 'lid' | 'username'
 
-  const ensureUserByIdentifiers = async (
-    identifiers: Array<{ type: UserIdentifierType; value: string }>,
-    displayName?: string | null
-  ) => {
+  const ensureUserByIdentifiers = async (identifiers: Array<{ type: UserIdentifierType; value: string }>, displayName?: string | null) => {
     const clean = identifiers
       .map((entry) => {
-        const normalized =
-          entry.type === 'pn' || entry.type === 'lid'
-            ? normalizePnLid(entry.value)
-            : normalizeIdentifier(entry.value)
+        const normalized = entry.type === 'pn' || entry.type === 'lid' ? normalizePnLid(entry.value) : normalizeIdentifier(entry.value)
         return { type: entry.type, value: normalized }
       })
-      .filter(
-        (entry): entry is { type: UserIdentifierType; value: string } =>
-          Boolean(entry.value)
-      )
+      .filter((entry): entry is { type: UserIdentifierType; value: string } => Boolean(entry.value))
     if (!clean.length) return null
 
-    const cachedUserId =
-      clean
-        .map((entry) => userIdCache.get(cacheKey(entry.type, entry.value)))
-        .find((value): value is string => Boolean(value)) ?? null
+    const cachedUserId = clean.map((entry) => userIdCache.get(cacheKey(entry.type, entry.value))).find((value): value is string => Boolean(value)) ?? null
 
     if (cachedUserId) {
       if (displayName) {
@@ -409,11 +354,9 @@ async function main() {
     return userId
   }
 
-  const ensureUserByJid = async (jid: string, displayName?: string | null) =>
-    ensureUserByIdentifiers([{ type: 'jid', value: jid }], displayName)
+  const ensureUserByJid = async (jid: string, displayName?: string | null) => ensureUserByIdentifiers([{ type: 'jid', value: jid }], displayName)
 
-  const ensureUserByPn = async (pn: string, displayName?: string | null) =>
-    ensureUserByIdentifiers([{ type: 'pn', value: pn }], displayName)
+  const ensureUserByPn = async (pn: string, displayName?: string | null) => ensureUserByIdentifiers([{ type: 'pn', value: pn }], displayName)
 
   const setChatUser = async (chatJid: string, userJid: string, role?: string | null) => {
     const normalizedChat = normalizeIdentifier(chatJid)
@@ -436,11 +379,7 @@ async function main() {
     )
   }
 
-  const setUserAlias = async (
-    jid: string,
-    type: 'pushName' | 'notify' | 'username' | 'display_name',
-    value: string
-  ) => {
+  const setUserAlias = async (jid: string, type: 'pushName' | 'notify' | 'username' | 'display_name', value: string) => {
     const normalized = normalizeString(value, { maxLength: MAX_LENGTHS.alias, truncate: true })
     if (!normalized) return
     const userId = await ensureUserByJid(jid)
@@ -457,10 +396,7 @@ async function main() {
     // Backfill groups owner_user_id
     // Backfill groups and participants
     type GroupRow = RowDataPacket & { jid: string; data_json: unknown }
-    const [groupRows] = await pool.execute<GroupRow[]>(
-      `SELECT jid, data_json FROM \`groups\` WHERE connection_id = ?`,
-      [connectionId]
-    )
+    const [groupRows] = await pool.execute<GroupRow[]>(`SELECT jid, data_json FROM \`groups\` WHERE connection_id = ?`, [connectionId])
     let groupIndex = 0
     let participantsProcessed = 0
     for (const row of groupRows) {
@@ -468,12 +404,8 @@ async function main() {
       const group = deserialize<GroupMetadata>(row.data_json)
       if (!group) continue
       const ownerCandidates: Array<{ type: UserIdentifierType; value: string }> = []
-      const pushOwnerCandidate = (
-        type: UserIdentifierType,
-        value: string | null | undefined
-      ) => {
-        const normalized =
-          type === 'jid' ? normalizeIdentifier(value ?? null) : normalizePnLid(value ?? null)
+      const pushOwnerCandidate = (type: UserIdentifierType, value: string | null | undefined) => {
+        const normalized = type === 'jid' ? normalizeIdentifier(value ?? null) : normalizePnLid(value ?? null)
         if (normalized) ownerCandidates.push({ type, value: normalized })
       }
       pushOwnerCandidate('jid', group.owner)
@@ -504,13 +436,7 @@ async function main() {
         ownerUserId = await ensureUserByIdentifiers(ownerCandidates, null)
       }
 
-      if (
-        ownerUserId ||
-        subject !== null ||
-        announce !== null ||
-        restrict !== null ||
-        size !== null
-      ) {
+      if (ownerUserId || subject !== null || announce !== null || restrict !== null || size !== null) {
         const [result] = await pool.execute<ResultSetHeader>(
           `UPDATE \`groups\`
            SET owner_user_id = COALESCE(owner_user_id, IF(?, UUID_TO_BIN(?, 1), NULL)),
@@ -520,16 +446,7 @@ async function main() {
                size = COALESCE(size, ?)
            WHERE connection_id = ?
              AND jid = ?`,
-          [
-            ownerUserId ? 1 : 0,
-            ownerUserId,
-            subject,
-            announce,
-            restrict,
-            size,
-            connectionId,
-            row.jid,
-          ]
+          [ownerUserId ? 1 : 0, ownerUserId, subject, announce, restrict, size, connectionId, row.jid]
         )
         if (ownerUserId && result.affectedRows) {
           logger.info('backfill groups.owner_user_id atualizado', { groupJid: row.jid })
@@ -562,16 +479,7 @@ async function main() {
                is_admin = VALUES(is_admin),
                is_superadmin = VALUES(is_superadmin),
                data_json = VALUES(data_json)`,
-            [
-              connectionId,
-              row.jid,
-              userId,
-              jid,
-              role,
-              isAdmin ? 1 : 0,
-              isSuper ? 1 : 0,
-              serialize(participant),
-            ]
+            [connectionId, row.jid, userId, jid, role, isAdmin ? 1 : 0, isSuper ? 1 : 0, serialize(participant)]
           )
           await setChatUser(row.jid, jid, role)
           participantsProcessed += 1
@@ -665,10 +573,7 @@ async function main() {
   const backfillChatUsersDirect = async () => {
     // Backfill chat_users for direct chats
     type ChatRow = RowDataPacket & { jid: string; data_json: unknown }
-    const [chatRows] = await pool.execute<ChatRow[]>(
-      `SELECT jid, data_json FROM chats WHERE connection_id = ?`,
-      [connectionId]
-    )
+    const [chatRows] = await pool.execute<ChatRow[]>(`SELECT jid, data_json FROM chats WHERE connection_id = ?`, [connectionId])
     for (const row of chatRows) {
       if (!row.jid.endsWith('@g.us')) {
         await setChatUser(row.jid, row.jid, 'member')
@@ -678,24 +583,14 @@ async function main() {
 
   const backfillChatsFromJson = async () => {
     type ChatRow = RowDataPacket & { jid: string; data_json: unknown }
-    const [chatRows] = await pool.execute<ChatRow[]>(
-      `SELECT jid, data_json FROM chats WHERE connection_id = ?`,
-      [connectionId]
-    )
+    const [chatRows] = await pool.execute<ChatRow[]>(`SELECT jid, data_json FROM chats WHERE connection_id = ?`, [connectionId])
     for (const row of chatRows) {
       const chat = deserialize<Chat>(row.data_json)
       if (!chat) continue
-      const displayName = normalizeDisplayName(
-        chat.name ?? (chat as { subject?: string | null }).subject ?? null
-      )
-      const lastMessageTs = toNumber(
-        (chat as { conversationTimestamp?: unknown }).conversationTimestamp
-      )
+      const displayName = normalizeDisplayName(chat.name ?? (chat as { subject?: string | null }).subject ?? null)
+      const lastMessageTs = toNumber((chat as { conversationTimestamp?: unknown }).conversationTimestamp)
       const rawUnreadCount = (chat as { unreadCount?: number }).unreadCount
-      const unreadCount =
-        typeof rawUnreadCount === 'number' && Number.isFinite(rawUnreadCount) && rawUnreadCount >= 0
-          ? rawUnreadCount
-          : null
+      const unreadCount = typeof rawUnreadCount === 'number' && Number.isFinite(rawUnreadCount) && rawUnreadCount >= 0 ? rawUnreadCount : null
       if (displayName || lastMessageTs !== null || unreadCount !== null) {
         await pool.execute(
           `UPDATE chats
@@ -713,10 +608,7 @@ async function main() {
   const backfillContactAliases = async () => {
     // Backfill contacts aliases
     type ContactRow = RowDataPacket & { jid: string; data_json: unknown }
-    const [contactRows] = await pool.execute<ContactRow[]>(
-      `SELECT jid, data_json FROM wa_contacts_cache WHERE connection_id = ?`,
-      [connectionId]
-    )
+    const [contactRows] = await pool.execute<ContactRow[]>(`SELECT jid, data_json FROM wa_contacts_cache WHERE connection_id = ?`, [connectionId])
     for (const row of contactRows) {
       const contact = deserialize<Contact>(row.data_json)
       if (!contact) continue
@@ -921,17 +813,9 @@ async function main() {
         const messageText = getMessageText(message)
         const mediaInfo = extractMediaInfo(normalized.content, normalized.type)
         const timestamp = toNumber(message.messageTimestamp)
-        const contentType = normalized.type
-          ? normalizeString(String(normalized.type), { maxLength: MAX_LENGTHS.contentType })
-          : null
-        const messageType =
-          message.messageStubType !== undefined && message.messageStubType !== null
-            ? normalizeString(String(message.messageStubType), { maxLength: MAX_LENGTHS.messageType })
-            : null
-        const status =
-          message.status !== undefined && message.status !== null
-            ? normalizeString(String(message.status), { maxLength: MAX_LENGTHS.status })
-            : null
+        const contentType = normalized.type ? normalizeString(String(normalized.type), { maxLength: MAX_LENGTHS.contentType }) : null
+        const messageType = message.messageStubType !== undefined && message.messageStubType !== null ? normalizeString(String(message.messageStubType), { maxLength: MAX_LENGTHS.messageType }) : null
+        const status = message.status !== undefined && message.status !== null ? normalizeString(String(message.status), { maxLength: MAX_LENGTHS.status }) : null
         const isForwarded = toTinyInt(extractForwardedFlag(normalized.content, normalized.type))
         const isEphemeral = toTinyInt(extractEphemeralFlag(message))
         const textPreview = normalizeString(messageText, {
@@ -940,15 +824,7 @@ async function main() {
           trim: false,
         })
 
-        if (
-          timestamp !== null ||
-          contentType ||
-          messageType ||
-          status ||
-          isForwarded !== null ||
-          isEphemeral !== null ||
-          textPreview
-        ) {
+        if (timestamp !== null || contentType || messageType || status || isForwarded !== null || isEphemeral !== null || textPreview) {
           await pool.execute(
             `UPDATE messages
              SET timestamp = COALESCE(timestamp, ?),
@@ -960,17 +836,7 @@ async function main() {
                  text_preview = IF(text_preview IS NULL OR text_preview = '', ?, text_preview)
              WHERE connection_id = ?
                AND id = ?`,
-            [
-              timestamp,
-              contentType,
-              messageType,
-              status,
-              isForwarded,
-              isEphemeral,
-              textPreview,
-              connectionId,
-              row.id,
-            ]
+            [timestamp, contentType, messageType, status, isForwarded, isEphemeral, textPreview, connectionId, row.id]
           )
         }
 
@@ -1009,28 +875,15 @@ async function main() {
                data_json
              )
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
-            [
-              connectionId,
-              row.id,
-              mediaInfo.mediaType,
-              mediaInfo.mimeType,
-              mediaInfo.fileSha256,
-              mediaInfo.fileLength,
-              mediaInfo.fileName,
-              mediaInfo.url,
-              serialize(mediaInfo.data),
-            ]
+            [connectionId, row.id, mediaInfo.mediaType, mediaInfo.mimeType, mediaInfo.fileSha256, mediaInfo.fileLength, mediaInfo.fileName, mediaInfo.url, serialize(mediaInfo.data)]
           )
         }
 
         const contextInfo = getContextInfo(normalized.content, normalized.type)
-        const mentionedJids =
-          contextInfo?.mentionedJid?.filter((jid): jid is string => typeof jid === 'string') ?? []
+        const mentionedJids = contextInfo?.mentionedJid?.filter((jid): jid is string => typeof jid === 'string') ?? []
         const quotedJid = typeof contextInfo?.participant === 'string' ? contextInfo.participant : null
 
-        const senderJid = message.key.fromMe
-          ? (selfJid ?? message.key.participant ?? null)
-          : (message.key.participant ?? message.key.remoteJid ?? null)
+        const senderJid = message.key.fromMe ? (selfJid ?? message.key.participant ?? null) : (message.key.participant ?? message.key.remoteJid ?? null)
         if (senderJid) {
           const senderUserId = await ensureUserByJid(senderJid)
           if (senderUserId) {
@@ -1082,37 +935,37 @@ async function main() {
           }
         }
 
-      if (quotedJid) {
-        const userId = await ensureUserByJid(quotedJid)
-        if (userId) {
-          await pool.execute(
-            `INSERT IGNORE INTO message_users (
+        if (quotedJid) {
+          const userId = await ensureUserByJid(quotedJid)
+          if (userId) {
+            await pool.execute(
+              `INSERT IGNORE INTO message_users (
                connection_id,
                message_db_id,
                user_id,
                relation_type
              )
              VALUES (?, ?, UUID_TO_BIN(?, 1), 'quoted')`,
-            [connectionId, row.id, userId]
-          )
+              [connectionId, row.id, userId]
+            )
+          }
         }
-      }
 
-      if (contextInfo?.participant) {
-        const userId = await ensureUserByJid(contextInfo.participant)
-        if (userId) {
-          await pool.execute(
-            `INSERT IGNORE INTO message_users (
+        if (contextInfo?.participant) {
+          const userId = await ensureUserByJid(contextInfo.participant)
+          if (userId) {
+            await pool.execute(
+              `INSERT IGNORE INTO message_users (
                connection_id,
                message_db_id,
                user_id,
                relation_type
              )
              VALUES (?, ?, UUID_TO_BIN(?, 1), 'participant')`,
-            [connectionId, row.id, userId]
-          )
+              [connectionId, row.id, userId]
+            )
+          }
         }
-      }
 
         if (shouldLogProgress(MESSAGE_LOG_EVERY, messagesProcessed)) {
           logger.info('backfill mensagens progresso', {
@@ -1213,10 +1066,8 @@ async function main() {
       if (!record) continue
 
       if (!row.actor_user_id) {
-        const actorJid =
-          pickFrom(record, ['actorJid', 'actor', 'author', 'creator', 'from', 'sender']) ?? null
-        const actorPn =
-          pickFrom(record, ['actorPn', 'authorPn', 'senderPn', 'participantPn', 'pn']) ?? null
+        const actorJid = pickFrom(record, ['actorJid', 'actor', 'author', 'creator', 'from', 'sender']) ?? null
+        const actorPn = pickFrom(record, ['actorPn', 'authorPn', 'senderPn', 'participantPn', 'pn']) ?? null
         let actorUserId: string | null = null
         if (actorJid && isUserJid(actorJid)) {
           actorUserId = await ensureUserByIdentifiers([{ type: 'jid', value: actorJid }], null)
@@ -1240,10 +1091,8 @@ async function main() {
       }
 
       if (!row.target_user_id) {
-        const targetJid =
-          pickFrom(record, ['targetJid', 'target', 'participant', 'user']) ?? null
-        const targetPn =
-          pickFrom(record, ['targetPn', 'participantPn', 'userPn', 'pn']) ?? null
+        const targetJid = pickFrom(record, ['targetJid', 'target', 'participant', 'user']) ?? null
+        const targetPn = pickFrom(record, ['targetPn', 'participantPn', 'userPn', 'pn']) ?? null
         let targetUserId: string | null = null
         if (targetJid && isUserJid(targetJid)) {
           targetUserId = await ensureUserByIdentifiers([{ type: 'jid', value: targetJid }], null)
@@ -1299,18 +1148,11 @@ async function main() {
       }
       const record = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
       if (!record) continue
-      const actorJid =
-        pickFrom(record, ['actorJid', 'actor', 'author', 'creator']) ?? null
-      const actorUserId =
-        actorJid && isUserJid(actorJid)
-          ? await ensureUserByIdentifiers([{ type: 'jid', value: actorJid }], null)
-          : null
+      const actorJid = pickFrom(record, ['actorJid', 'actor', 'author', 'creator']) ?? null
+      const actorUserId = actorJid && isUserJid(actorJid) ? await ensureUserByIdentifiers([{ type: 'jid', value: actorJid }], null) : null
       const name = normalizeDisplayName(record.name ?? null)
       const colorRaw = record.color ?? null
-      const color =
-        colorRaw !== null && colorRaw !== undefined
-          ? normalizeString(String(colorRaw), { maxLength: MAX_LENGTHS.color })
-          : null
+      const color = colorRaw !== null && colorRaw !== undefined ? normalizeString(String(colorRaw), { maxLength: MAX_LENGTHS.color }) : null
       if (!actorUserId && !name && !color) continue
       await pool.execute(
         `UPDATE labels
@@ -1357,47 +1199,19 @@ async function main() {
       const record = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
       if (!record) continue
 
-      const actorJid =
-        pickFrom(record, ['actorJid', 'actor', 'author', 'creator']) ?? null
-      const actorUserId =
-        actorJid && isUserJid(actorJid)
-          ? await ensureUserByIdentifiers([{ type: 'jid', value: actorJid }], null)
-          : null
+      const actorJid = pickFrom(record, ['actorJid', 'actor', 'author', 'creator']) ?? null
+      const actorUserId = actorJid && isUserJid(actorJid) ? await ensureUserByIdentifiers([{ type: 'jid', value: actorJid }], null) : null
 
-      const messageId = normalizeMessageId(
-        (record.messageId as string | undefined) ??
-          (record.message_id as string | undefined) ??
-          null
-      )
-      const chatJid = normalizeJid(
-        (record.chatId as string | undefined) ??
-          (record.chat_id as string | undefined) ??
-          null
-      )
-      const contactJid = normalizeJid(
-        (record.contactJid as string | undefined) ??
-          (record.contact_jid as string | undefined) ??
-          null
-      )
-      const groupJid = normalizeJid(
-        (record.groupJid as string | undefined) ??
-          (record.group_jid as string | undefined) ??
-          null
-      )
+      const messageId = normalizeMessageId((record.messageId as string | undefined) ?? (record.message_id as string | undefined) ?? null)
+      const chatJid = normalizeJid((record.chatId as string | undefined) ?? (record.chat_id as string | undefined) ?? null)
+      const contactJid = normalizeJid((record.contactJid as string | undefined) ?? (record.contact_jid as string | undefined) ?? null)
+      const groupJid = normalizeJid((record.groupJid as string | undefined) ?? (record.group_jid as string | undefined) ?? null)
 
       let messageDbId: number | null = null
       let resolvedChatJid: string | null = null
       let resolvedTargetJid: string | null = null
 
-      const associationType =
-        row.association_type ||
-        (messageId && chatJid
-          ? 'message'
-          : groupJid
-            ? 'group'
-            : contactJid
-              ? 'contact'
-              : 'chat')
+      const associationType = row.association_type || (messageId && chatJid ? 'message' : groupJid ? 'group' : contactJid ? 'contact' : 'chat')
 
       if (associationType === 'message' && messageId && chatJid) {
         type MessageRow = RowDataPacket & { id: number }
@@ -1432,19 +1246,7 @@ async function main() {
            AND chat_jid <=> ?
            AND message_db_id <=> ?
            AND target_jid <=> ?`,
-        [
-          actorUserId ? 1 : 0,
-          actorUserId,
-          resolvedChatJid,
-          messageDbId,
-          resolvedTargetJid,
-          connectionId,
-          row.label_id,
-          associationType,
-          row.chat_jid,
-          row.message_db_id,
-          row.target_jid,
-        ]
+        [actorUserId ? 1 : 0, actorUserId, resolvedChatJid, messageDbId, resolvedTargetJid, connectionId, row.label_id, associationType, row.chat_jid, row.message_db_id, row.target_jid]
       )
     }
   }
@@ -1488,18 +1290,18 @@ async function main() {
   }
 
   const backfillEventsLog = async () => {
-  // Backfill events_log (best effort from data_json)
-  type EventRow = RowDataPacket & {
-    id: number
-    chat_jid: string | null
-    group_jid: string | null
-    message_db_id: number | null
-    actor_user_id: Buffer | null
-    target_user_id: Buffer | null
-    data_json: unknown
-  }
-  const [eventRows] = await pool.execute<EventRow[]>(
-    `SELECT id, chat_jid, group_jid, message_db_id, actor_user_id, target_user_id, data_json
+    // Backfill events_log (best effort from data_json)
+    type EventRow = RowDataPacket & {
+      id: number
+      chat_jid: string | null
+      group_jid: string | null
+      message_db_id: number | null
+      actor_user_id: Buffer | null
+      target_user_id: Buffer | null
+      data_json: unknown
+    }
+    const [eventRows] = await pool.execute<EventRow[]>(
+      `SELECT id, chat_jid, group_jid, message_db_id, actor_user_id, target_user_id, data_json
      FROM events_log
      WHERE connection_id = ?
        AND data_json IS NOT NULL
@@ -1510,199 +1312,171 @@ async function main() {
          OR actor_user_id IS NULL
          OR target_user_id IS NULL
        )`,
-    [connectionId]
-  )
-  const extractMessageRef = (
-    raw: unknown,
-    fallbackChatJid: string | null
-  ): { chatJid: string; messageId: string } | null => {
-    if (!raw || typeof raw !== 'object') return null
-    const data = raw as Record<string, unknown>
-    const key = data.key as Record<string, unknown> | undefined
-    const messageKey = data.messageKey as Record<string, unknown> | undefined
-    const chatJid =
-      (data.chatJid as string | undefined) ??
-      (data.chatId as string | undefined) ??
-      (data.chat_jid as string | undefined) ??
-      (data.remoteJid as string | undefined) ??
-      (key?.remoteJid as string | undefined) ??
-      (messageKey?.chatJid as string | undefined) ??
-      fallbackChatJid ??
-      null
-    const messageId =
-      (data.messageId as string | undefined) ??
-      (data.message_id as string | undefined) ??
-      (data.id as string | undefined) ??
-      (key?.id as string | undefined) ??
-      (messageKey?.messageId as string | undefined) ??
-      null
-    if (!chatJid || !messageId) return null
-    return { chatJid, messageId }
-  }
-
-  let eventsMessageLogged = 0
-  let eventsMessageUpdated = 0
-  let eventsContextLogged = 0
-  let eventsContextUpdated = 0
-  let eventsActorLogged = 0
-  let eventsActorUpdated = 0
-  let eventsTargetLogged = 0
-  let eventsTargetUpdated = 0
-
-  for (const row of eventRows) {
-    let parsed: unknown = null
-    try {
-      parsed = deserialize<unknown>(row.data_json)
-    } catch {
-      parsed = null
+      [connectionId]
+    )
+    const extractMessageRef = (raw: unknown, fallbackChatJid: string | null): { chatJid: string; messageId: string } | null => {
+      if (!raw || typeof raw !== 'object') return null
+      const data = raw as Record<string, unknown>
+      const key = data.key as Record<string, unknown> | undefined
+      const messageKey = data.messageKey as Record<string, unknown> | undefined
+      const chatJid = (data.chatJid as string | undefined) ?? (data.chatId as string | undefined) ?? (data.chat_jid as string | undefined) ?? (data.remoteJid as string | undefined) ?? (key?.remoteJid as string | undefined) ?? (messageKey?.chatJid as string | undefined) ?? fallbackChatJid ?? null
+      const messageId = (data.messageId as string | undefined) ?? (data.message_id as string | undefined) ?? (data.id as string | undefined) ?? (key?.id as string | undefined) ?? (messageKey?.messageId as string | undefined) ?? null
+      if (!chatJid || !messageId) return null
+      return { chatJid, messageId }
     }
-    const record = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
 
-    const ref = row.message_db_id ? null : extractMessageRef(record, row.chat_jid ?? null)
-    if (ref) {
-      type MessageRow = RowDataPacket & { id: number }
-      const [msgRows] = await pool.execute<MessageRow[]>(
-        `SELECT id
+    let eventsMessageLogged = 0
+    let eventsMessageUpdated = 0
+    let eventsContextLogged = 0
+    let eventsContextUpdated = 0
+    let eventsActorLogged = 0
+    let eventsActorUpdated = 0
+    let eventsTargetLogged = 0
+    let eventsTargetUpdated = 0
+
+    for (const row of eventRows) {
+      let parsed: unknown = null
+      try {
+        parsed = deserialize<unknown>(row.data_json)
+      } catch {
+        parsed = null
+      }
+      const record = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
+
+      const ref = row.message_db_id ? null : extractMessageRef(record, row.chat_jid ?? null)
+      if (ref) {
+        type MessageRow = RowDataPacket & { id: number }
+        const [msgRows] = await pool.execute<MessageRow[]>(
+          `SELECT id
          FROM messages
          WHERE connection_id = ?
            AND chat_jid = ?
            AND message_id = ?
          LIMIT 1`,
-        [connectionId, ref.chatJid, ref.messageId]
-      )
-      const msgId = msgRows[0]?.id
-      if (msgId) {
-        const groupJid = ref.chatJid.endsWith('@g.us') ? ref.chatJid : null
-        const [eventMsgResult] = await pool.execute<ResultSetHeader>(
-          `UPDATE events_log
+          [connectionId, ref.chatJid, ref.messageId]
+        )
+        const msgId = msgRows[0]?.id
+        if (msgId) {
+          const groupJid = ref.chatJid.endsWith('@g.us') ? ref.chatJid : null
+          const [eventMsgResult] = await pool.execute<ResultSetHeader>(
+            `UPDATE events_log
            SET message_db_id = ?,
                chat_jid = COALESCE(chat_jid, ?),
                group_jid = COALESCE(group_jid, ?)
            WHERE connection_id = ?
              AND id = ?`,
-          [msgId, ref.chatJid, groupJid, connectionId, row.id]
-        )
-        if (eventMsgResult.affectedRows) {
-          eventsMessageUpdated += eventMsgResult.affectedRows
-          if (eventsMessageLogged < LOG_SAMPLE_LIMIT) {
-            logger.info('backfill events_log.message_db_id atualizado', {
-              eventId: row.id,
-              chatJid: ref.chatJid,
-              messageDbId: msgId,
-            })
-            eventsMessageLogged += 1
+            [msgId, ref.chatJid, groupJid, connectionId, row.id]
+          )
+          if (eventMsgResult.affectedRows) {
+            eventsMessageUpdated += eventMsgResult.affectedRows
+            if (eventsMessageLogged < LOG_SAMPLE_LIMIT) {
+              logger.info('backfill events_log.message_db_id atualizado', {
+                eventId: row.id,
+                chatJid: ref.chatJid,
+                messageDbId: msgId,
+              })
+              eventsMessageLogged += 1
+            }
           }
         }
       }
-    }
 
-    const chatCandidate =
-      pickFrom(record, ['chatJid', 'chatId', 'chat_jid', 'remoteJid', 'jid', 'id']) ?? null
-    const groupCandidate =
-      pickFrom(record, ['groupJid', 'groupId', 'group_jid']) ?? null
-    const resolvedChatJid =
-      row.chat_jid ?? (chatCandidate && !isGroupJid(chatCandidate) ? chatCandidate : null)
-    const resolvedGroupJid =
-      row.group_jid ??
-      (groupCandidate && isGroupJid(groupCandidate) ? groupCandidate : null) ??
-      (chatCandidate && isGroupJid(chatCandidate) ? chatCandidate : null)
+      const chatCandidate = pickFrom(record, ['chatJid', 'chatId', 'chat_jid', 'remoteJid', 'jid', 'id']) ?? null
+      const groupCandidate = pickFrom(record, ['groupJid', 'groupId', 'group_jid']) ?? null
+      const resolvedChatJid = row.chat_jid ?? (chatCandidate && !isGroupJid(chatCandidate) ? chatCandidate : null)
+      const resolvedGroupJid = row.group_jid ?? (groupCandidate && isGroupJid(groupCandidate) ? groupCandidate : null) ?? (chatCandidate && isGroupJid(chatCandidate) ? chatCandidate : null)
 
-    if ((resolvedChatJid && !row.chat_jid) || (resolvedGroupJid && !row.group_jid)) {
-      const [eventContextResult] = await pool.execute<ResultSetHeader>(
-        `UPDATE events_log
+      if ((resolvedChatJid && !row.chat_jid) || (resolvedGroupJid && !row.group_jid)) {
+        const [eventContextResult] = await pool.execute<ResultSetHeader>(
+          `UPDATE events_log
          SET chat_jid = COALESCE(chat_jid, ?),
              group_jid = COALESCE(group_jid, ?)
          WHERE connection_id = ?
            AND id = ?`,
-        [resolvedChatJid, resolvedGroupJid, connectionId, row.id]
-      )
-      if (eventContextResult.affectedRows) {
-        eventsContextUpdated += eventContextResult.affectedRows
-        if (eventsContextLogged < LOG_SAMPLE_LIMIT) {
-          logger.info('backfill events_log.contexto atualizado', {
-            eventId: row.id,
-            chatJid: resolvedChatJid,
-            groupJid: resolvedGroupJid,
-          })
-          eventsContextLogged += 1
+          [resolvedChatJid, resolvedGroupJid, connectionId, row.id]
+        )
+        if (eventContextResult.affectedRows) {
+          eventsContextUpdated += eventContextResult.affectedRows
+          if (eventsContextLogged < LOG_SAMPLE_LIMIT) {
+            logger.info('backfill events_log.contexto atualizado', {
+              eventId: row.id,
+              chatJid: resolvedChatJid,
+              groupJid: resolvedGroupJid,
+            })
+            eventsContextLogged += 1
+          }
         }
       }
-    }
 
-    if (!row.actor_user_id) {
-      const actorJid =
-        pickFrom(record, ['actorJid', 'actor', 'author', 'creator', 'from', 'sender']) ?? null
-      const actorPn =
-        pickFrom(record, ['actorPn', 'authorPn', 'senderPn', 'participantPn', 'pn']) ?? null
-      let actorUserId: string | null = null
-      if (actorJid && isUserJid(actorJid)) {
-        actorUserId = await ensureUserByIdentifiers([{ type: 'jid', value: actorJid }], null)
-      } else if (actorPn) {
-        actorUserId = await ensureUserByPn(actorPn)
-      }
-      if (actorUserId) {
-        const [actorResult] = await pool.execute<ResultSetHeader>(
-          `UPDATE events_log
+      if (!row.actor_user_id) {
+        const actorJid = pickFrom(record, ['actorJid', 'actor', 'author', 'creator', 'from', 'sender']) ?? null
+        const actorPn = pickFrom(record, ['actorPn', 'authorPn', 'senderPn', 'participantPn', 'pn']) ?? null
+        let actorUserId: string | null = null
+        if (actorJid && isUserJid(actorJid)) {
+          actorUserId = await ensureUserByIdentifiers([{ type: 'jid', value: actorJid }], null)
+        } else if (actorPn) {
+          actorUserId = await ensureUserByPn(actorPn)
+        }
+        if (actorUserId) {
+          const [actorResult] = await pool.execute<ResultSetHeader>(
+            `UPDATE events_log
            SET actor_user_id = UUID_TO_BIN(?, 1)
            WHERE connection_id = ?
              AND id = ?
              AND actor_user_id IS NULL`,
-          [actorUserId, connectionId, row.id]
-        )
-        if (actorResult.affectedRows) {
-          eventsActorUpdated += actorResult.affectedRows
-          if (eventsActorLogged < LOG_SAMPLE_LIMIT) {
-            logger.info('backfill events_log.actor_user_id atualizado', { eventId: row.id })
-            eventsActorLogged += 1
+            [actorUserId, connectionId, row.id]
+          )
+          if (actorResult.affectedRows) {
+            eventsActorUpdated += actorResult.affectedRows
+            if (eventsActorLogged < LOG_SAMPLE_LIMIT) {
+              logger.info('backfill events_log.actor_user_id atualizado', { eventId: row.id })
+              eventsActorLogged += 1
+            }
           }
         }
       }
-    }
 
-    if (!row.target_user_id) {
-      const targetJid =
-        pickFrom(record, ['targetJid', 'target', 'participant', 'user']) ?? null
-      const targetPn =
-        pickFrom(record, ['targetPn', 'participantPn', 'userPn', 'pn']) ?? null
-      let targetUserId: string | null = null
-      if (targetJid && isUserJid(targetJid)) {
-        targetUserId = await ensureUserByIdentifiers([{ type: 'jid', value: targetJid }], null)
-      } else if (targetPn) {
-        targetUserId = await ensureUserByPn(targetPn)
-      }
-      if (targetUserId) {
-        const [targetResult] = await pool.execute<ResultSetHeader>(
-          `UPDATE events_log
+      if (!row.target_user_id) {
+        const targetJid = pickFrom(record, ['targetJid', 'target', 'participant', 'user']) ?? null
+        const targetPn = pickFrom(record, ['targetPn', 'participantPn', 'userPn', 'pn']) ?? null
+        let targetUserId: string | null = null
+        if (targetJid && isUserJid(targetJid)) {
+          targetUserId = await ensureUserByIdentifiers([{ type: 'jid', value: targetJid }], null)
+        } else if (targetPn) {
+          targetUserId = await ensureUserByPn(targetPn)
+        }
+        if (targetUserId) {
+          const [targetResult] = await pool.execute<ResultSetHeader>(
+            `UPDATE events_log
            SET target_user_id = UUID_TO_BIN(?, 1)
            WHERE connection_id = ?
              AND id = ?
              AND target_user_id IS NULL`,
-          [targetUserId, connectionId, row.id]
-        )
-        if (targetResult.affectedRows) {
-          eventsTargetUpdated += targetResult.affectedRows
-          if (eventsTargetLogged < LOG_SAMPLE_LIMIT) {
-            logger.info('backfill events_log.target_user_id atualizado', { eventId: row.id })
-            eventsTargetLogged += 1
+            [targetUserId, connectionId, row.id]
+          )
+          if (targetResult.affectedRows) {
+            eventsTargetUpdated += targetResult.affectedRows
+            if (eventsTargetLogged < LOG_SAMPLE_LIMIT) {
+              logger.info('backfill events_log.target_user_id atualizado', { eventId: row.id })
+              eventsTargetLogged += 1
+            }
           }
         }
       }
     }
-  }
 
-  if (eventsMessageUpdated) {
-    logger.info('backfill events_log.message_db_id total', { updated: eventsMessageUpdated })
-  }
-  if (eventsContextUpdated) {
-    logger.info('backfill events_log.contexto total', { updated: eventsContextUpdated })
-  }
-  if (eventsActorUpdated) {
-    logger.info('backfill events_log.actor_user_id total', { updated: eventsActorUpdated })
-  }
-  if (eventsTargetUpdated) {
-    logger.info('backfill events_log.target_user_id total', { updated: eventsTargetUpdated })
-  }
-
+    if (eventsMessageUpdated) {
+      logger.info('backfill events_log.message_db_id total', { updated: eventsMessageUpdated })
+    }
+    if (eventsContextUpdated) {
+      logger.info('backfill events_log.contexto total', { updated: eventsContextUpdated })
+    }
+    if (eventsActorUpdated) {
+      logger.info('backfill events_log.actor_user_id total', { updated: eventsActorUpdated })
+    }
+    if (eventsTargetUpdated) {
+      logger.info('backfill events_log.target_user_id total', { updated: eventsTargetUpdated })
+    }
   }
 
   const backfillContacts = async () => {
@@ -1926,9 +1700,7 @@ async function main() {
       [connectionId]
     )
 
-  const buildTaskOrder = (
-    tasksWithMissing: Array<BackfillTask & { missing: number }>
-  ): Array<BackfillTask & { missing: number }> => {
+  const buildTaskOrder = (tasksWithMissing: Array<BackfillTask & { missing: number }>): Array<BackfillTask & { missing: number }> => {
     const byKey = new Map(tasksWithMissing.map((task) => [task.key, task]))
     const remaining = new Set(tasksWithMissing.map((task) => task.key))
     const done = new Set<string>()
@@ -1937,9 +1709,7 @@ async function main() {
     while (remaining.size) {
       const ready = Array.from(remaining)
         .map((key) => byKey.get(key)!)
-        .filter((task) =>
-          (task.dependsOn ?? []).every((dep) => !byKey.has(dep) || done.has(dep))
-        )
+        .filter((task) => (task.dependsOn ?? []).every((dep) => !byKey.has(dep) || done.has(dep)))
       if (!ready.length) {
         logger.warn('backfill dependencias em ciclo, executando restante sem ordem', {
           remaining: Array.from(remaining),

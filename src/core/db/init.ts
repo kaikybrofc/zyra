@@ -11,26 +11,11 @@ const extractCreateTableStatements = (schema: string): string[] => {
   const matches = schema.match(/CREATE TABLE[\s\S]*?;(?=\s|$)/gi)
   if (!matches) return []
   return matches.map((statement) => {
-    const withIfNotExists = statement.replace(
-      /^CREATE TABLE\s+/i,
-      'CREATE TABLE IF NOT EXISTS '
-    )
-    const withQuotedTable = withIfNotExists
-      .replace(
-        /^CREATE TABLE IF NOT EXISTS\s+`?([a-zA-Z0-9_]+)`?/i,
-        'CREATE TABLE IF NOT EXISTS `$1`'
-      )
-      .replace(/(?<!`)restrict(?!`)/gi, '`restrict`')
-    const tableMatch = withQuotedTable.match(
-      /^CREATE TABLE IF NOT EXISTS\s+`([a-zA-Z0-9_]+)`/i
-    )
+    const withIfNotExists = statement.replace(/^CREATE TABLE\s+/i, 'CREATE TABLE IF NOT EXISTS ')
+    const withQuotedTable = withIfNotExists.replace(/^CREATE TABLE IF NOT EXISTS\s+`?([a-zA-Z0-9_]+)`?/i, 'CREATE TABLE IF NOT EXISTS `$1`').replace(/(?<!`)restrict(?!`)/gi, '`restrict`')
+    const tableMatch = withQuotedTable.match(/^CREATE TABLE IF NOT EXISTS\s+`([a-zA-Z0-9_]+)`/i)
     const tableName = tableMatch?.[1]
-    const withUniqueConstraints = tableName
-      ? withQuotedTable.replace(
-          /CONSTRAINT\s+`?([a-zA-Z0-9_]+)`?/gi,
-          (_match, name: string) => `CONSTRAINT \`${tableName}_${name}\``
-        )
-      : withQuotedTable
+    const withUniqueConstraints = tableName ? withQuotedTable.replace(/CONSTRAINT\s+`?([a-zA-Z0-9_]+)`?/gi, (_match, name: string) => `CONSTRAINT \`${tableName}_${name}\``) : withQuotedTable
     return withUniqueConstraints.trim()
   })
 }
@@ -75,9 +60,7 @@ export async function initMysqlSchema(logger?: AppLogger): Promise<void> {
   const serverConfig = buildServerConfig(config.mysqlUrl)
   const admin = await mysql.createConnection(serverConfig)
   try {
-    await admin.query(
-      `CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
-    )
+    await admin.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`)
   } finally {
     await admin.end()
   }

@@ -19,8 +19,7 @@ function ensureTrace(logger: LoggerInstancia): AppLogger {
 
   if (typedLogger.child) {
     const originalChild = typedLogger.child.bind(typedLogger)
-    typedLogger.child = ((meta?: object) =>
-      ensureTrace(originalChild((meta ?? {}) as object))) as LoggerInstancia['child']
+    typedLogger.child = ((meta?: object) => ensureTrace(originalChild((meta ?? {}) as object))) as LoggerInstancia['child']
   }
 
   return typedLogger as AppLogger
@@ -42,11 +41,7 @@ export function createLogger(): AppLogger {
       return `${timestamp ?? ''} [${level}] ${message ?? ''}${meta}`
     })
   )
-  const fileFormat = winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.errors({ stack: true }),
-    winston.format.json()
-  )
+  const fileFormat = winston.format.combine(winston.format.timestamp(), winston.format.errors({ stack: true }), winston.format.json())
   const transportDefinitions = [
     {
       type: 'console' as const,
