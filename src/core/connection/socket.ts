@@ -219,38 +219,6 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
   // Sincronização inicial do JID do bot
   store.setSelfJid(sock.user?.id ?? null)
 
-  sock.ev.on('connection.update', (update) => {
-    if (update.connection === 'open') {
-      store.setSelfJid(sock.user?.id ?? null)
-      logger.info('status da conexao: aberta', { connectionId })
-    }
-
-    if (update.isNewLogin) {
-      allowHistorySyncOnceForNewLogin()
-    }
-
-    if (update.connection === 'close') {
-      const statusCode = (update.lastDisconnect?.error as Boom | undefined)?.output?.statusCode
-      logger.warn('status da conexao: encerrada', { connectionId, statusCode })
-
-      if (statusCode === DisconnectReason.loggedOut) {
-        logger.error('sessao invalidada/removida, requer re-pareamento', {
-          connectionId,
-        })
-        store.setSelfJid(null)
-      }
-    }
-  })
-
-  // Vincula repositório de LIDs se disponível (WhatsApp Multi-Device v2)
-  const lidMappingStore = (sock as SocketWithSignalRepository).signalRepository?.lidMapping
-  if (lidMappingStore) {
-    store.bindLidMappingStore(lidMappingStore)
-  }
-
-  // Acopla a store ao fluxo de eventos do socket
-  store.bind(sock.ev)
-
   // Escuta atualizações de chaves criptográficas e tokens
   let credsSaveTimer: NodeJS.Timeout | null = null
   let credsSaveInFlight = false
@@ -277,6 +245,15 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
     }
   }
 
+  const forceCredsSave = (reason: string) => {
+    if (credsSaveTimer) {
+      clearTimeout(credsSaveTimer)
+      credsSaveTimer = null
+    }
+    logger.info('forcando persistencia imediata de credenciais', { connectionId, reason })
+    void flushCredsSave()
+  }
+
   const scheduleCredsSave = () => {
     if (CREDS_DEBOUNCE_MS <= 0) {
       void flushCredsSave()
@@ -288,6 +265,43 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
       void flushCredsSave()
     }, CREDS_DEBOUNCE_MS)
   }
+
+  sock.ev.on('connection.update', (update) => {
+    if (update.connection === 'open') {
+      store.setSelfJid(sock.user?.id ?? null)
+      logger.info('status da conexao: aberta', { connectionId })
+    }
+
+    if (update.isNewLogin) {
+      allowHistorySyncOnceForNewLogin()
+      forceCredsSave('new_login')
+    }
+
+    if (update.connection === 'close') {
+      const statusCode = (update.lastDisconnect?.error as Boom | undefined)?.output?.statusCode
+      logger.warn('status da conexao: encerrada', { connectionId, statusCode })
+
+      if (statusCode === DisconnectReason.restartRequired) {
+        forceCredsSave('restart_required')
+      }
+
+      if (statusCode === DisconnectReason.loggedOut) {
+        logger.error('sessao invalidada/removida, requer re-pareamento', {
+          connectionId,
+        })
+        store.setSelfJid(null)
+      }
+    }
+  })
+
+  // Vincula repositório de LIDs se disponível (WhatsApp Multi-Device v2)
+  const lidMappingStore = (sock as SocketWithSignalRepository).signalRepository?.lidMapping
+  if (lidMappingStore) {
+    store.bindLidMappingStore(lidMappingStore)
+  }
+
+  // Acopla a store ao fluxo de eventos do socket
+  store.bind(sock.ev)
 
   sock.ev.on('creds.update', scheduleCredsSave)
 
