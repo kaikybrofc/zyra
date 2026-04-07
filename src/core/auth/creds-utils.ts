@@ -74,29 +74,44 @@ const isObject = (value: unknown): boolean => isRecord(value)
 const hasId = (value: unknown): boolean =>
   isRecord(value) && isNonEmptyString((value as { id?: unknown }).id)
 
+type CredsCheck = {
+  key: string
+  check: (value: unknown) => boolean
+  weight: number
+  shouldCheck?: (creds: AuthenticationCreds) => boolean
+}
+
+const shouldRequireAdvSecretKey = (creds: AuthenticationCreds): boolean =>
+  isObject((creds as Record<string, unknown>).account)
+
 /**
  * Definição de campos cujo preenchimento correto é obrigatório para o funcionamento do socket.
  * @internal
  */
-const CRITICAL_CHECKS: Array<{ key: string; check: (value: unknown) => boolean; weight: number }> = [
+const CRITICAL_CHECKS: CredsCheck[] = [
   { key: 'noiseKey', check: isKeyPair, weight: 3 },
   { key: 'signedIdentityKey', check: isKeyPair, weight: 3 },
   { key: 'signedPreKey', check: isSignedPreKey, weight: 3 },
   { key: 'registrationId', check: isNonNegativeNumber, weight: 2 },
+  {
+    key: 'advSecretKey',
+    check: isNonEmptyString,
+    weight: 3,
+    shouldCheck: shouldRequireAdvSecretKey,
+  },
 ]
 
 /**
  * Definição de campos que auxiliam na persistência da sessão e histórico, mas não impedem o boot inicial.
  * @internal
  */
-const IMPORTANT_CHECKS: Array<{ key: string; check: (value: unknown) => boolean; weight: number }> = [
+const IMPORTANT_CHECKS: CredsCheck[] = [
   { key: 'pairingEphemeralKeyPair', check: isKeyPair, weight: 1 },
   { key: 'processedHistoryMessages', check: isArray, weight: 1 },
   { key: 'nextPreKeyId', check: isNumber, weight: 1 },
   { key: 'firstUnuploadedPreKeyId', check: isNumber, weight: 1 },
   { key: 'accountSyncCounter', check: isNumber, weight: 1 },
   { key: 'accountSettings', check: isObject, weight: 1 },
-  { key: 'advSecretKey', check: isNonEmptyString, weight: 1 },
   { key: 'registered', check: isBoolean, weight: 1 },
   { key: 'me', check: hasId, weight: 1 },
   { key: 'account', check: isObject, weight: 1 },
@@ -154,6 +169,7 @@ export const scoreCreds = (creds: AuthenticationCreds | null | undefined): Creds
   let score = 0
   const missingCritical: string[] = []
   for (const check of CRITICAL_CHECKS) {
+    if (check.shouldCheck && !check.shouldCheck(creds)) continue
     if (check.check((creds as Record<string, unknown>)[check.key])) {
       score += check.weight
     } else {
@@ -161,6 +177,7 @@ export const scoreCreds = (creds: AuthenticationCreds | null | undefined): Creds
     }
   }
   for (const check of IMPORTANT_CHECKS) {
+    if (check.shouldCheck && !check.shouldCheck(creds)) continue
     if (check.check((creds as Record<string, unknown>)[check.key])) {
       score += check.weight
     }
