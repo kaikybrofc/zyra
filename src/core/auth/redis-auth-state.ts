@@ -29,6 +29,27 @@ type RedisAuthState = {
   saveCreds: () => Promise<void>
 }
 
+const DISK_READ_CONCURRENCY = Math.max(
+  1,
+  Number(process.env.WA_AUTH_DISK_CONCURRENCY ?? 50)
+)
+
+const runWithConcurrency = async <T>(
+  items: T[],
+  concurrency: number,
+  handler: (item: T) => Promise<void>
+) => {
+  let index = 0
+  const workers = new Array(Math.min(concurrency, items.length)).fill(null).map(async () => {
+    while (index < items.length) {
+      const current = items[index]
+      index += 1
+      await handler(current)
+    }
+  })
+  await Promise.all(workers)
+}
+
 /**
  * Define as chaves de acesso ao Redis baseadas no ID da conexão e prefixos configurados.
  * @internal
@@ -69,11 +90,44 @@ export async function useRedisAuthState(connectionId?: string): Promise<RedisAut
   const persistKeysOnDisk = config.authPersistKeysOnDisk
   const { redisCredsKey, legacyRedisCredsKey, redisKeysKey, legacyRedisKeysKey } =
     buildRedisKeys(connectionId)
+  let redisFailureLogged = false
+  let redisRecoveryLogged = false
+
+  const markRedisUnhealthy = (error: unknown) => {
+    if (!redisFailureLogged) {
+      redisFailureLogged = true
+      redisRecoveryLogged = false
+      console.warn('[auth] falha ao acessar redis, usando disco como fallback', { error })
+    }
+  }
+
+  const markRedisHealthy = () => {
+    if (!redisFailureLogged || redisRecoveryLogged) return
+    redisRecoveryLogged = true
+    redisFailureLogged = false
+    console.info('[auth] redis recuperado, reativando cache')
+  }
+
+  const withRedis = async <T>(
+    fn: (redisClient: typeof client) => Promise<T>,
+    fallback: T
+  ): Promise<T> => {
+    try {
+      const result = await fn(client)
+      if (redisFailureLogged) markRedisHealthy()
+      return result
+    } catch (error) {
+      markRedisUnhealthy(error)
+      return fallback
+    }
+  }
 
   // --- Recuperação de Credenciais ---
   const credsFromDisk = await readData<AuthenticationCreds>(config.authDir, 'creds.json')
-  const credsFromRedisRaw = await client.get(redisCredsKey)
-  const credsFromLegacyRaw = legacyRedisCredsKey ? await client.get(legacyRedisCredsKey) : null
+  const credsFromRedisRaw = await withRedis((redisClient) => redisClient.get(redisCredsKey), null)
+  const credsFromLegacyRaw = legacyRedisCredsKey
+    ? await withRedis((redisClient) => redisClient.get(legacyRedisCredsKey), null)
+    : null
   
   const credsFromRedis = credsFromRedisRaw
     ? deserialize<AuthenticationCreds>(credsFromRedisRaw)
@@ -101,7 +155,7 @@ export async function useRedisAuthState(connectionId?: string): Promise<RedisAut
   // --- Sincronização Inicial ---
   const serializedCurrent = serialize(creds)
   if (credsFromRedisRaw !== serializedCurrent) {
-    await client.set(redisCredsKey, serializedCurrent)
+    await withRedis((redisClient) => redisClient.set(redisCredsKey, serializedCurrent), undefined)
   }
 
   const serializedDisk = credsFromDisk ? serialize(credsFromDisk) : null
@@ -123,12 +177,18 @@ export async function useRedisAuthState(connectionId?: string): Promise<RedisAut
       if (!ids.length) return data
 
       const redisKey = redisKeysKey(type)
-      const values = await client.hmGet(redisKey, ids)
+      const emptyValues: Array<string | null> = ids.map(() => null)
+      const values = await withRedis<Array<string | null>>(
+        (redisClient) => redisClient.hmGet(redisKey, ids) as Promise<Array<string | null>>,
+        emptyValues
+      )
       const legacyRedisKey = legacyRedisKeysKey(type)
       const toWarm: Record<string, string> = {}
 
-      await Promise.all(
-        values.map(async (raw: string | null, index: number) => {
+      await runWithConcurrency(
+        values.map((raw: string | null, index: number) => ({ raw, index })),
+        DISK_READ_CONCURRENCY,
+        async ({ raw, index }) => {
           const id = ids[index]
           if (!id) return
 
@@ -140,7 +200,10 @@ export async function useRedisAuthState(connectionId?: string): Promise<RedisAut
           } else {
             // 2. Tentar Redis Legado (Migração)
             if (legacyRedisKey) {
-              const legacyRaw = await client.hGet(legacyRedisKey, id)
+              const legacyRaw = await withRedis(
+                (redisClient) => redisClient.hGet(legacyRedisKey, id),
+                null
+              )
               if (legacyRaw) {
                 value = deserialize<SignalDataTypeMap[typeof type]>(legacyRaw)
                 toWarm[id] = legacyRaw
@@ -165,11 +228,10 @@ export async function useRedisAuthState(connectionId?: string): Promise<RedisAut
             data[id] = normalized
           }
         })
-      )
 
       // Salva no Redis Atual o que foi encontrado em outras fontes para acelerar o próximo 'get'
       if (Object.keys(toWarm).length) {
-        await client.hSet(redisKey, toWarm)
+        await withRedis((redisClient) => redisClient.hSet(redisKey, toWarm), undefined)
       }
 
       return data
@@ -187,18 +249,20 @@ export async function useRedisAuthState(connectionId?: string): Promise<RedisAut
         const redisKey = redisKeysKey(category)
         const toSet: Record<string, string> = {}
         const toDelete: string[] = []
-        const diskTasks: Promise<void>[] = []
+        const diskOperations: Array<() => Promise<void>> = []
 
         for (const [id, value] of Object.entries(entries)) {
           if (value) {
             toSet[id] = serialize(value)
             if (persistKeysOnDisk) {
-              diskTasks.push(writeData(config.authDir, `${category}-${id}.json`, value))
+              diskOperations.push(() =>
+                writeData(config.authDir, `${category}-${id}.json`, value)
+              )
             }
           } else {
             toDelete.push(id)
             if (persistKeysOnDisk) {
-              diskTasks.push(deleteData(config.authDir, `${category}-${id}.json`))
+              diskOperations.push(() => deleteData(config.authDir, `${category}-${id}.json`))
             }
           }
         }
@@ -209,10 +273,21 @@ export async function useRedisAuthState(connectionId?: string): Promise<RedisAut
         if (toDelete.length) {
           pipeline.hDel(redisKey, toDelete)
         }
-        if (diskTasks.length) await Promise.all(diskTasks)
+        if (diskOperations.length) {
+          await runWithConcurrency(
+            diskOperations,
+            DISK_READ_CONCURRENCY,
+            async (operation) => {
+              await operation()
+            }
+          )
+        }
       }
 
-      await pipeline.exec()
+      await withRedis((redisClient) => {
+        void redisClient
+        return pipeline.exec()
+      }, undefined)
     },
   }
 
@@ -220,8 +295,10 @@ export async function useRedisAuthState(connectionId?: string): Promise<RedisAut
    * Sincroniza o estado atual das credenciais no Disco e Redis.
    */
   const saveCreds = async () => {
-    await writeData(config.authDir, 'creds.json', creds)
-    await client.set(redisCredsKey, serialize(creds))
+    await Promise.all([
+      writeData(config.authDir, 'creds.json', creds),
+      withRedis((redisClient) => redisClient.set(redisCredsKey, serialize(creds)), undefined),
+    ])
   }
 
   return { state: { creds, keys }, saveCreds }
