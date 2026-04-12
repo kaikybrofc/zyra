@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { config } from '../config/index.js'
 import { ensureMysqlConnection } from '../core/db/connection.js'
 import { getMysqlPool } from '../core/db/mysql.js'
+import { createLogger } from '../observability/logger.js'
 import { getMessageText, getNormalizedMessage } from '../utils/message.js'
 
 const serialize = (value: unknown) => JSON.stringify(value, BufferJSON.replacer)
@@ -14,6 +15,8 @@ const deserialize = <T>(value: unknown) => {
   }
   return JSON.parse(JSON.stringify(value), BufferJSON.reviver) as T
 }
+
+const storeLogger = createLogger()
 
 const MAX_LENGTHS = {
   jid: 128,
@@ -188,6 +191,7 @@ export type SqlStore = {
  */
 export function createSqlStore(connectionId?: string): SqlStore {
   let selfJid: string | null = null
+  const resolvedConnectionId = connectionId ?? config.connectionId ?? 'default'
   if (!config.mysqlUrl) {
     return {
       enabled: false,
@@ -226,7 +230,11 @@ export function createSqlStore(connectionId?: string): SqlStore {
     }
   }
 
-  const safe = async <T>(fn: (pool: NonNullable<ReturnType<typeof getMysqlPool>>) => Promise<T>, fallback: T, options?: { ensureConnection?: boolean }): Promise<T> => {
+  const safe = async <T>(
+    fn: (pool: NonNullable<ReturnType<typeof getMysqlPool>>) => Promise<T>,
+    fallback: T,
+    options?: { ensureConnection?: boolean; action?: string }
+  ): Promise<T> => {
     try {
       const pool = getMysqlPool()
       if (!pool) return fallback
@@ -234,12 +242,17 @@ export function createSqlStore(connectionId?: string): SqlStore {
         await ensureMysqlConnection(pool)
       }
       return await fn(pool)
-    } catch {
+    } catch (error) {
+      if (options?.action) {
+        storeLogger.error('falha na persistencia sql', {
+          err: error,
+          action: options.action,
+          connectionId: resolvedConnectionId,
+        })
+      }
       return fallback
     }
   }
-
-  const resolvedConnectionId = connectionId ?? config.connectionId ?? 'default'
 
   type UserIdentifierType = 'pn' | 'lid' | 'jid' | 'username'
   const normalizeUserIdentifier = (entry: { type: UserIdentifierType; value: string }): { type: UserIdentifierType; value: string } | null => {
@@ -739,7 +752,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
           }
         },
         undefined,
-        { ensureConnection: true }
+        { ensureConnection: true, action: 'recordNewsletter' }
       ),
     deleteMessage: async (chatJid, messageId, fromMe) =>
       safe(
@@ -758,7 +771,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
           )
         },
         undefined,
-        { ensureConnection: true }
+        { ensureConnection: true, action: 'recordNewsletterParticipant' }
       ),
     deleteMessagesByJid: async (jid) =>
       safe(
@@ -774,7 +787,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
           )
         },
         undefined,
-        { ensureConnection: true }
+        { ensureConnection: true, action: 'recordNewsletterEvent' }
       ),
     getGroup: async (id) =>
       safe(async (pool) => {

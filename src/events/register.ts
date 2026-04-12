@@ -53,6 +53,23 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
     return { chatJid: key.remoteJid, messageId: key.id, fromMe: Boolean(key.fromMe) }
   }
   const toGroupJid = (jid?: string | null) => (jid && jid.endsWith('@g.us') ? jid : null)
+  const isNewsletterJid = (jid?: string | null): jid is string => Boolean(jid && jid.endsWith('@newsletter'))
+  const recordNewsletterSnapshot = (newsletterId: string | null | undefined, data: Record<string, unknown>) => {
+    if (!sqlStore.enabled || !newsletterId) return
+    void sqlStore.recordNewsletter({ newsletterId, data })
+  }
+  const recordNewsletterFromMessage = (message: BaileysEventMap['messages.upsert']['messages'][number]) => {
+    const key = message.key
+    const newsletterId = isNewsletterJid(key?.remoteJid) ? key.remoteJid : null
+    if (!newsletterId) return
+    recordNewsletterSnapshot(newsletterId, {
+      id: newsletterId,
+      lastMessageId: key?.id ?? null,
+      fromMe: Boolean(key?.fromMe),
+      pushName: message.pushName ?? null,
+      messageTimestamp: message.messageTimestamp ?? null,
+    })
+  }
 
   const syncGroupsOnConnect = async (): Promise<GroupMetadata[]> => {
     try {
@@ -303,6 +320,11 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
           count: event.messages.length,
           type: event.type,
         })
+        if (sqlStore.enabled) {
+          for (const message of event.messages) {
+            recordNewsletterFromMessage(message)
+          }
+        }
         if (sqlStore.enabled && event.type === 'notify') {
           const selfJid = resolveSelfJid()
           for (const message of event.messages) {
@@ -503,7 +525,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
     'newsletter.reaction': ({ id, server_id }) => {
       logEvent('newsletter.reaction', { id, serverId: server_id }, { actorJid: resolveSelfJid() })
       if (sqlStore.enabled) {
-        void sqlStore.recordNewsletter({ newsletterId: id, data: { id, server_id } })
+        recordNewsletterSnapshot(id, { id, server_id })
         void sqlStore.recordNewsletterEvent({
           newsletterId: id,
           eventType: 'reaction',
@@ -514,7 +536,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
     'newsletter.view': ({ id, server_id, count }) => {
       logEvent('newsletter.view', { id, serverId: server_id, count }, { actorJid: resolveSelfJid() })
       if (sqlStore.enabled) {
-        void sqlStore.recordNewsletter({ newsletterId: id, data: { id, server_id, count } })
+        recordNewsletterSnapshot(id, { id, server_id, count })
         void sqlStore.recordNewsletterEvent({
           newsletterId: id,
           eventType: 'view',
@@ -525,6 +547,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
     'newsletter-participants.update': ({ id, author, user, new_role, action }) => {
       logEvent('newsletter-participants.update', { id, author, user, newRole: new_role, action }, { actorJid: author ?? null, targetJid: user ?? null })
       if (sqlStore.enabled) {
+        recordNewsletterSnapshot(id, { id, author, user, new_role, action })
         if (user) {
           void sqlStore.recordNewsletterParticipant({
             newsletterId: id,
@@ -545,6 +568,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
     'newsletter-settings.update': ({ id }) => {
       logEvent('newsletter-settings.update', { id }, { actorJid: resolveSelfJid() })
       if (sqlStore.enabled) {
+        recordNewsletterSnapshot(id, { id })
         void sqlStore.recordNewsletterEvent({
           newsletterId: id,
           eventType: 'settings.update',
