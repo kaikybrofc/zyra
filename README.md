@@ -133,3 +133,4 @@ Utilize o `LOG_LEVEL=debug` durante o desenvolvimento para visualizar o fluxo de
 Este projeto está licenciado sob a **Licença MIT**. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
 
 Copyright (c) 2026 kaikybrofc
+
