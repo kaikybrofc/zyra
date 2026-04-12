@@ -1,15 +1,7 @@
-import type { WASocket, proto } from '@whiskeysockets/baileys'
-
-export type CommandContext = {
-  sock: WASocket
-  message: proto.IWebMessageInfo
-  chatId: string
-  text: string
-  args: string[]
-}
+import type { CommandContext } from '../core/commands/context.js'
 
 export type Command = {
   name: string
   description: string
-  execute: (context: CommandContext) => Promise<void>
+  execute: (ctx: CommandContext) => Promise<void>
 }

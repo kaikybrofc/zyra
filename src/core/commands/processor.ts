@@ -1,0 +1,223 @@
+import { type WAMessage, type WASocket, type proto } from '@whiskeysockets/baileys'
+import { commands } from '../../commands/index.js'
+import type { AppLogger } from '../../observability/logger.js'
+import { createSqlStore, type SqlStore } from '../../store/sql-store.js'
+import { config } from '../../config/index.js'
+import { getMessageText, getNormalizedMessage } from '../../utils/message.js'
+import { createCommandAdminActions } from './admin.js'
+import { CommandContext } from './context.js'
+
+const COMMAND_PREFIX = '!'
+const ANSI_RESET = '\x1b[0m'
+const ANSI_BOLD = '\x1b[1m'
+const ANSI_CYAN = '\x1b[36m'
+const ANSI_GREEN = '\x1b[32m'
+const ANSI_MAGENTA = '\x1b[35m'
+const ANSI_GRAY = '\x1b[90m'
+const MEDIA_TYPES = new Set([
+  'imageMessage',
+  'videoMessage',
+  'audioMessage',
+  'documentMessage',
+  'stickerMessage',
+  'ptvMessage',
+  'contactMessage',
+  'contactsArrayMessage',
+  'locationMessage',
+  'liveLocationMessage',
+])
+
+let defaultSqlStore: SqlStore | null = null
+
+export type IncomingCommandEnvelope = {
+  sock: WASocket
+  message: WAMessage
+  chatId: string
+  sender: string
+  text: string
+  isGroup: boolean
+  commandName: string | null
+  commandArgs: string[]
+}
+
+type CreateCommandProcessorOptions = {
+  logger: AppLogger
+  sqlStore?: SqlStore
+}
+
+const colorize = (value: string, color: string): string => (process.stdout.isTTY ? `${color}${value}${ANSI_RESET}` : value)
+
+const resolveSqlStore = (sqlStore?: SqlStore): SqlStore => {
+  if (sqlStore) return sqlStore
+  if (!defaultSqlStore) {
+    defaultSqlStore = createSqlStore()
+  }
+  return defaultSqlStore
+}
+
+const parseTimestamp = (raw: unknown): number | null => {
+  if (!raw) return null
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null
+  if (typeof (raw as { toNumber?: () => number }).toNumber === 'function') {
+    const value = (raw as { toNumber: () => number }).toNumber()
+    return Number.isFinite(value) ? value : null
+  }
+  const value = Number(raw)
+  return Number.isFinite(value) ? value : null
+}
+
+export const buildIncomingCommandEnvelope = (
+  sock: WASocket,
+  message: proto.IWebMessageInfo
+): IncomingCommandEnvelope | null => {
+  if (!message.message || !message.key) return null
+  if (message.key.fromMe && !config.allowOwnMessages) return null
+
+  const chatId = message.key.remoteJid
+  if (!chatId) return null
+
+  const text = getMessageText(message)?.trim() ?? ''
+  const isCommand = text.startsWith(COMMAND_PREFIX)
+  const commandTokens = isCommand ? text.slice(COMMAND_PREFIX.length).trim().split(/\s+/).filter(Boolean) : []
+  const [commandName, ...commandArgs] = commandTokens
+
+  return {
+    sock,
+    message: message as WAMessage,
+    chatId,
+    sender: message.key.participant ?? chatId,
+    text,
+    isGroup: chatId.endsWith('@g.us'),
+    commandName: commandName?.toLowerCase() ?? null,
+    commandArgs,
+  }
+}
+
+const logIncomingMessage = async (context: IncomingCommandEnvelope, logger: AppLogger): Promise<void> => {
+  const { type: messageType } = getNormalizedMessage(context.message)
+  const messageKey = context.message.key
+  const rawTimestamp = context.message.messageTimestamp
+  const timestampSeconds = parseTimestamp(rawTimestamp)
+  const timestampMs = timestampSeconds ? timestampSeconds * 1000 : null
+  const timestampIso = timestampMs ? new Date(timestampMs).toISOString() : null
+  const text = context.text.length > 200 ? `${context.text.slice(0, 200)}...` : context.text || null
+  const compactText = text ? text.replace(/\s+/g, ' ').trim() : null
+  const hasMedia = messageType ? MEDIA_TYPES.has(messageType) : false
+  const logParts = [
+    `chatId=${context.chatId}`,
+    `messageId=${messageKey.id ?? ''}`,
+    `fromMe=${messageKey.fromMe ?? ''}`,
+    `sender=${context.sender}`,
+    `pushName=${context.message.pushName ?? ''}`,
+    `isGroup=${context.isGroup}`,
+    `messageType=${messageType ? colorize(messageType, ANSI_MAGENTA) : ''}`,
+    `hasMedia=${hasMedia}`,
+    `text=${compactText ? JSON.stringify(compactText) : ''}`,
+    `isCommand=${colorize(String(Boolean(context.commandName)), context.commandName ? ANSI_GREEN : ANSI_GRAY)}`,
+    `commandName=${context.commandName ? colorize(context.commandName, ANSI_CYAN) : ''}`,
+    `timestamp=${timestampIso ?? ''}`,
+  ]
+  const title = colorize('mensagem recebida', `${ANSI_BOLD}${ANSI_CYAN}`)
+  logger.info(`\n\n${title} | ${logParts.join(' ')}`)
+}
+
+const createRuntimeContext = (context: IncomingCommandEnvelope): CommandContext => {
+  const admin = createCommandAdminActions({
+    sock: context.sock,
+    chatId: context.chatId,
+    sender: context.sender,
+    isGroup: context.isGroup,
+  })
+
+  return new CommandContext({
+    chatId: context.chatId,
+    sender: context.sender,
+    text: context.text,
+    args: context.commandArgs,
+    isGroup: context.isGroup,
+    commandName: context.commandName ?? '',
+    messageId: context.message.key.id ?? null,
+    pushName: context.message.pushName ?? null,
+    admin,
+    reply: async (text) => {
+      await context.sock.sendMessage(context.chatId, { text }, { quoted: context.message })
+    },
+    react: async (emoji) => {
+      await context.sock.sendMessage(context.chatId, {
+        react: { text: emoji, key: context.message.key },
+      })
+    },
+  })
+}
+
+const recordCommandExecution = (
+  sqlStore: SqlStore,
+  context: IncomingCommandEnvelope,
+  durationMs: number,
+  success: boolean
+): void => {
+  if (!sqlStore.enabled || !context.commandName) return
+
+  const messageKey = context.message.key
+  const selfJid = messageKey.fromMe ? (context.sock.user?.id ?? null) : null
+  const actorJid = selfJid ?? messageKey.participant ?? (!context.isGroup ? context.chatId : null)
+  void sqlStore.recordCommandLog({
+    actorJid,
+    chatJid: context.chatId,
+    commandName: context.commandName,
+    argsText: context.commandArgs.length ? context.commandArgs.join(' ') : null,
+    success,
+    durationMs,
+    data: { isGroup: context.isGroup },
+  })
+}
+
+export type CommandProcessor = {
+  process: (sock: WASocket, message: proto.IWebMessageInfo) => Promise<void>
+}
+
+export function createCommandProcessor({ logger, sqlStore }: CreateCommandProcessorOptions): CommandProcessor {
+  const resolvedSqlStore = resolveSqlStore(sqlStore)
+
+  return {
+    async process(sock, message) {
+      const context = buildIncomingCommandEnvelope(sock, message)
+      if (!context) {
+        logger.info('mensagem ignorada pelo processor', {
+          hasMessage: Boolean(message.message),
+          hasKey: Boolean(message.key),
+          fromMe: message.key?.fromMe ?? null,
+        })
+        return
+      }
+
+      await logIncomingMessage(context, logger)
+
+      if (!context.commandName) return
+
+      const command = commands[context.commandName]
+      if (!command) return
+
+      const startedAt = Date.now()
+      let success = true
+      const cmdCtx = createRuntimeContext(context)
+
+      try {
+        await command.execute(cmdCtx)
+      } catch (error) {
+        success = false
+        logger.error('comando falhou', { err: error, command: context.commandName })
+        try {
+          await cmdCtx.reply('❌ Ocorreu um erro interno ao executar este comando.')
+        } catch (sendError) {
+          logger.error('falha ao enviar aviso de erro do comando', {
+            err: sendError,
+            command: context.commandName,
+          })
+        }
+      } finally {
+        recordCommandExecution(resolvedSqlStore, context, Date.now() - startedAt, success)
+      }
+    },
+  }
+}
