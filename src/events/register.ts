@@ -7,28 +7,53 @@ import { handleIncomingMessages } from '../router/index.js'
 import { createSqlStore } from '../store/sql-store.js'
 import { getMessageText, getNormalizedMessage } from '../utils/message.js'
 
+/**
+ * Opções de inicialização para o registro de eventos.
+ */
 type RegisterOptions = {
+  /** Instância do socket do Baileys. */
   sock: WASocket
+  /** Logger da aplicação. */
   logger: AppLogger
+  /** Função para disparar a reconexão do socket. */
   reconnect: () => Promise<void>
+  /** Identificador único da conexão (usado para logs e banco de dados). */
   connectionId: string
 }
 
+/**
+ * Extensão do socket para incluir métodos de persistência imediata.
+ */
 type SocketWithCredsFlush = WASocket & {
+  /** Força a persistência imediata das credenciais. */
   flushCredsNow?: (reason: string) => Promise<void>
 }
 
+/**
+ * Metadados de uma Newsletter (Canal).
+ */
 type NewsletterMetadata = {
+  /** JID da Newsletter. */
   id: string
+  /** JID do proprietário. */
   owner?: string | null
+  /** Nome da Newsletter. */
   name?: string
+  /** Descrição da Newsletter. */
   description?: string | null
+  /** Link de convite. */
   invite?: string | null
+  /** Timestamp de criação. */
   creation_time?: number | null
+  /** Número de inscritos. */
   subscribers?: number | null
+  /** Status de verificação. */
   verification?: string | null
+  /** Estado de silenciamento. */
   mute_state?: string | null
+  /** Foto de perfil. */
   picture?: unknown
+  /** Metadados da thread (mensagens). */
   thread_metadata?: {
     creation_time?: number | null
     name?: string
@@ -36,7 +61,11 @@ type NewsletterMetadata = {
   } | null
 }
 
+/**
+ * Extensão do socket para incluir busca de metadados de Newsletter.
+ */
 type SocketWithNewsletterMetadata = WASocket & {
+  /** Busca metadados de uma Newsletter via JID ou invite. */
   newsletterMetadata?: (type: 'invite' | 'jid', key: string) => Promise<NewsletterMetadata | null>
 }
 
@@ -46,10 +75,16 @@ type MissingEvents = Exclude<keyof BaileysEventMap, (typeof ALL_EVENTS)[number]>
 const _allEventsCovered: MissingEvents extends never ? true : never = true
 void _allEventsCovered
 
+/**
+ * Define a estrutura de um manipulador de evento genérico.
+ */
 type EventHandler<K extends keyof BaileysEventMap> = (data: BaileysEventMap[K]) => void | Promise<void>
 
 /**
- * Registra os listeners de eventos do Baileys e integra persistencia/logs por connection_id.
+ * Registra todos os listeners de eventos do Baileys e integra com persistência SQL e logs.
+ * Esta função é o coração da reatividade do bot, lidando desde conexões até mensagens e newsletters.
+ * 
+ * @param options Opções de configuração contendo o socket, logger e callbacks de ciclo de vida.
  */
 export function registerEvents({ sock, logger, reconnect, connectionId }: RegisterOptions): void {
   const socketWithCredsFlush = sock as SocketWithCredsFlush
