@@ -118,7 +118,11 @@ const pickFrom = (obj: Record<string, unknown> | null, keys: string[]) => {
   return pickString(nested, keys)
 }
 
-const isUserJid = (jid: string) => jid.includes('@') && !jid.endsWith('@g.us')
+const isUserJid = (jid: string) =>
+  jid.includes('@') &&
+  !jid.endsWith('@g.us') &&
+  !jid.endsWith('@newsletter') &&
+  jid !== 'status@broadcast'
 
 const userIdCache = new Map<string, string>()
 const cacheKey = (type: string, value: string) => `${type}:${value}`
@@ -166,16 +170,73 @@ async function main() {
 
   type UserIdentifierType = 'jid' | 'pn' | 'lid' | 'username'
 
+  const normalizeUserIdentifier = (entry: { type: UserIdentifierType; value: string }): { type: UserIdentifierType; value: string } | null => {
+    switch (entry.type) {
+      case 'jid': {
+        const jid = normalizeIdentifier(entry.value)
+        if (!jid) return null
+        if (jid.endsWith('@lid')) {
+          return { type: 'lid', value: jid }
+        }
+        return { type: 'jid', value: jid }
+      }
+      case 'pn':
+      case 'lid': {
+        const value = normalizePnLid(entry.value)
+        return value ? { type: entry.type, value } : null
+      }
+      case 'username': {
+        const value = normalizeIdentifier(entry.value)
+        return value ? { type: 'username', value } : null
+      }
+      default:
+        return null
+    }
+  }
+
+  const buildUserIdentifierLookupVariants = (entry: { type: UserIdentifierType; value: string }): Array<{ type: UserIdentifierType; value: string }> => {
+    if (entry.type === 'lid' && entry.value.endsWith('@lid')) {
+      return [entry, { type: 'jid', value: entry.value }]
+    }
+    return [entry]
+  }
+
+  const resolveUserIdentifierEntries = (value: string | null | undefined): Array<{ type: UserIdentifierType; value: string }> => {
+    const normalizedJid = normalizeIdentifier(value)
+    if (normalizedJid?.includes('@')) {
+      const entry = normalizeUserIdentifier({ type: 'jid', value: normalizedJid })
+      return entry ? [entry] : []
+    }
+    const normalizedLid = normalizePnLid(value)
+    if (!normalizedLid) return []
+    const entry = normalizeUserIdentifier({ type: 'lid', value: normalizedLid })
+    return entry ? [entry] : []
+  }
+
+  const resolveMessageSenderIdentifierEntries = (message: WAMessage): Array<{ type: UserIdentifierType; value: string }> => {
+    const key = message.key
+    if (key?.fromMe) {
+      return resolveUserIdentifierEntries(selfJid ?? key.participant ?? null)
+    }
+    if (key?.participant) {
+      return resolveUserIdentifierEntries(key.participant)
+    }
+    const remoteJid = normalizeIdentifier(key?.remoteJid ?? null)
+    if (!remoteJid) return []
+    if (remoteJid.endsWith('@s.whatsapp.net') || remoteJid.endsWith('@lid')) {
+      return resolveUserIdentifierEntries(remoteJid)
+    }
+    return []
+  }
+
   const ensureUserByIdentifiers = async (identifiers: Array<{ type: UserIdentifierType; value: string }>, displayName?: string | null) => {
     const clean = identifiers
-      .map((entry) => {
-        const normalized = entry.type === 'pn' || entry.type === 'lid' ? normalizePnLid(entry.value) : normalizeIdentifier(entry.value)
-        return { type: entry.type, value: normalized }
-      })
-      .filter((entry): entry is { type: UserIdentifierType; value: string } => Boolean(entry.value))
+      .map((entry) => normalizeUserIdentifier(entry))
+      .filter((entry): entry is { type: UserIdentifierType; value: string } => Boolean(entry?.value))
     if (!clean.length) return null
+    const lookup = clean.flatMap(buildUserIdentifierLookupVariants).filter((entry, index, entries) => entries.findIndex((item) => item.type === entry.type && item.value === entry.value) === index)
 
-    const cachedUserId = clean.map((entry) => userIdCache.get(cacheKey(entry.type, entry.value))).find((value): value is string => Boolean(value)) ?? null
+    const cachedUserId = lookup.map((entry) => userIdCache.get(cacheKey(entry.type, entry.value))).find((value): value is string => Boolean(value)) ?? null
 
     if (cachedUserId) {
       if (displayName) {
@@ -192,8 +253,8 @@ async function main() {
     }
 
     type UserRow = RowDataPacket & { user_id: string; id_type: string; id_value: string }
-    const whereClauses = clean.map(() => `(id_type = ? AND id_value = ?)`).join(' OR ')
-    const whereParams = clean.flatMap((entry) => [entry.type, entry.value])
+    const whereClauses = lookup.map(() => `(id_type = ? AND id_value = ?)`).join(' OR ')
+    const whereParams = lookup.flatMap((entry) => [entry.type, entry.value])
     const [rows] = await pool.execute<UserRow[]>(
       `SELECT LOWER(CONCAT(HEX(SUBSTR(user_id, 1, 4)),'-',HEX(SUBSTR(user_id, 5, 2)),'-',HEX(SUBSTR(user_id, 7, 2)),'-',HEX(SUBSTR(user_id, 9, 2)),'-',HEX(SUBSTR(user_id, 11, 6)))) AS user_id, id_type, id_value
        FROM user_identifiers
@@ -451,9 +512,9 @@ async function main() {
         [timestamp, contentType, textPreview, connectionId, row.id]
       )
 
-      const senderJid = message.key.fromMe ? (selfJid ?? message.key.participant ?? null) : (message.key.participant ?? message.key.remoteJid ?? null)
-      if (senderJid) {
-        const senderUserId = await ensureUserByJid(senderJid)
+      const senderIdentifierEntries = resolveMessageSenderIdentifierEntries(message)
+      if (senderIdentifierEntries.length) {
+        const senderUserId = await ensureUserByIdentifiers(senderIdentifierEntries)
         if (senderUserId) {
           await pool.execute(
             `UPDATE messages SET sender_user_id = UNHEX(REPLACE(?, '-', ''))
@@ -522,10 +583,15 @@ async function main() {
         [connectionId]
       )
       if (msgUpdate.affectedRows) logger.info('batch: sender_user_id atualizado', { affected: msgUpdate.affectedRows })
-
     } catch (error) {
       logger.error('erro no ciclo de backfill', { err: error })
     }
+  }
+
+  if (process.env.WA_BACKFILL_ONCE === 'true') {
+    await runCycle()
+    await pool.end()
+    return
   }
 
   // Worker Loop
@@ -542,4 +608,3 @@ main().catch((error) => {
   logger.error('falha fatal no backfill', { err: error })
   process.exitCode = 1
 })
-

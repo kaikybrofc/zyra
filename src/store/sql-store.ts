@@ -259,7 +259,11 @@ export function createSqlStore(connectionId?: string): SqlStore {
     switch (entry.type) {
       case 'jid': {
         const jid = normalizeJid(entry.value)
-        return jid ? { type: entry.type, value: jid } : null
+        if (!jid) return null
+        if (jid.endsWith('@lid')) {
+          return { type: 'lid', value: jid }
+        }
+        return { type: entry.type, value: jid }
       }
       case 'pn':
       case 'lid': {
@@ -275,9 +279,45 @@ export function createSqlStore(connectionId?: string): SqlStore {
     }
   }
 
+  const buildUserIdentifierLookupVariants = (entry: { type: UserIdentifierType; value: string }): Array<{ type: UserIdentifierType; value: string }> => {
+    if (entry.type === 'lid' && entry.value.endsWith('@lid')) {
+      return [entry, { type: 'jid', value: entry.value }]
+    }
+    return [entry]
+  }
+
+  const resolveUserIdentifierEntries = (value: string | null | undefined): Array<{ type: UserIdentifierType; value: string }> => {
+    const normalizedJid = normalizeJid(value)
+    if (normalizedJid) {
+      const entry = normalizeUserIdentifier({ type: 'jid', value: normalizedJid })
+      return entry ? [entry] : []
+    }
+    const normalizedLid = normalizePnLid(value)
+    if (!normalizedLid) return []
+    const entry = normalizeUserIdentifier({ type: 'lid', value: normalizedLid })
+    return entry ? [entry] : []
+  }
+
+  const resolveMessageSenderIdentifierEntries = (message: WAMessage, currentSelfJid: string | null): Array<{ type: UserIdentifierType; value: string }> => {
+    const key = message.key
+    if (key?.fromMe) {
+      return resolveUserIdentifierEntries(currentSelfJid ?? key.participant ?? null)
+    }
+    if (key?.participant) {
+      return resolveUserIdentifierEntries(key.participant)
+    }
+    const remoteJid = normalizeJid(key?.remoteJid)
+    if (!remoteJid) return []
+    if (remoteJid.endsWith('@s.whatsapp.net') || remoteJid.endsWith('@lid')) {
+      return resolveUserIdentifierEntries(remoteJid)
+    }
+    return []
+  }
+
   const ensureUserByIdentifiers = async (pool: NonNullable<ReturnType<typeof getMysqlPool>>, identifiers: Array<{ type: UserIdentifierType; value: string }>, displayName?: string | null, aliases?: Array<{ type: 'pushName' | 'notify' | 'username' | 'display_name'; value: string }>): Promise<string | null> => {
     const cleanIdentifiers = identifiers.map((entry) => normalizeUserIdentifier(entry)).filter((entry): entry is { type: UserIdentifierType; value: string } => Boolean(entry))
     if (!cleanIdentifiers.length) return null
+    const lookupIdentifiers = cleanIdentifiers.flatMap(buildUserIdentifierLookupVariants).filter((entry, index, entries) => entries.findIndex((item) => item.type === entry.type && item.value === entry.value) === index)
     const normalizedDisplayName = normalizeDisplayName(displayName)
     const normalizedAliases =
       aliases
@@ -292,7 +332,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
         .filter((alias): alias is { type: 'pushName' | 'notify' | 'username' | 'display_name'; value: string } => Boolean(alias)) ?? null
 
     type UserRow = RowDataPacket & { user_id: string }
-    for (const entry of cleanIdentifiers) {
+    for (const entry of lookupIdentifiers) {
       const [rows] = await pool.execute<UserRow[]>(
         `SELECT LOWER(CONCAT(HEX(SUBSTR(user_id, 1, 4)),'-',HEX(SUBSTR(user_id, 5, 2)),'-',HEX(SUBSTR(user_id, 7, 2)),'-',HEX(SUBSTR(user_id, 9, 2)),'-',HEX(SUBSTR(user_id, 11, 6)))) AS user_id
          FROM user_identifiers
@@ -624,12 +664,11 @@ export function createSqlStore(connectionId?: string): SqlStore {
           const chatJid = normalizeJid(key?.remoteJid)
           const messageId = normalizeMessageId(key?.id)
           if (!chatJid || !messageId) return
-          const senderJid = key.fromMe ? (selfJid ?? key.participant ?? null) : (key.participant ?? key.remoteJid ?? null)
-          const normalizedSender = normalizeJid(senderJid)
-          const senderUserId = normalizedSender
+          const senderIdentifierEntries = resolveMessageSenderIdentifierEntries(message, selfJid)
+          const senderUserId = senderIdentifierEntries.length
             ? await ensureUserByIdentifiers(
                 pool,
-                [{ type: 'jid', value: normalizedSender }],
+                senderIdentifierEntries,
                 null,
                 (() => {
                   const pushName = normalizeDisplayName(message.pushName)
@@ -682,6 +721,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
            )
            VALUES (?, ?, ?, ?, IF(?, UNHEX(REPLACE(?, '-', '')), NULL), ?, ?, ?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE
+             sender_user_id = COALESCE(VALUES(sender_user_id), sender_user_id),
              timestamp = VALUES(timestamp),
              content_type = VALUES(content_type),
              message_type = VALUES(message_type),
@@ -752,7 +792,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
           }
         },
         undefined,
-        { ensureConnection: true, action: 'recordNewsletter' }
+        { ensureConnection: true, action: 'setMessage' }
       ),
     deleteMessage: async (chatJid, messageId, fromMe) =>
       safe(
