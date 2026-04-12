@@ -10,6 +10,7 @@
 - **Persistência Híbrida:** Sistema de autenticação inteligente que alterna entre **MySQL**, **Redis** e **Disco** (FileSystem) para máxima resiliência.
 - **Identidade Unificada:** Mapeamento inteligente de usuários (PN, LID, JID, Username) para um único ID interno.
 - **Store de Alta Performance:** Cache de contatos, chats e mensagens otimizado para baixa latência.
+- **Arquitetura Modular de Comandos:** Comandos desacoplados do núcleo com contexto próprio e funções de core prontas (consulte [README-COMMANDS.md](README-COMMANDS.md)).
 - **Observabilidade Total:** Logs estruturados e rastreamento de eventos para auditoria e troubleshooting.
 
 ---
