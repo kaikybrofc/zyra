@@ -307,7 +307,7 @@ describe('socket', () => {
       return process
     }) as typeof process.once)
 
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((_code?: number) => {
       return undefined as never
     }) as typeof process.exit)
 
