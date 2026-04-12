@@ -1,4 +1,4 @@
-import type { CommandContext } from '../core/commands/context.js'
+import type { CommandContext } from '../core/command-runtime/context.js'
 
 export type Command = {
   name: string

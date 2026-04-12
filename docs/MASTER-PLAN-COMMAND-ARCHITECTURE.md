@@ -115,12 +115,12 @@ Com esta base, o Zyra pode evoluir para:
 ## 6. Plano de Implementação (Roadmap)
 
 ### Fase 1: Fundação (Core)
-- Implementar `src/core/commands/context.ts` (A interface).
-- Implementar `src/core/commands/processor.ts` (O motor).
+- Implementar `src/core/command-runtime/context.ts` (A interface).
+- Implementar `src/core/command-runtime/processor.ts` (O motor).
 
 ### Fase 2: Inteligência (Helpers)
-- Criar `src/core/commands/helpers/group.ts` (Lógica de admins/membros).
-- Criar `src/core/commands/helpers/message.ts` (Parser de texto e mídias).
+- Criar `src/core/command-runtime/helpers/group.ts` (Lógica de admins/membros).
+- Criar `src/core/command-runtime/helpers/message.ts` (Parser de texto e mídias).
 
 ### Fase 3: Migração
 - Converter comandos básicos (`ping`) para o novo formato.

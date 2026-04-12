@@ -17,7 +17,7 @@ Anteriormente, os comandos recebiam diretamente o socket do Baileys (`WASocket`)
 
 ## 🛠️ O que mudou no código?
 
-### 1. Novo Core de Comandos (`src/core/commands/`)
+### 1. Novo Runtime de Comandos (`src/core/command-runtime/`)
 Agora o core foi dividido em camadas:
 
 - `context.ts`: expõe um `ctx` normalizado para os comandos.
@@ -37,7 +37,7 @@ export type Command = {
 }
 ```
 
-### 3. Processador Central (`src/core/commands/processor.ts`)
+### 3. Processador Central (`src/core/command-runtime/processor.ts`)
 O processador central agora identifica o comando, cria o contexto e gerencia a execução de forma isolada. O roteador apenas encaminha as mensagens recebidas para o processor do core.
 
 ---

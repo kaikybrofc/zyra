@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const createCommandProcessorMock = vi.fn()
 const createSqlStoreMock = vi.fn()
 
-vi.mock('../src/core/commands/processor.js', () => ({
+vi.mock('../src/core/command-runtime/processor.js', () => ({
   createCommandProcessor: (...args: unknown[]) => createCommandProcessorMock(...args),
 }))
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { CommandContext } from '../src/core/commands/context.ts'
+import { CommandContext } from '../src/core/command-runtime/context.ts'
 
 describe('CommandContext', () => {
   it('expoe dados normalizados e delega helpers do core', async () => {

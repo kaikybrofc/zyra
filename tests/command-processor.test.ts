@@ -75,7 +75,7 @@ describe('CommandProcessor', () => {
       groupParticipantsUpdate,
     }
 
-    const { createCommandProcessor } = await import('../src/core/commands/processor.ts')
+    const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
     const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
 
     await processor.process(sock as never, createMessage('!ping agora', { chatId: 'grupo@g.us' }) as never)
@@ -120,7 +120,7 @@ describe('CommandProcessor', () => {
       groupParticipantsUpdate: vi.fn(),
     }
 
-    const { createCommandProcessor } = await import('../src/core/commands/processor.ts')
+    const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
     const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
 
     await processor.process(sock as never, createMessage('!ping') as never)
@@ -153,7 +153,7 @@ describe('CommandProcessor', () => {
       groupParticipantsUpdate: vi.fn(),
     }
 
-    const { buildIncomingCommandEnvelope, createCommandProcessor } = await import('../src/core/commands/processor.ts')
+    const { buildIncomingCommandEnvelope, createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
     const processor = createCommandProcessor({ logger })
 
     expect(buildIncomingCommandEnvelope(sock as never, { key: null, message: null } as never)).toBeNull()

@@ -1,7 +1,7 @@
 import { type WASocket, type proto } from '@whiskeysockets/baileys'
 import type { AppLogger } from '../observability/logger.js'
 import { createSqlStore, type SqlStore } from '../store/sql-store.js'
-import { createCommandProcessor } from '../core/commands/processor.js'
+import { createCommandProcessor } from '../core/command-runtime/processor.js'
 
 let defaultSqlStore: SqlStore | null = null
 
