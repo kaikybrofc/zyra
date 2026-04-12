@@ -41,7 +41,7 @@ describe('registerEvents newsletter persistence', () => {
     handleIncomingMessagesMock.mockResolvedValue(undefined)
   })
 
-  it('preenche newsletters quando chega mensagem em chat @newsletter', async () => {
+  it('preenche newsletters e eventos quando chega mensagem em chat @newsletter', async () => {
     const sqlStore = createSqlStoreStub()
     createSqlStoreMock.mockReturnValue(sqlStore)
 
@@ -80,7 +80,82 @@ describe('registerEvents newsletter persistence', () => {
         id: '120363111111111111@newsletter',
         lastMessageId: 'msg-1',
         pushName: 'Canal Teste',
+        messageType: 'conversation',
       }),
+    })
+    expect(sqlStore.recordNewsletterEvent).toHaveBeenCalledWith({
+      newsletterId: '120363111111111111@newsletter',
+      eventType: 'message.notify',
+      data: expect.objectContaining({
+        id: '120363111111111111@newsletter',
+        messageId: 'msg-1',
+        pushName: 'Canal Teste',
+        messageType: 'conversation',
+        text: 'conteudo',
+      }),
+    })
+  })
+
+  it('sincroniza metadados da newsletter e registra o owner como participante', async () => {
+    const sqlStore = createSqlStoreStub()
+    createSqlStoreMock.mockReturnValue(sqlStore)
+
+    const newsletterMetadata = vi.fn().mockResolvedValue({
+      id: '120363444444444444@newsletter',
+      owner: 'owner@s.whatsapp.net',
+      name: 'Canal Oficial',
+      description: 'Atualizacoes do projeto',
+      subscribers: 42,
+      verification: 'VERIFIED',
+    })
+
+    const { registerEvents } = await import('../src/events/register.ts')
+    const sock = {
+      ev: new EventEmitter(),
+      user: { id: 'bot@s.whatsapp.net' },
+      newsletterMetadata,
+    }
+    const logger = createLogger()
+
+    registerEvents({ sock: sock as never, logger: logger as never, reconnect: vi.fn(), connectionId: 'conn' })
+
+    sock.ev.emit('messages.upsert', {
+      type: 'notify',
+      messages: [
+        {
+          key: {
+            remoteJid: '120363444444444444@newsletter',
+            id: 'msg-2',
+            fromMe: false,
+          },
+          pushName: 'Canal Oficial',
+          messageTimestamp: 456,
+          message: {
+            conversation: 'novo post',
+          },
+        },
+      ],
+    })
+
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(newsletterMetadata).toHaveBeenCalledWith('jid', '120363444444444444@newsletter')
+    expect(sqlStore.recordNewsletter).toHaveBeenCalledWith({
+      newsletterId: '120363444444444444@newsletter',
+      data: expect.objectContaining({
+        id: '120363444444444444@newsletter',
+        owner: 'owner@s.whatsapp.net',
+        name: 'Canal Oficial',
+        description: 'Atualizacoes do projeto',
+        subscribers: 42,
+        verification: 'VERIFIED',
+      }),
+    })
+    expect(sqlStore.recordNewsletterParticipant).toHaveBeenCalledWith({
+      newsletterId: '120363444444444444@newsletter',
+      userJid: 'owner@s.whatsapp.net',
+      role: 'OWNER',
+      status: 'ACTIVE',
     })
   })
 
@@ -120,7 +195,7 @@ describe('registerEvents newsletter persistence', () => {
     })
     expect(sqlStore.recordNewsletter).toHaveBeenCalledWith({
       newsletterId: '120363333333333333@newsletter',
-      data: { id: '120363333333333333@newsletter' },
+      data: { id: '120363333333333333@newsletter', update: null },
     })
   })
 })

@@ -5,6 +5,7 @@ import type { AppLogger } from '../observability/logger.js'
 import { config } from '../config/index.js'
 import { handleIncomingMessages } from '../router/index.js'
 import { createSqlStore } from '../store/sql-store.js'
+import { getMessageText, getNormalizedMessage } from '../utils/message.js'
 
 type RegisterOptions = {
   sock: WASocket
@@ -15,6 +16,28 @@ type RegisterOptions = {
 
 type SocketWithCredsFlush = WASocket & {
   flushCredsNow?: (reason: string) => Promise<void>
+}
+
+type NewsletterMetadata = {
+  id: string
+  owner?: string | null
+  name?: string
+  description?: string | null
+  invite?: string | null
+  creation_time?: number | null
+  subscribers?: number | null
+  verification?: string | null
+  mute_state?: string | null
+  picture?: unknown
+  thread_metadata?: {
+    creation_time?: number | null
+    name?: string
+    description?: string | null
+  } | null
+}
+
+type SocketWithNewsletterMetadata = WASocket & {
+  newsletterMetadata?: (type: 'invite' | 'jid', key: string) => Promise<NewsletterMetadata | null>
 }
 
 const ALL_EVENTS = ['connection.update', 'creds.update', 'messaging-history.set', 'chats.upsert', 'chats.update', 'lid-mapping.update', 'chats.delete', 'presence.update', 'contacts.upsert', 'contacts.update', 'messages.delete', 'messages.update', 'messages.media-update', 'messages.upsert', 'messages.reaction', 'message-receipt.update', 'groups.upsert', 'groups.update', 'group-participants.update', 'group.join-request', 'group.member-tag.update', 'blocklist.set', 'blocklist.update', 'call', 'labels.edit', 'labels.association', 'newsletter.reaction', 'newsletter.view', 'newsletter-participants.update', 'newsletter-settings.update', 'chats.lock', 'settings.update'] as const satisfies readonly (keyof BaileysEventMap)[]
@@ -30,8 +53,12 @@ type EventHandler<K extends keyof BaileysEventMap> = (data: BaileysEventMap[K]) 
  */
 export function registerEvents({ sock, logger, reconnect, connectionId }: RegisterOptions): void {
   const socketWithCredsFlush = sock as SocketWithCredsFlush
+  const socketWithNewsletterMetadata = sock as SocketWithNewsletterMetadata
   const sqlStore = createSqlStore(connectionId)
   let restartedAfterNewLogin = false
+  const newsletterMetadataSync = new Map<string, { nextAttemptAt: number; inFlight?: Promise<void> }>()
+  const NEWSLETTER_METADATA_SYNC_TTL_MS = 5 * 60_000
+  const NEWSLETTER_METADATA_RETRY_TTL_MS = 30 * 1000
   type EventContext = {
     actorJid?: string | null
     targetJid?: string | null
@@ -58,17 +85,81 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
     if (!sqlStore.enabled || !newsletterId) return
     void sqlStore.recordNewsletter({ newsletterId, data })
   }
-  const recordNewsletterFromMessage = (message: BaileysEventMap['messages.upsert']['messages'][number]) => {
+  const recordNewsletterMetadata = async (newsletterId: string, metadata: NewsletterMetadata | null | undefined) => {
+    if (!sqlStore.enabled || !metadata) return
+    recordNewsletterSnapshot(newsletterId, {
+      id: newsletterId,
+      owner: metadata.owner ?? null,
+      name: metadata.name ?? metadata.thread_metadata?.name ?? null,
+      description: metadata.description ?? metadata.thread_metadata?.description ?? null,
+      invite: metadata.invite ?? null,
+      creationTime: metadata.creation_time ?? metadata.thread_metadata?.creation_time ?? null,
+      subscribers: metadata.subscribers ?? null,
+      verification: metadata.verification ?? null,
+      muteState: metadata.mute_state ?? null,
+      picture: metadata.picture ?? null,
+    })
+    if (metadata.owner) {
+      await sqlStore.recordNewsletterParticipant({
+        newsletterId,
+        userJid: metadata.owner,
+        role: 'OWNER',
+        status: 'ACTIVE',
+      })
+    }
+  }
+  const syncNewsletterMetadata = async (newsletterId: string, source: string, options?: { force?: boolean }) => {
+    if (!sqlStore.enabled) return
+    if (typeof socketWithNewsletterMetadata.newsletterMetadata !== 'function') return
+    const cached = newsletterMetadataSync.get(newsletterId)
+    const now = Date.now()
+    if (cached?.inFlight) {
+      await cached.inFlight
+      return
+    }
+    if (!options?.force && cached && cached.nextAttemptAt > now) {
+      return
+    }
+    const inFlight = (async () => {
+      try {
+        const metadata = await socketWithNewsletterMetadata.newsletterMetadata?.('jid', newsletterId)
+        await recordNewsletterMetadata(newsletterId, metadata)
+        newsletterMetadataSync.set(newsletterId, { nextAttemptAt: Date.now() + NEWSLETTER_METADATA_SYNC_TTL_MS })
+      } catch (error) {
+        newsletterMetadataSync.set(newsletterId, { nextAttemptAt: Date.now() + NEWSLETTER_METADATA_RETRY_TTL_MS })
+        logger.debug('falha ao sincronizar metadados de newsletter', { newsletterId, source, err: error })
+      }
+    })()
+    newsletterMetadataSync.set(newsletterId, { nextAttemptAt: now + NEWSLETTER_METADATA_SYNC_TTL_MS, inFlight })
+    await inFlight
+  }
+  const recordNewsletterFromMessage = async (message: BaileysEventMap['messages.upsert']['messages'][number], upsertType: string) => {
     const key = message.key
     const newsletterId = isNewsletterJid(key?.remoteJid) ? key.remoteJid : null
     if (!newsletterId) return
+    const normalizedMessage = getNormalizedMessage(message)
     recordNewsletterSnapshot(newsletterId, {
       id: newsletterId,
       lastMessageId: key?.id ?? null,
       fromMe: Boolean(key?.fromMe),
       pushName: message.pushName ?? null,
       messageTimestamp: message.messageTimestamp ?? null,
+      messageType: normalizedMessage.type,
     })
+    void sqlStore.recordNewsletterEvent({
+      newsletterId,
+      eventType: `message.${upsertType}`,
+      data: {
+        id: newsletterId,
+        messageId: key?.id ?? null,
+        fromMe: Boolean(key?.fromMe),
+        pushName: message.pushName ?? null,
+        messageTimestamp: message.messageTimestamp ?? null,
+        messageType: normalizedMessage.type,
+        text: getMessageText(message),
+      },
+    })
+    await syncNewsletterMetadata(newsletterId, 'messages.upsert')
   }
 
   const syncGroupsOnConnect = async (): Promise<GroupMetadata[]> => {
@@ -321,8 +412,12 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
           type: event.type,
         })
         if (sqlStore.enabled) {
+          const newsletterTasks: Promise<void>[] = []
           for (const message of event.messages) {
-            recordNewsletterFromMessage(message)
+            newsletterTasks.push(recordNewsletterFromMessage(message, event.type))
+          }
+          if (newsletterTasks.length) {
+            await Promise.allSettled(newsletterTasks)
           }
         }
         if (sqlStore.enabled && event.type === 'notify') {
@@ -565,15 +660,16 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
         })
       }
     },
-    'newsletter-settings.update': ({ id }) => {
-      logEvent('newsletter-settings.update', { id }, { actorJid: resolveSelfJid() })
+    'newsletter-settings.update': ({ id, update }) => {
+      logEvent('newsletter-settings.update', { id, update }, { actorJid: resolveSelfJid() })
       if (sqlStore.enabled) {
-        recordNewsletterSnapshot(id, { id })
+        recordNewsletterSnapshot(id, { id, update: update ?? null })
         void sqlStore.recordNewsletterEvent({
           newsletterId: id,
           eventType: 'settings.update',
-          data: { id },
+          data: { id, update: update ?? null },
         })
+        void syncNewsletterMetadata(id, 'newsletter-settings.update', { force: true })
       }
     },
     'chats.lock': ({ id, locked }) => logEvent('chats.lock', { id, locked }, { chatJid: id, actorJid: resolveSelfJid() }),
