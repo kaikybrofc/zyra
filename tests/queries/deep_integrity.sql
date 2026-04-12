@@ -8,7 +8,7 @@ SELECT
     g.size as expected_size, 
     COUNT(gp.user_id) as actual_participants,
     ABS(g.size - COUNT(gp.user_id)) as discrepancy
-FROM zyra.\`groups\` g
+FROM zyra.`groups` g
 LEFT JOIN zyra.group_participants gp ON g.jid = gp.group_jid
 GROUP BY g.jid, g.subject, g.size
 HAVING discrepancy > 0;
