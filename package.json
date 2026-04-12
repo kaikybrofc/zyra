@@ -1,7 +1,8 @@
 {
   "name": "zyra",
   "version": "0.1.4",
-  "private": true,
+  "private": false,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",

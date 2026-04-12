@@ -1,147 +1,135 @@
-# Zyra System
+# 🌌 Zyra System
 
-Zyra System — bot de WhatsApp em Node.js usando Baileys, com persistência em MySQL e suporte a múltiplas conexões.
+**Zyra System** é um motor de bot para WhatsApp de alta performance, construído em Node.js utilizando a biblioteca [Baileys](https://github.com/WhiskeySockets/Baileys). Ele foi projetado para ser **escalável, resiliente e multi-instância**, com suporte nativo a persistência em MySQL e cache em Redis.
 
-## Visão geral
+---
 
-- Conexões isoladas por `connection_id`, permitindo múltiplas instâncias no mesmo banco.
-- Persistência de credenciais e chaves do Baileys com fallback multi‑fonte.
-- Store persistente para chats, mensagens, grupos e caches auxiliares.
-- Rastreamento de eventos e histórico para auditoria e troubleshooting.
+## 🚀 Principais Diferenciais
 
-## Sistema de conexão
+- **Multi-instância Nativa:** Utilize o mesmo banco de dados para centenas de conexões isoladas via `connection_id`.
+- **Persistência Híbrida:** Sistema de autenticação inteligente que alterna entre **MySQL**, **Redis** e **Disco** (FileSystem) para máxima resiliência.
+- **Identidade Unificada:** Mapeamento inteligente de usuários (PN, LID, JID, Username) para um único ID interno.
+- **Store de Alta Performance:** Cache de contatos, chats e mensagens otimizado para baixa latência.
+- **Observabilidade Total:** Logs estruturados e rastreamento de eventos para auditoria e troubleshooting.
 
-O módulo `src/core/connection` centraliza a criação e o ciclo de vida do socket do WhatsApp.
+---
 
-- `createSocket(connectionId, logger)` cria uma conexão isolada por `connection_id`.
-- Carrega credenciais via `getAuthState` e salva atualizações com `creds.update`.
-- Resolve a versão do Baileys com cache de 24h, fallback seguro e logs de aviso quando necessário.
-- Inicializa a política de sincronização de histórico para evitar reprocessamento.
-- Configura o socket com store e caches, e liga o store aos eventos do Baileys.
-- Atualiza o `selfJid` quando a conexão abre e libera um único sync completo após novo login.
-- Registra encerramento gracioso para salvar credenciais e fechar sockets com segurança.
-- Trata encerramento de conexão e sinaliza logout (`DisconnectReason.loggedOut`).
+## 📋 Pré-requisitos
 
-A política de sync em `src/core/connection/history-sync.ts` libera a sincronização completa apenas:
+- **Node.js:** v20.x (LTS) ou superior.
+- **Gerenciador de Pacotes:** `npm` ou `yarn`.
+- **Banco de Dados:** MySQL 8.0+ (Obrigatório para persistência de longo prazo).
+- **Cache:** Redis 6.0+ (Altamente recomendado para performance).
 
-- No primeiro login (quando `accountSyncCounter` indica conta nova).
-- Em um novo login detectado pelo Baileys.
+---
 
-Isso reduz carga, evita travamentos no buffer e mantém o histórico sob controle.
+## 🛠️ Instalação de Dependências
 
-## Auth e persistência (novo modelo)
+### 1. Servidor MySQL
+O Zyra utiliza recursos modernos do MySQL 8 (como tipos JSON e índices Full-text).
 
-- `getAuthState` seleciona a estratégia (MySQL → Redis → Disco) com fallback seguro.
-- `useMysqlAuthState` é multi‑fonte: lê MySQL + Redis + Disco, escolhe o melhor conjunto de credenciais (`selectBestCreds`) e faz auto‑cura das fontes.
-- `useRedisAuthState` combina Redis + Disco e migra namespaces legados quando necessário.
-- `creds-utils` normaliza e pontua credenciais para evitar regressão de sessão.
-- Retry automático do MySQL com backoff leve (`WA_MYSQL_RETRY_MS`) evita travamentos quando o banco oscila.
-- Persistência opcional das chaves do Signal no disco (`WA_AUTH_PERSIST_KEYS`) aumenta a resiliência em falhas de Redis/MySQL.
-
-## Modelo do banco
-
-O modelo completo está documentado em `docs/exemplodbmodel.md` (inclui diagrama e DDL MySQL 8).
-
-Principais entidades e responsabilidades:
-
-- `connections`: raiz de isolamento por conexão.
-- `auth_creds` e `signal_keys`: persistência das credenciais e chaves do Baileys.
-- `users` e `user_identifiers`: identidade única por usuário com múltiplos identificadores (`pn`, `lid`, `jid`, `username`).
-- Store persistente: `chats`, `messages`, `groups`, `wa_contacts_cache`.
-- Relacionamentos e suporte: `chat_users`, `group_participants`, `message_users`, `message_media`.
-- Observabilidade e histórico: `events_log`, `message_events`, `message_failures`, `commands_log`.
-
-## Vantagens do modelo
-
-- Multi-tenant real: cada `connection_id` isola dados, credenciais e store.
-- Identidade de usuário consistente, mesmo com múltiplos identificadores.
-- Facilidade de auditoria e depuração com logs e eventos persistidos.
-- Persistência confiável de credenciais e store, reduzindo re-login e inconsistência.
-- Estrutura extensível para features futuras (labels, bloqueios, newsletters, etc.).
-
-## Requisitos
-
-- Node.js LTS (>=20)
-- npm
-
-## Instalação rápida
-
-1. Instale as dependências:
-
+**No Ubuntu/Debian:**
 ```bash
-npm install
+sudo apt update
+sudo apt install mysql-server -y
+# Acesse o MySQL e crie o banco
+sudo mysql -u root
+# CREATE DATABASE zyra CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-2. Crie o arquivo `.env` a partir do `.env.example`:
+### 2. Servidor Redis
+O Redis é utilizado para "cache quente" das sessões de autenticação e estados temporários do socket.
 
+**No Ubuntu/Debian:**
 ```bash
-cp .env.example .env
+sudo apt update
+sudo apt install redis-server -y
+sudo systemctl enable redis-server
 ```
 
-3. Configure as variáveis de ambiente (lista completa):
+---
 
-- `WA_AUTH_DIR`: caminho para os arquivos de sessão do WhatsApp (padrão: `data/auth`).
-- `WA_PRINT_QR`: `true` ou `false` para imprimir o QR no terminal (padrão: `true`).
-- `LOG_LEVEL`: nível de log (`trace|debug|info|warn|error|fatal`) (padrão: `info`).
-- `WA_REDIS_URL`: URL do Redis para cache quente da sessão e da store (opcional).
-- `WA_REDIS_PREFIX`: prefixo das chaves no Redis (padrão: `zyra:conexao`).
-- `MYSQL_URL`: URL de conexão MySQL para persistência (opcional).
-- `WA_DB_URL`: alias legado para `MYSQL_URL` (opcional).
-- `WA_MYSQL_RETRY_MS`: intervalo de retentativa do MySQL após falha (ms) (padrão: `60000`).
-- `WA_CONNECTION_ID`: identificador da conexão no banco (padrão: `default`).
-- `WA_ACCEPT_OWN_MESSAGES`: aceita mensagens da própria conta (padrão: `false`).
-- `WA_AUTH_PERSIST_KEYS`: persiste chaves do Signal também no disco (padrão: `false`).
-- `WA_DELETE_SESSION_TIMEOUT_MS`: timeout do script de delete-session (ms) (padrão: `15000`).
-- `WA_DELETE_SESSION_REDIS_MAX_MS`: limite do scan no Redis (ms) (padrão: `60000`).
-- `WA_BACKFILL_LOG_SAMPLE`: amostra de logs detalhados do backfill (padrão: `20`).
-- `WA_BACKFILL_BATCH_SIZE`: tamanho do lote de mensagens no backfill (padrão: `500`).
-- `WA_BACKFILL_GROUP_LOG_EVERY`: log de progresso de grupos a cada N grupos (padrão: `25`).
-- `WA_BACKFILL_PARTICIPANT_LOG_EVERY`: log de progresso de participantes a cada N registros (padrão: `200`).
-- `WA_BACKFILL_MESSAGE_LOG_EVERY`: log de progresso de mensagens a cada N registros (padrão: `1000`).
+## ⚙️ Configuração do Projeto
 
-Exemplo completo (igual ao `.env.example`):
+1. **Clonar e Instalar:**
+   ```bash
+   git clone <repo-url>
+   cd zyra
+   npm install
+   ```
 
-```dotenv
-WA_AUTH_DIR=data/auth
-WA_PRINT_QR=true
-LOG_LEVEL=info
-WA_REDIS_URL=redis://localhost:6379
-WA_REDIS_PREFIX=zyra:conexao
-MYSQL_URL=mysql://user:password@localhost:3306/zyra
-# WA_DB_URL=mysql://user:password@localhost:3306/zyra
-WA_MYSQL_RETRY_MS=60000
-WA_CONNECTION_ID=default
-WA_ACCEPT_OWN_MESSAGES=false
-WA_AUTH_PERSIST_KEYS=false
-WA_DELETE_SESSION_TIMEOUT_MS=15000
-WA_DELETE_SESSION_REDIS_MAX_MS=60000
-WA_BACKFILL_LOG_SAMPLE=20
-WA_BACKFILL_BATCH_SIZE=500
-WA_BACKFILL_GROUP_LOG_EVERY=25
-WA_BACKFILL_PARTICIPANT_LOG_EVERY=200
-WA_BACKFILL_MESSAGE_LOG_EVERY=1000
-```
+2. **Variáveis de Ambiente:**
+   Crie um arquivo `.env` baseado no `.env.example`:
+   ```bash
+   cp .env.example .env
+   ```
 
-## Como rodar
+3. **Inicializar o Banco de Dados:**
+   O Zyra possui um script automático que cria todas as tabelas necessárias:
+   ```bash
+   npm run db:init
+   ```
 
-Desenvolvimento:
+---
 
+## 🚦 Como Executar
+
+### Desenvolvimento
 ```bash
 npm run dev
 ```
 
-Produção:
-
+### Produção
 ```bash
 npm run build
-npm start
+npm run start:prod
 ```
 
-Nota: o QR aparece no terminal no primeiro login quando `WA_PRINT_QR=true`. Se não aparecer, já existe uma sessão salva em `data/auth`.
+---
 
-## Testes e cobertura
+## 🧠 Arquitetura do Sistema
 
-- `tests/creds-utils.test.ts`: valida seleção/normalização de credenciais.
-- `tests/mysql-auth-state.test.ts`: cobre fallback e sincronização multi‑fonte do MySQL.
-- `tests/redis-auth-state.test.ts`: cobre Redis + Disco e migração.
-- `tests/socket.test.ts`: cobre cache de versão, eventos de conexão, `creds.update` e shutdown gracioso.
+### Fluxo de Autenticação (Multi-Layer)
+O sistema busca as credenciais na seguinte ordem de prioridade:
+1. **Redis:** Acesso ultra-rápido para sessões ativas.
+2. **MySQL:** Persistência durável e compartilhada.
+3. **Disco:** Fallback local em caso de falha de rede.
+
+### Gerenciamento de Memória e Histórico
+A política de sincronização de histórico (`history-sync.ts`) é otimizada para liberar o sync completo apenas em novos logins, evitando o consumo excessivo de memória e processamento em reconexões rápidas.
+
+---
+
+## 🛠️ Ferramentas de Manutenção
+
+O projeto inclui scripts utilitários para operações avançadas:
+
+- **`npm run db:verify`**: Verifica a integridade das tabelas e conta registros por conexão.
+- **`npm run db:delete-session`**: Limpa todos os dados de uma sessão específica (MySQL e Redis).
+- **`npm run db:backfill`**: Processa mensagens antigas ou pendentes no banco.
+- **`npm run db:nulls`**: Gera relatórios de campos inconsistentes para limpeza.
+
+---
+
+## 💡 Dicas de Infraestrutura (Pro-Tips)
+
+### Performance SSH
+Se você gerencia o servidor via SSH, habilite a **Multiplexação** no seu computador local para conexões instantâneas:
+```bash
+# Adicione ao seu ~/.ssh/config local
+Host *
+    ControlMaster auto
+    ControlPath ~/.ssh/sockets/%r@%h:%p
+    ControlPersist 1h
+```
+
+### Monitoramento de Logs
+Utilize o `LOG_LEVEL=debug` durante o desenvolvimento para visualizar o fluxo de eventos do Baileys e as interações com o banco de dados.
+
+---
+
+## 📄 Licença
+
+Este projeto está licenciado sob a **Licença MIT**. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+
+Copyright (c) 2026 kaikybrofc
