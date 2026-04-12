@@ -3,9 +3,15 @@ import { FileStateAdapter, wrapSocket, type AntiBanConfig, type WarmUpState, typ
 import { config } from '../../config/index.js'
 import type { AppLogger } from '../../observability/logger.js'
 
+/**
+ * Extensão do socket para incluir métodos do Anti-Ban.
+ */
 type SocketWithAntiBan = {
+  /** Propriedades injetadas pelo wrapper do Anti-Ban. */
   antiban?: {
+    /** Exporta o estado atual de aquecimento (warm-up). */
     exportWarmUpState: () => WarmUpState
+    /** Obtém estatísticas internas de uso. */
     getStats: () => unknown
   }
 }
@@ -29,6 +35,12 @@ const buildWarmUpConfig = () => ({
 const resolveStateAdapter = (connectionId: string): FileStateAdapter =>
   new FileStateAdapter(path.resolve(process.cwd(), config.antibanStateDir, connectionId))
 
+/**
+ * Cria a configuração do Anti-Ban baseada nas configurações globais da aplicação.
+ * @param logger Logger da aplicação para reportar riscos e bloqueios.
+ * @param connectionId Identificador único da conexão (ex: 'main').
+ * @returns Objeto de configuração compatível com a biblioteca baileys-antiban.
+ */
 export function createAntiBanConfig(logger: AppLogger, connectionId: string): AntiBanConfig {
   return {
     logging: config.antibanLogging,
@@ -66,6 +78,12 @@ export function createAntiBanConfig(logger: AppLogger, connectionId: string): An
   }
 }
 
+/**
+ * Carrega o estado de aquecimento (warm-up) do Anti-Ban do armazenamento persistente.
+ * @param connectionId Identificador da conexão.
+ * @param logger Logger para reportar erros de carregamento.
+ * @returns O estado de warm-up ou undefined se não existir ou se o Anti-Ban estiver desativado.
+ */
 export async function loadAntiBanWarmUpState(connectionId: string, logger: AppLogger): Promise<WarmUpState | undefined> {
   if (!config.antibanEnabled) return undefined
   try {
@@ -80,6 +98,13 @@ export async function loadAntiBanWarmUpState(connectionId: string, logger: AppLo
   }
 }
 
+/**
+ * Salva o estado atual de aquecimento (warm-up) do Anti-Ban no armazenamento persistente.
+ * @param sock Socket envolvido pelo Anti-Ban.
+ * @param connectionId Identificador da conexão.
+ * @param logger Logger para reportar o status da operação.
+ * @param reason Motivo pelo qual o estado está sendo salvo (ex: 'periodico', 'desconexao').
+ */
 export async function saveAntiBanWarmUpState(sock: SocketWithAntiBan, connectionId: string, logger: AppLogger, reason: string): Promise<void> {
   if (!config.antibanEnabled || !sock.antiban) return
   try {
@@ -94,6 +119,14 @@ export async function saveAntiBanWarmUpState(sock: SocketWithAntiBan, connection
   }
 }
 
+/**
+ * Envolve um socket do Baileys com a camada de proteção Anti-Ban.
+ * @param sock Instância do socket original.
+ * @param logger Logger da aplicação.
+ * @param connectionId Identificador da conexão.
+ * @param warmUpState Estado de aquecimento inicial opcional.
+ * @returns O socket protegido ou o original se o Anti-Ban estiver desativado.
+ */
 export function wrapSocketWithAntiBan<T extends Record<string, unknown>>(
   sock: T,
   logger: AppLogger,

@@ -9,17 +9,26 @@ import { getAuthState } from '../auth/state.js'
 import { loadAntiBanWarmUpState, saveAntiBanWarmUpState, wrapSocketWithAntiBan } from './antiban.js'
 import { allowHistorySyncOnceForNewLogin, initHistorySyncPolicy, shouldSyncHistoryMessageOnce } from './history-sync.js'
 
-/** * Extensão de tipo para acessar repositórios internos de LID (Linked Identity) do Baileys.
+/**
+ * Extensão de tipo para acessar repositórios internos de LID (Linked Identity) do Baileys.
  * @internal
  */
 type SocketWithSignalRepository = {
+  /** Repositório de sinais contendo mapeamento de LIDs. */
   signalRepository?: SignalRepositoryWithLIDStore
 }
 
+/**
+ * Extensão do socket para incluir métodos de persistência imediata e Anti-Ban.
+ */
 type SocketWithCredsFlush = ReturnType<typeof makeWASocket> & {
+  /** Força a persistência imediata das credenciais no disco/DB. */
   flushCredsNow?: (reason: string) => Promise<void>
+  /** Ações do Anti-Ban acopladas ao socket. */
   antiban?: {
+    /** Exporta o estado atual de aquecimento. */
     exportWarmUpState: () => WarmUpState
+    /** Obtém estatísticas de funcionamento do Anti-Ban. */
     getStats: () => unknown
   }
 }
@@ -29,12 +38,12 @@ type SocketVersion = typeof DEFAULT_CONNECTION_CONFIG.version
 
 /** Tempo de vida do cache da versão do Baileys (24 horas) */
 const VERSION_CACHE_TTL_MS = 24 * 60 * 60 * 1000
-/** Timeout máximo para shutdown gracioso antes de forçar saída */
+/** Timeout máximo para shutdown gracioso antes de forçar saída em milissegundos */
 const SHUTDOWN_TIMEOUT_MS = Math.max(0, Number(process.env.WA_SHUTDOWN_TIMEOUT_MS ?? 10_000))
-/** Debounce para evitar tempestade de gravações em creds.update */
+/** Debounce para evitar tempestade de gravações em creds.update em milissegundos */
 const CREDS_DEBOUNCE_MS = Math.max(0, Number(process.env.WA_CREDS_DEBOUNCE_MS ?? 1_500))
 
-/** Cache volátil para evitar requisições excessivas à API de versões */
+/** Cache volátil da versão do WhatsApp Web */
 let cachedVersion: { version: SocketVersion; fetchedAt: number } | null = null
 
 /**
@@ -42,7 +51,7 @@ let cachedVersion: { version: SocketVersion; fetchedAt: number } | null = null
  * @remarks
  * Implementa cache em memória para evitar gargalos no boot de múltiplas instâncias.
  * Se a busca falhar, utiliza a última versão em cache ou a constante padrão da biblioteca.
- * @param logger - Instância do logger para registro de alertas de versão.
+ * @param logger Instância do logger para registro de alertas de versão.
  * @returns Promessa com a versão [major, minor, patch].
  */
 async function resolveBaileysVersion(logger: AppLogger): Promise<SocketVersion> {
@@ -75,9 +84,10 @@ async function resolveBaileysVersion(logger: AppLogger): Promise<SocketVersion> 
  * Inicializa o estado de autenticação com base nas configurações de infraestrutura.
  * @remarks
  * Tenta utilizar a estratégia centralizada (MySQL/Redis).
- * Em caso de erro crítico, regride para o sistema de arquivos local (Disco) para garantir a disponibilidade.
- * @param connectionId - ID único da conexão.
- * @param logger - Logger para rastro de falhas de autenticação.
+ * Em caso de erro crítico, regride para o sistema de arquivos local para garantir a disponibilidade.
+ * @param connectionId ID único da conexão.
+ * @param logger Logger para rastro de falhas de autenticação.
+ * @returns O estado de autenticação e a função para salvar credenciais.
  */
 async function resolveAuthState(connectionId: string, logger: AppLogger) {
   try {
@@ -92,22 +102,22 @@ async function resolveAuthState(connectionId: string, logger: AppLogger) {
 }
 
 /**
- * Define o contrato para objetos registrados para encerramento gracioso.
+ * Define o contrato para objetos registrados para encerramento gracioso (graceful shutdown).
  */
 type ShutdownTarget = {
-  /** Instância ativa do socket Baileys */
+  /** Instância ativa do socket Baileys. */
   sock: SocketWithCredsFlush
-  /** Repositório de dados vinculado à conexão */
+  /** Repositório de dados vinculado à conexão. */
   store: ReturnType<typeof createBaileysStore>
-  /** Função de persistência de credenciais */
+  /** Função de persistência de credenciais. */
   saveCreds: () => Promise<void>
-  /** Persistência do estado do antiban */
+  /** Persistência do estado do Anti-Ban. */
   saveAntiBanState?: (reason: string) => Promise<void>
-  /** Limpeza de timers/recursos em background */
+  /** Função de limpeza de timers e recursos. */
   cleanup?: () => void
-  /** Logger da aplicação */
+  /** Logger da aplicação. */
   logger: AppLogger
-  /** ID da conexão */
+  /** ID da conexão. */
   connectionId: string
 }
 

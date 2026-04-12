@@ -29,19 +29,35 @@ const MEDIA_TYPES = new Set([
 
 let defaultSqlStore: SqlStore | null = null
 
+/**
+ * Envelope de comando recebido, contendo dados extraídos e normalizados da mensagem.
+ */
 export type IncomingCommandEnvelope = {
+  /** Instância do socket do Baileys. */
   sock: WASocket
+  /** Mensagem original do Baileys. */
   message: WAMessage
+  /** JID do chat. */
   chatId: string
+  /** JID do remetente. */
   sender: string
+  /** Texto completo da mensagem. */
   text: string
+  /** Indica se é um grupo. */
   isGroup: boolean
+  /** Nome do comando identificado (sem o prefixo), ou null se não for comando. */
   commandName: string | null
+  /** Argumentos do comando. */
   commandArgs: string[]
 }
 
+/**
+ * Opções para criação do processador de comandos.
+ */
 type CreateCommandProcessorOptions = {
+  /** Logger da aplicação. */
   logger: AppLogger
+  /** Store SQL opcional para persistência de logs. */
   sqlStore?: SqlStore
 }
 
@@ -66,6 +82,12 @@ const parseTimestamp = (raw: unknown): number | null => {
   return Number.isFinite(value) ? value : null
 }
 
+/**
+ * Constrói um envelope de comando a partir de uma mensagem bruta do Baileys.
+ * @param sock Instância do socket.
+ * @param message Mensagem recebida.
+ * @returns O envelope estruturado ou null se a mensagem deve ser ignorada.
+ */
 export const buildIncomingCommandEnvelope = (
   sock: WASocket,
   message: proto.IWebMessageInfo
@@ -172,10 +194,23 @@ const recordCommandExecution = (
   })
 }
 
+/**
+ * Processador de comandos que lida com o ciclo de vida de uma mensagem recebida.
+ */
 export type CommandProcessor = {
+  /**
+   * Processa uma mensagem de entrada, identifica se é um comando e o executa.
+   * @param sock Instância do socket do Baileys.
+   * @param message Mensagem bruta recebida.
+   */
   process: (sock: WASocket, message: proto.IWebMessageInfo) => Promise<void>
 }
 
+/**
+ * Cria uma instância do processador de comandos.
+ * @param options Dependências do processador.
+ * @returns Um objeto CommandProcessor.
+ */
 export function createCommandProcessor({ logger, sqlStore }: CreateCommandProcessorOptions): CommandProcessor {
   const resolvedSqlStore = resolveSqlStore(sqlStore)
 
