@@ -11,12 +11,17 @@ let createBaileysLoggerMock: ReturnType<typeof vi.fn>
 let allowHistorySyncOnceForNewLoginMock: ReturnType<typeof vi.fn>
 let initHistorySyncPolicyMock: ReturnType<typeof vi.fn>
 let shouldSyncHistoryMessageOnceMock: ReturnType<typeof vi.fn>
+let loadAntiBanWarmUpStateMock: ReturnType<typeof vi.fn>
+let saveAntiBanWarmUpStateMock: ReturnType<typeof vi.fn>
+let wrapSocketWithAntiBanMock: ReturnType<typeof vi.fn>
 
 const mockConfig = {
   authDir: '/tmp/auth-test',
   mysqlUrl: 'mysql://test',
   redisUrl: 'redis://test',
   connectionId: 'default',
+  antibanEnabled: false,
+  antibanStateSaveIntervalMs: 300000,
 }
 
 vi.mock('@whiskeysockets/baileys', async () => {
@@ -43,6 +48,11 @@ vi.mock('../src/core/connection/history-sync.js', () => ({
   allowHistorySyncOnceForNewLogin: (...args: unknown[]) => allowHistorySyncOnceForNewLoginMock(...args),
   initHistorySyncPolicy: (...args: unknown[]) => initHistorySyncPolicyMock(...args),
   shouldSyncHistoryMessageOnce: (...args: unknown[]) => shouldSyncHistoryMessageOnceMock(...args),
+}))
+vi.mock('../src/core/connection/antiban.js', () => ({
+  loadAntiBanWarmUpState: (...args: unknown[]) => loadAntiBanWarmUpStateMock(...args),
+  saveAntiBanWarmUpState: (...args: unknown[]) => saveAntiBanWarmUpStateMock(...args),
+  wrapSocketWithAntiBan: (...args: unknown[]) => wrapSocketWithAntiBanMock(...args),
 }))
 
 const createState = (): AuthenticationState => ({
@@ -88,6 +98,9 @@ beforeEach(() => {
   allowHistorySyncOnceForNewLoginMock = vi.fn()
   initHistorySyncPolicyMock = vi.fn()
   shouldSyncHistoryMessageOnceMock = vi.fn()
+  loadAntiBanWarmUpStateMock = vi.fn().mockResolvedValue(undefined)
+  saveAntiBanWarmUpStateMock = vi.fn().mockResolvedValue(undefined)
+  wrapSocketWithAntiBanMock = vi.fn((sock) => sock)
 })
 
 afterEach(() => {
@@ -129,6 +142,8 @@ describe('socket', () => {
     const created = await createSocket('conn', logger)
 
     expect(created).toBe(sock)
+    expect(loadAntiBanWarmUpStateMock).toHaveBeenCalledWith('conn', logger)
+    expect(wrapSocketWithAntiBanMock).toHaveBeenCalledWith(sock, logger, 'conn', undefined)
     expect(store.setSelfJid).toHaveBeenCalledWith('123@s.whatsapp.net')
     expect(store.bind).toHaveBeenCalledWith(ev)
     expect(store.bindLidMappingStore).toHaveBeenCalledWith(sock.signalRepository.lidMapping)
@@ -227,6 +242,41 @@ describe('socket', () => {
     expect(logger.error).toHaveBeenCalledWith('erro ao salvar credenciais durante ciclo de vida', {
       err: persistError,
     })
+  })
+
+  it('integra antiban quando habilitado e salva warm-up no fechamento', async () => {
+    process.env.WA_CREDS_DEBOUNCE_MS = '0'
+    mockConfig.antibanEnabled = true
+    mockConfig.antibanStateSaveIntervalMs = 0
+    const ev = new EventEmitter()
+    const rawSock = { ev, user: { id: '7@s.whatsapp.net' }, end: vi.fn() }
+    const wrappedSock = { ...rawSock, antiban: { exportWarmUpState: vi.fn(() => ({ day: 1 })), getStats: vi.fn(() => ({})) } }
+
+    makeWASocketMock.mockReturnValue(rawSock)
+    wrapSocketWithAntiBanMock.mockReturnValue(wrappedSock)
+    fetchLatestMock.mockResolvedValue({ version: [2, 0, 0], isLatest: true })
+
+    const saveCreds = vi.fn().mockResolvedValue(undefined)
+    getAuthStateMock.mockResolvedValue({ state: createState(), saveCreds })
+
+    const store = createStore()
+    createBaileysStoreMock.mockReturnValue(store)
+
+    const logger = createLogger()
+    const { createSocket } = await import('../src/core/connection/socket.ts')
+    const created = await createSocket('conn', logger)
+
+    expect(created).toBe(wrappedSock)
+
+    ev.emit('connection.update', {
+      connection: 'close',
+      lastDisconnect: { error: { output: { statusCode: DisconnectReason.restartRequired } } },
+    })
+    await Promise.resolve()
+
+    expect(saveAntiBanWarmUpStateMock).toHaveBeenCalledWith(wrappedSock, 'conn', logger, 'connection_close')
+    mockConfig.antibanEnabled = false
+    mockConfig.antibanStateSaveIntervalMs = 300000
   })
 
   it('debounce agrupa atualizacoes de credenciais', async () => {

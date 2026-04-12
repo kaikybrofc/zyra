@@ -1,10 +1,12 @@
 import makeWASocket, { Browsers, DEFAULT_CONNECTION_CONFIG, DisconnectReason, fetchLatestBaileysVersion, useMultiFileAuthState, type SignalRepositoryWithLIDStore } from '@whiskeysockets/baileys'
+import type { WarmUpState } from 'baileys-antiban'
 import { Boom } from '@hapi/boom'
 import { config } from '../../config/index.js'
 import type { AppLogger } from '../../observability/logger.js'
 import { createBaileysLogger } from '../../observability/baileys-logger.js'
 import { createBaileysStore } from '../../store/baileys-store.js'
 import { getAuthState } from '../auth/state.js'
+import { loadAntiBanWarmUpState, saveAntiBanWarmUpState, wrapSocketWithAntiBan } from './antiban.js'
 import { allowHistorySyncOnceForNewLogin, initHistorySyncPolicy, shouldSyncHistoryMessageOnce } from './history-sync.js'
 
 /** * Extensão de tipo para acessar repositórios internos de LID (Linked Identity) do Baileys.
@@ -16,6 +18,10 @@ type SocketWithSignalRepository = {
 
 type SocketWithCredsFlush = ReturnType<typeof makeWASocket> & {
   flushCredsNow?: (reason: string) => Promise<void>
+  antiban?: {
+    exportWarmUpState: () => WarmUpState
+    getStats: () => unknown
+  }
 }
 
 /** Tipo que representa o formato da versão do protocolo do WhatsApp (ex: [2, 3000, 101]) */
@@ -90,11 +96,15 @@ async function resolveAuthState(connectionId: string, logger: AppLogger) {
  */
 type ShutdownTarget = {
   /** Instância ativa do socket Baileys */
-  sock: ReturnType<typeof makeWASocket>
+  sock: SocketWithCredsFlush
   /** Repositório de dados vinculado à conexão */
   store: ReturnType<typeof createBaileysStore>
   /** Função de persistência de credenciais */
   saveCreds: () => Promise<void>
+  /** Persistência do estado do antiban */
+  saveAntiBanState?: (reason: string) => Promise<void>
+  /** Limpeza de timers/recursos em background */
+  cleanup?: () => void
   /** Logger da aplicação */
   logger: AppLogger
   /** ID da conexão */
@@ -142,11 +152,15 @@ const registerGracefulShutdown = () => {
 
     try {
       await Promise.all(
-        targets.map(async ({ sock, saveCreds, logger, connectionId }) => {
+        targets.map(async ({ sock, saveCreds, saveAntiBanState, cleanup, logger, connectionId }) => {
           logger.warn('executando shutdown gracioso do socket', {
             signal,
             connectionId,
           })
+          cleanup?.()
+          if (saveAntiBanState) {
+            await saveAntiBanState('shutdown')
+          }
           try {
             await saveCreds()
           } catch (error) {
@@ -202,7 +216,7 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
   // Inicializa política de histórico (evita travamentos de buffer em logins antigos)
   initHistorySyncPolicy(state.creds)
 
-  const sock = makeWASocket({
+  const rawSock = makeWASocket({
     auth: state,
     version,
     browser: Browsers.ubuntu('Zyra System'),
@@ -221,12 +235,26 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
   })
 
   // Sincronização inicial do JID do bot
-  store.setSelfJid(sock.user?.id ?? null)
+  store.setSelfJid(rawSock.user?.id ?? null)
+
+  const warmUpState = await loadAntiBanWarmUpState(connectionId, logger)
+  const sock = wrapSocketWithAntiBan(rawSock, logger, connectionId, warmUpState) as SocketWithCredsFlush
 
   // Escuta atualizações de chaves criptográficas e tokens
   let credsSaveTimer: NodeJS.Timeout | null = null
   let credsSaveRequested = false
   let credsSaveRunner: Promise<void> | null = null
+  let antibanStateTimer: NodeJS.Timeout | null = null
+
+  const clearAntibanStateTimer = () => {
+    if (!antibanStateTimer) return
+    clearInterval(antibanStateTimer)
+    antibanStateTimer = null
+  }
+
+  const saveAntibanState = async (reason: string): Promise<void> => {
+    await saveAntiBanWarmUpState(sock, connectionId, logger, reason)
+  }
 
   const flushCredsSave = (): Promise<void> => {
     credsSaveRequested = true
@@ -287,6 +315,8 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
     }
 
     if (update.connection === 'close') {
+      clearAntibanStateTimer()
+      void saveAntibanState('connection_close')
       const statusCode = (update.lastDisconnect?.error as Boom | undefined)?.output?.statusCode
       logger.warn('status da conexao: encerrada', { connectionId, statusCode })
 
@@ -304,20 +334,26 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
   })
 
   // Vincula repositório de LIDs se disponível (WhatsApp Multi-Device v2)
-  const lidMappingStore = (sock as SocketWithSignalRepository).signalRepository?.lidMapping
+  const lidMappingStore = (rawSock as SocketWithSignalRepository).signalRepository?.lidMapping
   if (lidMappingStore) {
     store.bindLidMappingStore(lidMappingStore)
   }
 
   // Acopla a store ao fluxo de eventos do socket
-  store.bind(sock.ev)
+  store.bind(rawSock.ev)
 
-  sock.ev.on('creds.update', scheduleCredsSave)
+  rawSock.ev.on('creds.update', scheduleCredsSave)
+
+  if (config.antibanEnabled && config.antibanStateSaveIntervalMs > 0) {
+    antibanStateTimer = setInterval(() => {
+      void saveAntibanState('interval')
+    }, config.antibanStateSaveIntervalMs)
+  }
 
   ;(sock as SocketWithCredsFlush).flushCredsNow = flushCredsNow
 
   // Registro para encerramento seguro do processo
-  shutdownTargets.add({ sock, store, saveCreds, logger, connectionId })
+  shutdownTargets.add({ sock, store, saveCreds, saveAntiBanState: config.antibanEnabled ? saveAntibanState : undefined, cleanup: clearAntibanStateTimer, logger, connectionId })
   registerGracefulShutdown()
 
   return sock
