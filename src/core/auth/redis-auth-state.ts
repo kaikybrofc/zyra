@@ -2,6 +2,7 @@ import { type AuthenticationCreds, type AuthenticationState, type SignalDataSet,
 import { config } from '../../config/index.js'
 import { getRedisClient } from '../redis/client.js'
 import { getLegacyRedisNamespace, getRedisNamespace } from '../redis/prefix.js'
+import { resolveAuthDir } from './auth-dir.js'
 import { selectBestCreds } from './creds-utils.js'
 import { deleteData, deserialize, ensureAuthFolder, normalizeKeyValue, readData, serialize, writeData } from './storage-utils.js'
 
@@ -63,7 +64,8 @@ const buildRedisKeys = (connectionId?: string) => {
  * ```
  */
 export async function useRedisAuthState(connectionId?: string): Promise<RedisAuthState> {
-  await ensureAuthFolder(config.authDir)
+  const authDir = resolveAuthDir(connectionId)
+  await ensureAuthFolder(authDir)
   const client = await getRedisClient()
   const persistKeysOnDisk = config.authPersistKeysOnDisk
   const { redisCredsKey, legacyRedisCredsKey, redisKeysKey, legacyRedisKeysKey } = buildRedisKeys(connectionId)
@@ -97,7 +99,7 @@ export async function useRedisAuthState(connectionId?: string): Promise<RedisAut
   }
 
   // --- Recuperação de Credenciais ---
-  const credsFromDisk = await readData<AuthenticationCreds>(config.authDir, 'creds.json')
+  const credsFromDisk = await readData<AuthenticationCreds>(authDir, 'creds.json')
   const credsFromRedisRaw = await withRedis((redisClient) => redisClient.get(redisCredsKey), null)
   const credsFromLegacyRaw = legacyRedisCredsKey ? await withRedis((redisClient) => redisClient.get(legacyRedisCredsKey), null) : null
 
@@ -128,7 +130,7 @@ export async function useRedisAuthState(connectionId?: string): Promise<RedisAut
 
   const serializedDisk = credsFromDisk ? serialize(credsFromDisk) : null
   if (!serializedDisk || serializedDisk !== serializedCurrent) {
-    await writeData(config.authDir, 'creds.json', creds)
+    await writeData(authDir, 'creds.json', creds)
   }
 
   /**
@@ -175,7 +177,7 @@ export async function useRedisAuthState(connectionId?: string): Promise<RedisAut
 
           // 3. Tentar Disco Local
           if (!value) {
-            const diskValue = await readData<SignalDataTypeMap[typeof type]>(config.authDir, `${type}-${id}.json`)
+            const diskValue = await readData<SignalDataTypeMap[typeof type]>(authDir, `${type}-${id}.json`)
             if (diskValue) {
               value = diskValue
               toWarm[id] = serialize(diskValue)
@@ -215,12 +217,12 @@ export async function useRedisAuthState(connectionId?: string): Promise<RedisAut
           if (value) {
             toSet[id] = serialize(value)
             if (persistKeysOnDisk) {
-              diskOperations.push(() => writeData(config.authDir, `${category}-${id}.json`, value))
+              diskOperations.push(() => writeData(authDir, `${category}-${id}.json`, value))
             }
           } else {
             toDelete.push(id)
             if (persistKeysOnDisk) {
-              diskOperations.push(() => deleteData(config.authDir, `${category}-${id}.json`))
+              diskOperations.push(() => deleteData(authDir, `${category}-${id}.json`))
             }
           }
         }
@@ -249,7 +251,7 @@ export async function useRedisAuthState(connectionId?: string): Promise<RedisAut
    * Sincroniza o estado atual das credenciais no Disco e Redis.
    */
   const saveCreds = async () => {
-    await Promise.all([writeData(config.authDir, 'creds.json', creds), withRedis((redisClient) => redisClient.set(redisCredsKey, serialize(creds)), undefined)])
+    await Promise.all([writeData(authDir, 'creds.json', creds), withRedis((redisClient) => redisClient.set(redisCredsKey, serialize(creds)), undefined)])
   }
 
   return { state: { creds, keys }, saveCreds }

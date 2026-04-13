@@ -1,5 +1,6 @@
 import { useMultiFileAuthState, type AuthenticationState } from '@whiskeysockets/baileys'
 import { config } from '../../config/index.js'
+import { resolveAuthDir } from './auth-dir.js'
 import { useMysqlAuthState } from './mysql-auth-state.js'
 import { useRedisAuthState } from './redis-auth-state.js'
 
@@ -51,7 +52,7 @@ export async function getAuthState(connectionId?: string): Promise<AuthStateProv
 
   // 3ª Prioridade/Fallback: Sistema de Arquivos Local (JSON)
   // Utilizado geralmente em ambiente de desenvolvimento ou instâncias únicas simples.
-  const { state, saveCreds } = await useMultiFileAuthState(config.authDir)
+  const { state, saveCreds } = await useMultiFileAuthState(resolveAuthDir(connectionId))
 
   return {
     state,

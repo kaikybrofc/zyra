@@ -8,9 +8,7 @@ let useMultiFileAuthStateMock: ReturnType<typeof vi.fn>
 let getAuthStateMock: ReturnType<typeof vi.fn>
 let createBaileysStoreMock: ReturnType<typeof vi.fn>
 let createBaileysLoggerMock: ReturnType<typeof vi.fn>
-let allowHistorySyncOnceForNewLoginMock: ReturnType<typeof vi.fn>
-let initHistorySyncPolicyMock: ReturnType<typeof vi.fn>
-let shouldSyncHistoryMessageOnceMock: ReturnType<typeof vi.fn>
+let createHistorySyncPolicyMock: ReturnType<typeof vi.fn>
 let loadAntiBanWarmUpStateMock: ReturnType<typeof vi.fn>
 let saveAntiBanWarmUpStateMock: ReturnType<typeof vi.fn>
 let wrapSocketWithAntiBanMock: ReturnType<typeof vi.fn>
@@ -45,9 +43,7 @@ vi.mock('../src/core/auth/state.js', () => ({
   getAuthState: (...args: unknown[]) => getAuthStateMock(...args),
 }))
 vi.mock('../src/core/connection/history-sync.js', () => ({
-  allowHistorySyncOnceForNewLogin: (...args: unknown[]) => allowHistorySyncOnceForNewLoginMock(...args),
-  initHistorySyncPolicy: (...args: unknown[]) => initHistorySyncPolicyMock(...args),
-  shouldSyncHistoryMessageOnce: (...args: unknown[]) => shouldSyncHistoryMessageOnceMock(...args),
+  createHistorySyncPolicy: (...args: unknown[]) => createHistorySyncPolicyMock(...args),
 }))
 vi.mock('../src/core/connection/antiban.js', () => ({
   loadAntiBanWarmUpState: (...args: unknown[]) => loadAntiBanWarmUpStateMock(...args),
@@ -95,9 +91,11 @@ beforeEach(() => {
   getAuthStateMock = vi.fn()
   createBaileysStoreMock = vi.fn()
   createBaileysLoggerMock = vi.fn((logger) => logger)
-  allowHistorySyncOnceForNewLoginMock = vi.fn()
-  initHistorySyncPolicyMock = vi.fn()
-  shouldSyncHistoryMessageOnceMock = vi.fn()
+  createHistorySyncPolicyMock = vi.fn((creds) => ({
+    allowOnceForNewLogin: vi.fn(),
+    shouldSyncHistoryMessage: vi.fn(() => false),
+    _creds: creds,
+  }))
   loadAntiBanWarmUpStateMock = vi.fn().mockResolvedValue(undefined)
   saveAntiBanWarmUpStateMock = vi.fn().mockResolvedValue(undefined)
   wrapSocketWithAntiBanMock = vi.fn((sock) => sock)
@@ -149,7 +147,8 @@ describe('socket', () => {
     expect(store.bindLidMappingStore).toHaveBeenCalledWith(sock.signalRepository.lidMapping)
 
     ev.emit('connection.update', { connection: 'open', isNewLogin: true })
-    expect(allowHistorySyncOnceForNewLoginMock).toHaveBeenCalled()
+    expect(createHistorySyncPolicyMock).toHaveBeenCalledTimes(1)
+    expect(createHistorySyncPolicyMock.mock.results[0]?.value?.allowOnceForNewLogin).toHaveBeenCalled()
     expect(logger.info).toHaveBeenCalledWith('status da conexao: aberta', { connectionId: 'conn' })
 
     ev.emit('connection.update', {
@@ -202,6 +201,7 @@ describe('socket', () => {
     expect(fetchLatestMock).toHaveBeenCalledTimes(1)
     expect(getAuthStateMock).toHaveBeenCalledTimes(2)
     expect(useMultiFileAuthStateMock).toHaveBeenCalledTimes(1)
+    expect(useMultiFileAuthStateMock).toHaveBeenCalledWith('/tmp/auth-test/conn')
 
     handlers.SIGTERM?.()
     await new Promise((resolve) => setImmediate(resolve))
@@ -305,7 +305,7 @@ describe('socket', () => {
       connectionId: 'conn',
     })
     expect(createBaileysLoggerMock).toHaveBeenCalledWith(logger)
-    expect(initHistorySyncPolicyMock).toHaveBeenCalledWith(state.creds)
+    expect(createHistorySyncPolicyMock).toHaveBeenCalledWith(state.creds)
     expect(makeWASocketMock).toHaveBeenCalledTimes(1)
     const socketOptions = makeWASocketMock.mock.calls[0]?.[0]
     expect(socketOptions).toEqual(

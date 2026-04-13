@@ -5,6 +5,7 @@ import { ensureMysqlConnection } from '../db/connection.js'
 import { getMysqlPool } from '../db/mysql.js'
 import { getRedisClient } from '../redis/client.js'
 import { getLegacyRedisNamespace, getRedisNamespace } from '../redis/prefix.js'
+import { resolveAuthDir } from './auth-dir.js'
 import { selectBestCreds } from './creds-utils.js'
 import { deleteData, deserialize, ensureAuthFolder, normalizeKeyValue, readData, serialize, writeData } from './storage-utils.js'
 
@@ -105,11 +106,11 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
     console.warn('[auth] mysql indisponivel, usando redis/disco como fallback')
   }
 
-  await ensureAuthFolder(config.authDir)
+  const resolvedConnectionId = connectionId ?? config.connectionId ?? 'default'
+  const authDir = resolveAuthDir(resolvedConnectionId)
+  await ensureAuthFolder(authDir)
   const redisClient = config.redisUrl ? await getRedisClient() : null
   const { redisCredsKey, legacyRedisCredsKey, redisKeysKey } = buildRedisKeys(connectionId)
-
-  const resolvedConnectionId = connectionId ?? config.connectionId ?? 'default'
 
   const markMysqlUnhealthy = (error: unknown) => {
     mysqlHealthy = false
@@ -179,7 +180,7 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
 
   const credsFromRedis = credsFromRedisRaw ? deserialize<AuthenticationCreds>(credsFromRedisRaw) : credsFromLegacyRaw ? deserialize<AuthenticationCreds>(credsFromLegacyRaw) : null
 
-  const credsFromDisk = await readData<AuthenticationCreds>(config.authDir, 'creds.json')
+  const credsFromDisk = await readData<AuthenticationCreds>(authDir, 'creds.json')
 
   const selection = selectBestCreds(
     [
@@ -202,7 +203,7 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
   }
   const serializedDisk = credsFromDisk ? serialize(credsFromDisk) : null
   if (!serializedDisk || serializedDisk !== serializedCurrent) {
-    await writeData(config.authDir, 'creds.json', creds)
+    await writeData(authDir, 'creds.json', creds)
   }
 
   /**
@@ -262,7 +263,7 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
       if (remaining.size) {
         const remainingIds = Array.from(remaining)
         await runWithConcurrency(remainingIds, DISK_READ_CONCURRENCY, async (id) => {
-          const diskValue = await readData<SignalDataTypeMap[typeof type]>(config.authDir, `${type}-${id}.json`)
+          const diskValue = await readData<SignalDataTypeMap[typeof type]>(authDir, `${type}-${id}.json`)
           if (diskValue) {
             const normalized = normalizeKeyValue(type, diskValue)
             if (normalized) data[id] = normalized
@@ -338,10 +339,10 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
         if (persistKeysOnDisk) {
           const diskOperations: Array<() => Promise<void>> = []
           for (const entry of toSet) {
-            diskOperations.push(() => writeData(config.authDir, `${category}-${entry.id}.json`, entry.raw))
+            diskOperations.push(() => writeData(authDir, `${category}-${entry.id}.json`, entry.raw))
           }
           for (const id of toDelete) {
-            diskOperations.push(() => deleteData(config.authDir, `${category}-${id}.json`))
+            diskOperations.push(() => deleteData(authDir, `${category}-${id}.json`))
           }
           if (diskOperations.length) {
             await runWithConcurrency(diskOperations, DISK_READ_CONCURRENCY, async (op) => {
@@ -357,7 +358,7 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
   const saveCreds = async () => {
     const tasks: Array<Promise<unknown>> = [storeCredsInMysql(creds)]
     if (redisClient) tasks.push(redisClient.set(redisCredsKey, serialize(creds)))
-    tasks.push(writeData(config.authDir, 'creds.json', creds))
+    tasks.push(writeData(authDir, 'creds.json', creds))
     await Promise.all(tasks)
   }
 

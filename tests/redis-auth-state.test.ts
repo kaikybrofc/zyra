@@ -81,7 +81,7 @@ describe('redis-auth-state', () => {
     const credsKey = `${getRedisNamespace('conn')}:creds`
     redisStore.set(credsKey, serialize(redisCreds))
 
-    const credsPath = join(mockConfig.authDir, 'creds.json')
+    const credsPath = join(mockConfig.authDir, 'conn', 'creds.json')
     fileStore.set(credsPath, serialize(diskCreds))
 
     const { useRedisAuthState } = await import('../src/core/auth/redis-auth-state.ts')
@@ -96,7 +96,7 @@ describe('redis-auth-state', () => {
     const credsKey = `${getRedisNamespace('conn')}:creds`
     redisStore.set(credsKey, serialize(bad))
 
-    const credsPath = join(mockConfig.authDir, 'creds.json')
+    const credsPath = join(mockConfig.authDir, 'conn', 'creds.json')
     fileStore.set(credsPath, serialize(good))
 
     const { useRedisAuthState } = await import('../src/core/auth/redis-auth-state.ts')

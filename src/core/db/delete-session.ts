@@ -4,6 +4,7 @@ import { config } from '../../config/index.js'
 import { createLogger } from '../../observability/logger.js'
 import { getRedisClient } from '../redis/client.js'
 import { getLegacyRedisNamespace, getRedisNamespace } from '../redis/prefix.js'
+import { resolveAuthDir } from '../auth/auth-dir.js'
 import { ensureMysqlConnection } from './connection.js'
 import { getMysqlPool } from './mysql.js'
 
@@ -107,7 +108,7 @@ async function main() {
   }
 
   if (config.authDir) {
-    await deleteAuthFiles(config.authDir)
+    await deleteAuthFiles(resolveAuthDir(connectionId))
   }
 }
 

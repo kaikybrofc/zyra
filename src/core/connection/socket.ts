@@ -6,8 +6,9 @@ import type { AppLogger } from '../../observability/logger.js'
 import { createBaileysLogger } from '../../observability/baileys-logger.js'
 import { createBaileysStore } from '../../store/baileys-store.js'
 import { getAuthState } from '../auth/state.js'
+import { resolveAuthDir } from '../auth/auth-dir.js'
 import { loadAntiBanWarmUpState, saveAntiBanWarmUpState, wrapSocketWithAntiBan } from './antiban.js'
-import { allowHistorySyncOnceForNewLogin, initHistorySyncPolicy, shouldSyncHistoryMessageOnce } from './history-sync.js'
+import { createHistorySyncPolicy } from './history-sync.js'
 
 /**
  * Extensão de tipo para acessar repositórios internos de LID (Linked Identity) do Baileys.
@@ -96,7 +97,7 @@ async function resolveAuthState(connectionId: string, logger: AppLogger) {
     logger.error('falha ao resolver auth state, ativando fallback local', {
       err: error,
     })
-    const { state, saveCreds } = await useMultiFileAuthState(config.authDir)
+    const { state, saveCreds } = await useMultiFileAuthState(resolveAuthDir(connectionId))
     return { state, saveCreds }
   }
 }
@@ -223,8 +224,7 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
   const { state, saveCreds } = await resolveAuthState(connectionId, logger)
   const version = await resolveBaileysVersion(logger)
 
-  // Inicializa política de histórico (evita travamentos de buffer em logins antigos)
-  initHistorySyncPolicy(state.creds)
+  const historySyncPolicy = createHistorySyncPolicy(state.creds)
 
   const rawSock = makeWASocket({
     auth: state,
@@ -234,7 +234,7 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
     emitOwnEvents: true,
     fireInitQueries: false,
     syncFullHistory: false,
-    shouldSyncHistoryMessage: shouldSyncHistoryMessageOnce,
+    shouldSyncHistoryMessage: historySyncPolicy.shouldSyncHistoryMessage,
     getMessage: store.getMessage,
     cachedGroupMetadata: store.getGroupMetadata,
     msgRetryCounterCache: store.caches.msgRetryCounterCache,
@@ -320,7 +320,7 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
     }
 
     if (update.isNewLogin) {
-      allowHistorySyncOnceForNewLogin()
+      historySyncPolicy.allowOnceForNewLogin()
       forceCredsSave('new_login')
     }
 
@@ -350,9 +350,9 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
   }
 
   // Acopla a store ao fluxo de eventos do socket
-  store.bind(rawSock.ev)
+  store.bind(sock.ev)
 
-  rawSock.ev.on('creds.update', scheduleCredsSave)
+  sock.ev.on('creds.update', scheduleCredsSave)
 
   if (config.antibanEnabled && config.antibanStateSaveIntervalMs > 0) {
     antibanStateTimer = setInterval(() => {

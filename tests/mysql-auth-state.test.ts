@@ -147,7 +147,7 @@ describe('mysql-auth-state', () => {
     const mysqlCreds = initAuthCreds()
     mysqlCredsSerialized = serialize(mysqlCreds)
 
-    const credsPath = join(mockConfig.authDir, 'creds.json')
+    const credsPath = join(mockConfig.authDir, 'conn', 'creds.json')
     fileStore.set(credsPath, serialize(initAuthCreds()))
 
     const { useMysqlAuthState } = await import('../src/core/auth/mysql-auth-state.ts')
