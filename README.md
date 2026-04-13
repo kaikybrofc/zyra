@@ -86,6 +86,28 @@ npm run build
 npm run start:prod
 ```
 
+### Produção com PM2
+```bash
+npm run pm2:start
+```
+
+Comandos úteis:
+
+- `npm run pm2:restart`: recompila e reinicia o processo `zyra`.
+- `npm run pm2:logs`: acompanha os logs do processo.
+- `npm run pm2:stop`: para a instância sem removê-la.
+- `npm run pm2:delete`: remove a instância do PM2.
+- `npm run pm2:save`: salva a lista atual de processos para restauração automática.
+- `npm run pm2:startup`: gera o comando de inicialização automática do PM2 no boot do servidor.
+
+Fluxo recomendado para manter o bot subindo com o servidor:
+
+```bash
+npm run pm2:start
+npm run pm2:save
+npm run pm2:startup
+```
+
 ---
 
 ## 🧠 Arquitetura do Sistema
@@ -134,4 +156,3 @@ Utilize o `LOG_LEVEL=debug` durante o desenvolvimento para visualizar o fluxo de
 Este projeto está licenciado sob a **Licença MIT**. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
 
 Copyright (c) 2026 kaikybrofc
-
