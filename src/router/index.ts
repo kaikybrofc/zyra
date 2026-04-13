@@ -2,6 +2,7 @@ import { type WASocket, type proto } from '@whiskeysockets/baileys'
 import type { AppLogger } from '../observability/logger.js'
 import { createSqlStore, type SqlStore } from '../store/sql-store.js'
 import { createCommandProcessor } from '../core/command-runtime/processor.js'
+import { config } from '../config/index.js'
 
 let defaultSqlStore: SqlStore | null = null
 const chatQueues = new Map<string, Promise<void>>()
@@ -14,8 +15,10 @@ const resolveSqlStore = (sqlStore?: SqlStore): SqlStore => {
   return defaultSqlStore
 }
 
-const resolveQueueKey = (message: proto.IWebMessageInfo): string => {
-  return message.key?.remoteJid ?? message.key?.id ?? '__unknown_chat__'
+const resolveQueueKey = (message: proto.IWebMessageInfo, connectionId: string): string => {
+  const chatKey = message.key?.remoteJid ?? message.key?.id ?? '__unknown_chat__'
+  // Um processo pode manter múltiplas conexões; isolamos a fila por conexão para evitar head-of-line blocking.
+  return `${connectionId}:${chatKey}`
 }
 
 const enqueueMessageProcessing = (
@@ -46,7 +49,13 @@ const enqueueMessageProcessing = (
  * Enfileira mensagens recebidas para execucao assíncrona preservando a ordem por chat.
  * Permite injetar a store SQL para multi-tenant.
  */
-export async function handleIncomingMessages(sock: WASocket, messages: proto.IWebMessageInfo[], logger: AppLogger, sqlStore?: SqlStore): Promise<void> {
+export async function handleIncomingMessages(
+  sock: WASocket,
+  messages: proto.IWebMessageInfo[],
+  logger: AppLogger,
+  connectionId: string = config.connectionId ?? 'default',
+  sqlStore?: SqlStore
+): Promise<void> {
   const resolvedSqlStore = resolveSqlStore(sqlStore)
   const processor = createCommandProcessor({ logger, sqlStore: resolvedSqlStore })
   if (!messages.length) {
@@ -54,7 +63,7 @@ export async function handleIncomingMessages(sock: WASocket, messages: proto.IWe
     return
   }
   for (const message of messages) {
-    const queueKey = resolveQueueKey(message)
+    const queueKey = resolveQueueKey(message, connectionId)
     enqueueMessageProcessing(
       queueKey,
       async () => {

@@ -74,6 +74,22 @@ Se o Baileys for atualizado ou substituído, a tendência é concentrar os ajust
 
 ---
 
+## ⚙️ Configurações Importantes
+
+### Prefixo de comandos
+
+O prefixo padrão de comando é `!`, mas pode ser configurado via variável de ambiente:
+
+- `WA_COMMAND_PREFIX`: define o prefixo de comandos (default `!`)
+
+Isso permite rodar múltiplas instâncias com padrões diferentes sem alterar código.
+
+### Processamento de mensagens (anti-histórico)
+
+Para evitar execução de comandos em carga de histórico, o Core processa comandos apenas quando `messages.upsert.type === "notify"`.
+
+---
+
 ## 📜 Contrato dos Comandos
 
 O tipo `Command` espera uma função que recebe o `ctx`.

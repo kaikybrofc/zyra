@@ -40,7 +40,7 @@ describe('router', () => {
     ]
 
     const { handleIncomingMessages } = await import('../src/router/index.ts')
-    await handleIncomingMessages(sock as never, messages as never, logger)
+    await handleIncomingMessages(sock as never, messages as never, logger, 'conn')
 
     await vi.waitFor(() => {
       expect(process).toHaveBeenCalledTimes(2)
@@ -77,7 +77,7 @@ describe('router', () => {
     ]
 
     const { handleIncomingMessages } = await import('../src/router/index.ts')
-    await handleIncomingMessages(sock as never, messages as never, logger)
+    await handleIncomingMessages(sock as never, messages as never, logger, 'conn')
 
     await vi.waitFor(() => {
       expect(process).toHaveBeenCalledTimes(1)
@@ -118,7 +118,7 @@ describe('router', () => {
     ]
 
     const { handleIncomingMessages } = await import('../src/router/index.ts')
-    await handleIncomingMessages(sock as never, messages as never, logger)
+    await handleIncomingMessages(sock as never, messages as never, logger, 'conn')
 
     await vi.waitFor(() => {
       expect(process).toHaveBeenCalledTimes(2)
@@ -147,7 +147,7 @@ describe('router', () => {
     ]
 
     const { handleIncomingMessages } = await import('../src/router/index.ts')
-    await handleIncomingMessages(sock as never, messages as never, logger)
+    await handleIncomingMessages(sock as never, messages as never, logger, 'conn')
 
     await vi.waitFor(() => {
       expect(process).toHaveBeenCalledTimes(2)
@@ -157,7 +157,7 @@ describe('router', () => {
     expect(process).toHaveBeenNthCalledWith(2, sock, messages[1])
     expect(logger.error).toHaveBeenCalledWith('falha ao processar mensagem enfileirada', {
       err: expect.any(Error),
-      queueKey: 'chat@s.whatsapp.net',
+      queueKey: 'conn:chat@s.whatsapp.net',
     })
   })
 
@@ -185,7 +185,7 @@ describe('router', () => {
     ]
 
     const { handleIncomingMessages } = await import('../src/router/index.ts')
-    await handleIncomingMessages(sock as never, messages as never, logger)
+    await handleIncomingMessages(sock as never, messages as never, logger, 'conn')
 
     await vi.waitFor(() => {
       expect(process).toHaveBeenCalledTimes(2)
@@ -202,8 +202,40 @@ describe('router', () => {
     const logger = createLogger()
 
     const { handleIncomingMessages } = await import('../src/router/index.ts')
-    await handleIncomingMessages({} as never, [], logger)
+    await handleIncomingMessages({} as never, [], logger, 'conn')
 
     expect(logger.info).toHaveBeenCalledWith('messages.upsert sem mensagens')
+  })
+
+  it('isola filas por connectionId quando dois sockets recebem mensagens no mesmo chat', async () => {
+    let releaseFirst: (() => void) | null = null
+    const firstMessageProcessed = new Promise<void>((resolve) => {
+      releaseFirst = resolve
+    })
+    const process = vi.fn((_: unknown, message: { key?: { id?: string | null } }) => {
+      if (message.key?.id === '1') {
+        return firstMessageProcessed
+      }
+      return Promise.resolve()
+    })
+
+    const sqlStore = { enabled: true, recordCommandLog: vi.fn() }
+    createSqlStoreMock.mockReturnValue(sqlStore)
+    createCommandProcessorMock.mockReturnValue({ process })
+
+    const logger = createLogger()
+    const sock = { user: { id: 'bot@s.whatsapp.net' } }
+    const messageA = { key: { id: '1', remoteJid: 'chat@s.whatsapp.net' } }
+    const messageB = { key: { id: '2', remoteJid: 'chat@s.whatsapp.net' } }
+
+    const { handleIncomingMessages } = await import('../src/router/index.ts')
+    await handleIncomingMessages(sock as never, [messageA] as never, logger, 'conn-a')
+    await handleIncomingMessages(sock as never, [messageB] as never, logger, 'conn-b')
+
+    await vi.waitFor(() => {
+      expect(process).toHaveBeenCalledTimes(2)
+    })
+
+    releaseFirst?.()
   })
 })

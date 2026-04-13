@@ -440,7 +440,9 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
         type: event.type,
       })
       try {
-        await handleIncomingMessages(sock, event.messages, logger, sqlStore)
+        if (event.type === 'notify') {
+          await handleIncomingMessages(sock, event.messages, logger, connectionId, sqlStore)
+        }
         logger.debug('evento do Baileys recebido', {
           event: 'messages.upsert',
           count: event.messages.length,

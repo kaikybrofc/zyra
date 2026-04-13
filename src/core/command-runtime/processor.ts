@@ -7,7 +7,6 @@ import { getMessageText, getNormalizedMessage } from '../../utils/message.js'
 import { createCommandAdminActions } from './admin.js'
 import { CommandContext } from './context.js'
 
-const COMMAND_PREFIX = '!'
 const ANSI_RESET = '\x1b[0m'
 const ANSI_BOLD = '\x1b[1m'
 const ANSI_CYAN = '\x1b[36m'
@@ -99,8 +98,9 @@ export const buildIncomingCommandEnvelope = (
   if (!chatId) return null
 
   const text = getMessageText(message)?.trim() ?? ''
-  const isCommand = text.startsWith(COMMAND_PREFIX)
-  const commandTokens = isCommand ? text.slice(COMMAND_PREFIX.length).trim().split(/\s+/).filter(Boolean) : []
+  const prefix = config.commandPrefix || '!'
+  const isCommand = text.startsWith(prefix)
+  const commandTokens = isCommand ? text.slice(prefix.length).trim().split(/\s+/).filter(Boolean) : []
   const [commandName, ...commandArgs] = commandTokens
 
   return {

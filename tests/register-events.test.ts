@@ -246,7 +246,7 @@ describe('registerEvents messages.upsert', () => {
 
     await new Promise((resolve) => setImmediate(resolve))
 
-    expect(handleIncomingMessagesMock).toHaveBeenCalledWith(sock, event.messages, logger, sqlStore)
+    expect(handleIncomingMessagesMock).toHaveBeenCalledWith(sock, event.messages, logger, 'conn', sqlStore)
     expect(sqlStore.recordEvent).not.toHaveBeenCalled()
 
     resolveRouter?.()
@@ -308,5 +308,39 @@ describe('registerEvents messages.upsert', () => {
       reason: 'boom',
       data: expect.objectContaining({ error: routerError, type: 'notify' }),
     })
+  })
+
+  it('nao chama o router quando messages.upsert nao é notify', async () => {
+    const sqlStore = createSqlStoreStub()
+    createSqlStoreMock.mockReturnValue(sqlStore)
+
+    const { registerEvents } = await import('../src/events/register.ts')
+    const sock = {
+      ev: new EventEmitter(),
+      user: { id: 'bot@s.whatsapp.net' },
+    }
+    const logger = createLogger()
+
+    registerEvents({ sock: sock as never, logger: logger as never, reconnect: vi.fn(), connectionId: 'conn' })
+
+    sock.ev.emit('messages.upsert', {
+      type: 'append',
+      messages: [
+        {
+          key: {
+            remoteJid: 'chat@s.whatsapp.net',
+            id: 'msg-3',
+            fromMe: false,
+          },
+          message: {
+            conversation: '!ping',
+          },
+        },
+      ],
+    })
+
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(handleIncomingMessagesMock).not.toHaveBeenCalled()
   })
 })

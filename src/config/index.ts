@@ -36,6 +36,8 @@ function readRiskLevel(value: string | undefined, fallback: 'low' | 'medium' | '
 export const config = {
   /** Diretório para armazenamento local de credenciais de autenticação (WA_AUTH_DIR). */
   authDir: process.env.WA_AUTH_DIR ?? 'data/auth',
+  /** Prefixo para identificar comandos (WA_COMMAND_PREFIX). */
+  commandPrefix: (process.env.WA_COMMAND_PREFIX ?? '!').trim() || '!',
   /** Se deve imprimir o QR Code no terminal durante o emparelhamento (WA_PRINT_QR). */
   printQRInTerminal: readBoolean(process.env.WA_PRINT_QR, true),
   /** Nível de verbosidade dos logs da aplicação (LOG_LEVEL). */

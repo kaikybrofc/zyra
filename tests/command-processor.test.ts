@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 const mockConfig = {
   allowOwnMessages: false,
+  commandPrefix: '!',
 }
 
 const mockCommands: Record<string, { execute: ReturnType<typeof vi.fn>; name: string; description: string }> = {}
@@ -161,5 +162,33 @@ describe('CommandProcessor', () => {
     await processor.process(sock as never, createMessage('ola') as never)
 
     expect(sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('suporta prefixo customizado via config', async () => {
+    mockConfig.commandPrefix = '.'
+
+    const sqlStore = {
+      enabled: true,
+      recordCommandLog: vi.fn(),
+    }
+    const logger = createLogger()
+    const sendMessage = vi.fn().mockResolvedValue(undefined)
+    const execute = vi.fn().mockResolvedValue(undefined)
+
+    mockCommands.ping = { name: 'ping', description: 'ping', execute }
+
+    const sock = {
+      user: { id: 'bot@s.whatsapp.net' },
+      sendMessage,
+      groupMetadata: vi.fn(),
+      groupParticipantsUpdate: vi.fn(),
+    }
+
+    const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
+    const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
+
+    await processor.process(sock as never, createMessage('.ping agora') as never)
+
+    expect(execute).toHaveBeenCalledTimes(1)
   })
 })
