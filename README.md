@@ -154,7 +154,7 @@ Utilize o `LOG_LEVEL=debug` durante o desenvolvimento para visualizar o fluxo de
 ## 🤝 Contribuidores
 
 - **@kaikybrofc** — mantenedor do projeto.
-- **@kobie3717** — feedback e melhorias na integração do `baileys-antiban` (tipagem e cleanup de timers).
+- **@kobie3717** — feedback e melhorias na integração do [`baileys-antiban`](https://github.com/kobie3717/baileys-antiban) (tipagem e cleanup de timers).
 
 ---
 
