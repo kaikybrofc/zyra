@@ -199,3 +199,114 @@ describe('registerEvents newsletter persistence', () => {
     })
   })
 })
+
+describe('registerEvents messages.upsert', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('chama o router e grava evento apenas apos o processamento concluir', async () => {
+    const sqlStore = createSqlStoreStub()
+    createSqlStoreMock.mockReturnValue(sqlStore)
+
+    let resolveRouter: (() => void) | null = null
+    const routerPromise = new Promise<void>((resolve) => {
+      resolveRouter = resolve
+    })
+    handleIncomingMessagesMock.mockReturnValue(routerPromise)
+
+    const { registerEvents } = await import('../src/events/register.ts')
+    const sock = {
+      ev: new EventEmitter(),
+      user: { id: 'bot@s.whatsapp.net' },
+    }
+    const logger = createLogger()
+
+    registerEvents({ sock: sock as never, logger: logger as never, reconnect: vi.fn(), connectionId: 'conn' })
+
+    const event = {
+      type: 'notify',
+      messages: [
+        {
+          key: {
+            remoteJid: 'chat@s.whatsapp.net',
+            id: 'msg-1',
+            fromMe: false,
+          },
+          pushName: 'Tester',
+          messageTimestamp: 1,
+          message: {
+            conversation: 'oi',
+          },
+        },
+      ],
+    }
+
+    sock.ev.emit('messages.upsert', event)
+
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(handleIncomingMessagesMock).toHaveBeenCalledWith(sock, event.messages, logger, sqlStore)
+    expect(sqlStore.recordEvent).not.toHaveBeenCalled()
+
+    resolveRouter?.()
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(sqlStore.recordEvent).toHaveBeenCalledWith({
+      type: 'messages.upsert',
+      data: { type: 'notify' },
+      chatJid: 'chat@s.whatsapp.net',
+      groupJid: null,
+      messageKey: { chatJid: 'chat@s.whatsapp.net', messageId: 'msg-1', fromMe: false },
+      actorJid: 'chat@s.whatsapp.net',
+    })
+  })
+
+  it('registra falha quando o router lança erro durante messages.upsert', async () => {
+    const sqlStore = createSqlStoreStub()
+    createSqlStoreMock.mockReturnValue(sqlStore)
+
+    const routerError = new Error('boom')
+    handleIncomingMessagesMock.mockRejectedValue(routerError)
+
+    const { registerEvents } = await import('../src/events/register.ts')
+    const sock = {
+      ev: new EventEmitter(),
+      user: { id: 'bot@s.whatsapp.net' },
+    }
+    const logger = createLogger()
+
+    registerEvents({ sock: sock as never, logger: logger as never, reconnect: vi.fn(), connectionId: 'conn' })
+
+    sock.ev.emit('messages.upsert', {
+      type: 'notify',
+      messages: [
+        {
+          key: {
+            remoteJid: 'chat@s.whatsapp.net',
+            id: 'msg-2',
+            fromMe: false,
+          },
+          message: {
+            conversation: 'oi',
+          },
+        },
+      ],
+    })
+
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(logger.error).toHaveBeenCalledWith('falha ao processar messages.upsert', {
+      err: routerError,
+      count: 1,
+      type: 'notify',
+    })
+    expect(sqlStore.recordMessageFailure).toHaveBeenCalledWith({
+      chatJid: 'chat@s.whatsapp.net',
+      messageId: 'msg-2',
+      senderJid: null,
+      reason: 'boom',
+      data: expect.objectContaining({ error: routerError, type: 'notify' }),
+    })
+  })
+})

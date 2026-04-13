@@ -279,6 +279,134 @@ describe('socket', () => {
     mockConfig.antibanStateSaveIntervalMs = 300000
   })
 
+  it('configura o makeWASocket com auth, logger e caches da store', async () => {
+    process.env.WA_CREDS_DEBOUNCE_MS = '0'
+    mockConfig.mysqlUrl = null as unknown as string
+    mockConfig.redisUrl = 'redis://test'
+
+    const ev = new EventEmitter()
+    const sock = { ev, user: { id: 'cfg@s.whatsapp.net' }, end: vi.fn() }
+    makeWASocketMock.mockReturnValue(sock)
+    fetchLatestMock.mockResolvedValue({ version: [2, 5, 7], isLatest: true })
+
+    const state = createState()
+    const saveCreds = vi.fn().mockResolvedValue(undefined)
+    getAuthStateMock.mockResolvedValue({ state, saveCreds })
+
+    const store = createStore()
+    createBaileysStoreMock.mockReturnValue(store)
+
+    const logger = createLogger()
+    const { createSocket } = await import('../src/core/connection/socket.ts')
+    await createSocket('conn', logger)
+
+    expect(logger.info).toHaveBeenCalledWith('inicializando setup do socket', {
+      strategy: 'redis',
+      connectionId: 'conn',
+    })
+    expect(createBaileysLoggerMock).toHaveBeenCalledWith(logger)
+    expect(initHistorySyncPolicyMock).toHaveBeenCalledWith(state.creds)
+    expect(makeWASocketMock).toHaveBeenCalledTimes(1)
+    const socketOptions = makeWASocketMock.mock.calls[0]?.[0]
+    expect(socketOptions).toEqual(
+      expect.objectContaining({
+        auth: state,
+        version: [2, 5, 7],
+        logger,
+        emitOwnEvents: true,
+        fireInitQueries: false,
+        syncFullHistory: false,
+        shouldSyncHistoryMessage: expect.any(Function),
+        getMessage: store.getMessage,
+        cachedGroupMetadata: store.getGroupMetadata,
+        msgRetryCounterCache: store.caches.msgRetryCounterCache,
+        callOfferCache: store.caches.callOfferCache,
+        placeholderResendCache: store.caches.placeholderResendCache,
+        userDevicesCache: store.caches.userDevicesCache,
+        mediaCache: store.caches.mediaCache,
+      })
+    )
+    expect(socketOptions?.browser).toEqual(['Ubuntu', 'Zyra System', '22.04.4'])
+
+    mockConfig.mysqlUrl = 'mysql://test'
+  })
+
+  it('expõe flushCredsNow e cancela o debounce pendente', async () => {
+    vi.useFakeTimers()
+    process.env.WA_CREDS_DEBOUNCE_MS = '1000'
+
+    const ev = new EventEmitter()
+    const sock = { ev, user: { id: 'flush@s.whatsapp.net' }, end: vi.fn() }
+    makeWASocketMock.mockReturnValue(sock)
+    fetchLatestMock.mockResolvedValue({ version: [2, 0, 0], isLatest: true })
+
+    const saveCreds = vi.fn().mockResolvedValue(undefined)
+    getAuthStateMock.mockResolvedValue({ state: createState(), saveCreds })
+
+    const store = createStore()
+    createBaileysStoreMock.mockReturnValue(store)
+
+    const logger = createLogger()
+    const { createSocket } = await import('../src/core/connection/socket.ts')
+    const created = await createSocket('conn', logger)
+
+    ev.emit('creds.update')
+    await vi.advanceTimersByTimeAsync(500)
+    expect(saveCreds).not.toHaveBeenCalled()
+
+    await created.flushCredsNow?.('manual')
+
+    expect(logger.info).toHaveBeenCalledWith('forcando persistencia imediata de credenciais', {
+      connectionId: 'conn',
+      reason: 'manual',
+    })
+    expect(saveCreds).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(saveCreds).toHaveBeenCalledTimes(1)
+  })
+
+  it('salva estado do antiban em intervalo e limpa o timer ao fechar', async () => {
+    vi.useFakeTimers()
+    process.env.WA_CREDS_DEBOUNCE_MS = '0'
+    mockConfig.antibanEnabled = true
+    mockConfig.antibanStateSaveIntervalMs = 1000
+
+    const ev = new EventEmitter()
+    const rawSock = { ev, user: { id: 'timer@s.whatsapp.net' }, end: vi.fn() }
+    const wrappedSock = { ...rawSock, antiban: { exportWarmUpState: vi.fn(() => ({ day: 2 })), getStats: vi.fn(() => ({})) } }
+
+    makeWASocketMock.mockReturnValue(rawSock)
+    wrapSocketWithAntiBanMock.mockReturnValue(wrappedSock)
+    fetchLatestMock.mockResolvedValue({ version: [2, 0, 0], isLatest: true })
+
+    const saveCreds = vi.fn().mockResolvedValue(undefined)
+    getAuthStateMock.mockResolvedValue({ state: createState(), saveCreds })
+
+    const store = createStore()
+    createBaileysStoreMock.mockReturnValue(store)
+
+    const logger = createLogger()
+    const { createSocket } = await import('../src/core/connection/socket.ts')
+    await createSocket('conn', logger)
+
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(saveAntiBanWarmUpStateMock).toHaveBeenCalledWith(wrappedSock, 'conn', logger, 'interval')
+
+    ev.emit('connection.update', {
+      connection: 'close',
+      lastDisconnect: { error: { output: { statusCode: DisconnectReason.loggedOut } } },
+    })
+    await Promise.resolve()
+
+    const callsAfterClose = saveAntiBanWarmUpStateMock.mock.calls.length
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(saveAntiBanWarmUpStateMock).toHaveBeenCalledTimes(callsAfterClose)
+
+    mockConfig.antibanEnabled = false
+    mockConfig.antibanStateSaveIntervalMs = 300000
+  })
+
   it('debounce agrupa atualizacoes de credenciais', async () => {
     vi.useFakeTimers()
     process.env.WA_CREDS_DEBOUNCE_MS = '1000'
