@@ -262,6 +262,14 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
     antibanStateTimer = null
   }
 
+  const startAntibanStateTimer = () => {
+    if (!config.antibanEnabled || config.antibanStateSaveIntervalMs <= 0) return
+    if (antibanStateTimer) return
+    antibanStateTimer = setInterval(() => {
+      void saveAntibanState('interval')
+    }, config.antibanStateSaveIntervalMs)
+  }
+
   const saveAntibanState = async (reason: string): Promise<void> => {
     await saveAntiBanWarmUpState(sock, connectionId, logger, reason)
   }
@@ -314,7 +322,12 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
   }
 
   sock.ev.on('connection.update', (update) => {
+    if (update.connection && update.connection !== 'open') {
+      clearAntibanStateTimer()
+    }
+
     if (update.connection === 'open') {
+      startAntibanStateTimer()
       store.setSelfJid(sock.user?.id ?? null)
       logger.info('status da conexao: aberta', { connectionId })
     }
@@ -353,12 +366,6 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
   store.bind(sock.ev)
 
   sock.ev.on('creds.update', scheduleCredsSave)
-
-  if (config.antibanEnabled && config.antibanStateSaveIntervalMs > 0) {
-    antibanStateTimer = setInterval(() => {
-      void saveAntibanState('interval')
-    }, config.antibanStateSaveIntervalMs)
-  }
 
   ;(sock as SocketWithCredsFlush).flushCredsNow = flushCredsNow
 

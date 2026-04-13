@@ -390,6 +390,7 @@ describe('socket', () => {
     const { createSocket } = await import('../src/core/connection/socket.ts')
     await createSocket('conn', logger)
 
+    ev.emit('connection.update', { connection: 'open' })
     await vi.advanceTimersByTimeAsync(1000)
     expect(saveAntiBanWarmUpStateMock).toHaveBeenCalledWith(wrappedSock, 'conn', logger, 'interval')
 
