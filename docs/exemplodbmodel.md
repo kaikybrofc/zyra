@@ -1,8 +1,11 @@
-# Modelo completo do banco (MySQL 8)
+# Modelo atual do banco (MySQL 8)
 
 ![Diagrama do banco](diagrama-db.svg)
 
-Este arquivo contém o modelo completo proposto para persistência do bot, servindo como a **fonte da verdade** para a inicialização automática do schema (`npm run db:init`).
+Este arquivo descreve o schema do MySQL usado pelo Zyra para persistência e auditoria.
+Ele também serve como **fonte da verdade** para a inicialização automática do schema via `npm run db:init` (o script lê este Markdown e cria as tabelas ausentes).
+
+Observação importante: o `db:init` cria tabelas se não existirem, mas não faz migrações destrutivas (não remove colunas, não renomeia, não altera tipos). Mudanças estruturais precisam de um fluxo de migração.
 
 ## Estrutura de Dados (SQL)
 
@@ -433,58 +436,39 @@ CREATE TABLE user_devices (
   CONSTRAINT fk_user_devices_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
   CONSTRAINT fk_user_devices_user FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE signal_keys (
-  connection_id VARCHAR(64) NOT NULL,
-  key_type VARCHAR(64) NOT NULL,
-  key_id VARCHAR(255) NOT NULL,
-  value_json JSON NULL,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (connection_id, key_type, key_id),
-  CONSTRAINT fk_signal_keys_conn FOREIGN KEY (connection_id) REFERENCES connections(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
-## Análise Técnica de Maturidade e Prontidão
+## Visão geral (como o Zyra usa o banco hoje)
 
-O modelo `zyra` foi projetado para ser um sistema de **nível empresarial**, focado em alta disponibilidade, rastreabilidade total e escalabilidade multi-instância. Abaixo estão os pilares que tornam este modelo maduro para produção em escala.
+O Zyra separa “estado operacional do WhatsApp” (chats, grupos, mensagens e metadados brutos) da “identidade unificada” (usuários e seus identificadores), além de manter trilhas de auditoria para observabilidade.
 
-### 1. Arquitetura de Identidade Unificada (`Identity Linkage`)
-Diferente de sistemas que tratam o JID do WhatsApp como chave única, este modelo introduz a tabela `users` com **UUIDs (BINARY 16)**.
-- **Vantagem:** Permite que um mesmo usuário humano seja identificado por múltiplos meios (Número de Telefone, LID, JID ou Username) através da tabela `user_identifiers`.
-- **Maturidade:** Pronto para cenários onde o WhatsApp altera o JID (migrações de conta) sem quebrar o histórico de mensagens ou associações de negócio.
+Principais blocos:
 
-### 2. Escalabilidade Horizontal e Multi-Tenant
-O uso sistemático de `connection_id` em todas as tabelas (fazendo parte de quase todas as Primary Keys ou Indices) permite:
-- **Sharding Natural:** Facilita a partição do banco de dados por instância/cliente.
-- **Multi-Instância:** Um único banco de dados pode gerenciar centenas de bots simultâneos com isolamento lógico garantido.
+- **Multi-instância**: `connections` + `connection_id` em todas as entidades (isolamento lógico por instância).
+- **Identidade unificada**: `users` + `user_identifiers` + `user_aliases` + `lid_mappings` (mesma pessoa pode ter PN/LID/JID/username).
+- **Armazenamento do WhatsApp**: `chats`, `wa_contacts_cache`, `groups`, `group_participants`, `messages`, `message_media`, `message_text_index`.
+- **Auditoria/Observabilidade**: `events_log`, `message_events`, `group_events`, `commands_log`, `message_failures`, `bot_sessions`, `blocklist`, `labels` e `label_associations`.
+- **Newsletters (canais)**: `newsletters`, `newsletter_participants` e `newsletter_events`.
+- **Estado criptográfico**: `auth_creds` e `signal_keys` (quando a estratégia de auth estiver apontada para MySQL).
 
-### 3. Performance de Leitura e Escrita
-- **UUIDs Ordenados:** Sugere-se o uso de `UUID_TO_BIN(UUID(), 1)` para garantir que as novas inserções sejam sequenciais no índice B-Tree do InnoDB, minimizando fragmentação de disco e otimizando IO.
-- **Tabelas de Cache vs Verdade:** `wa_contacts_cache` lida com a volatilidade dos dados do Baileys, enquanto `users` mantém a integridade dos dados da aplicação. Isso evita "contaminação" de dados de negócio com estados temporários de conexão.
-- **Indexação de Texto Integrada:** A tabela `message_text_index` com `FULLTEXT KEY` permite buscas instantâneas em milhões de mensagens sem a necessidade inicial de um cluster externo (como ElasticSearch), embora a arquitetura permita essa migração facilmente.
+## Pontos fortes
 
-### 4. Rastreabilidade e Auditoria (Observability)
-Com tabelas dedicadas como `events_log`, `message_events` e `commands_log`, o sistema está pronto para:
-- **Compliance:** Auditoria completa de quem fez o quê, em qual chat e com qual comando.
-- **Analytics:** Geração de relatórios de performance de atendimento, tempo de resposta e engajamento por usuário ou grupo.
-- **Arquivamento Estratégico:** A tabela `events_log_archive` permite mover dados históricos frios para armazenamento mais barato, mantendo a tabela operacional (`events_log`) leve e rápida.
+- **Isolamento por instância**: o `connection_id` aparece sistematicamente em chaves e índices, facilitando multi-instância e filtros por tenant.
+- **Identidade resiliente**: `users` (BINARY(16)) desacopla a pessoa dos identificadores voláteis; `user_identifiers` permite re-vincular PN/LID/JID/username sem perder histórico.
+- **Observabilidade pronta para produção**: trilhas de evento e falha (`events_log`, `message_events`, `message_failures`, `commands_log`) facilitam auditoria, troubleshooting e métricas.
+- **Modelo híbrido “bruto + derivado”**: colunas de leitura rápida (ex: `text_preview`, `timestamp`, `status`) convivem com `data_json` para preservar payloads completos.
+- **Busca textual nativa**: `message_text_index` com FULLTEXT permite consultas rápidas sem depender de um serviço externo.
 
-### 5. Resiliência Operacional
-- **Soft Deletes:** O uso de `deleted_at` em `users`, `chats` e `messages` permite a recuperação de dados em caso de erro operacional e mantém a integridade referencial histórica.
-- **Tratamento de Falhas:** A tabela `message_failures` registra erros específicos de entrega, permitindo a implementação de filas de re-tentativa inteligentes (Retry Policies).
+## Pontos de atenção
 
-### 6. Prontidão para Alta Carga (High Load Readiness)
-Este modelo suporta:
-- **Milhões de Mensagens:** Através da partição sugerida (RANGE por timestamp).
-- **Consistência Eventual:** O design permite que o processamento pesado de logs e eventos seja feito de forma assíncrona, não bloqueando a recepção de novas mensagens.
-- **Integração com Redis:** Preparado para usar Redis como "cache quente" para sessões de autenticação (`auth_creds` e `signal_keys`) enquanto o MySQL atua como persistência durável.
+- **Migrações**: como o `db:init` só cria tabelas ausentes, alterações de colunas/índices exigem um processo de migração (senão pode haver divergência entre ambiente novo e banco antigo).
+- **UUID e fragmentação de índice**: hoje o `sql-store` grava UUIDs como BINARY(16) via `UNHEX(REPLACE(uuid,'-',''))`, o que não preserva ordenação temporal. Em grandes volumes, pode gerar fragmentação no InnoDB (mitigação: UUIDs ordenáveis ou chaves surrogate).
+- **Crescimento de dados**: `messages`, `events_log`, `message_events` e `newsletter_events` tendem a crescer rápido. Planejar retenção/arquivamento e, se necessário, particionamento e índices adicionais.
+- **JSON pesado**: `data_json` facilita compatibilidade e auditoria, mas aumenta custo de armazenamento e pode exigir colunas derivadas/indexadas para consultas frequentes.
+- **Chave `connections`**: por haver FKs para `connections(id)`, é importante garantir que o `connection_id` esteja registrado (o bootstrap faz isso via `ensureMysqlConnection`, usando `WA_CONNECTION_ID`).
+- **`wa_contacts_cache` é cache**: útil para performance e “estado do WhatsApp”, mas não deve ser tratado como fonte única de verdade de identidade (para isso existem `users`/`user_identifiers`).
 
----
+## Verificações recomendadas
 
-## Relatório de Conformidade do Banco
-
-Data da análise: `2026-04-12T01:30:00.000Z`
-Banco analisado: `zyra`
-
-Este modelo foi validado e está em **conformidade total** com o motor de sincronização da aplicação. Nenhuma divergência estrutural foi encontrada entre a documentação e a implementação física.
+- `npm run db:init`: cria as tabelas ausentes do MySQL a partir deste arquivo.
+- `npm run db:verify`: lista tabelas e contagens (por `WA_CONNECTION_ID` quando a tabela tem `connection_id`).
