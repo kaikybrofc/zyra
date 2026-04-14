@@ -145,6 +145,10 @@ describe('CommandProcessor', () => {
 
   it('ignora mensagens sem comando ou invalidas', async () => {
     const logger = createLogger()
+    const sqlStore = {
+      enabled: false,
+      recordCommandLog: vi.fn(),
+    }
     const sendMessage = vi.fn().mockResolvedValue(undefined)
 
     const sock = {
@@ -155,7 +159,7 @@ describe('CommandProcessor', () => {
     }
 
     const { buildIncomingCommandEnvelope, createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
-    const processor = createCommandProcessor({ logger })
+    const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
 
     expect(buildIncomingCommandEnvelope(sock as never, { key: null, message: null } as never)).toBeNull()
 
