@@ -1,4 +1,31 @@
-import type { CommandAdminActions, GroupParticipantsUpdateResult, ParticipantTarget } from './admin.js'
+import type {
+  AnyMessageContent,
+  MiscMessageGenerationOptions,
+  WAMessage,
+} from '@whiskeysockets/baileys'
+import type {
+  CommandAdminActions,
+  GroupInviteCodeResult,
+  GroupJoinApprovalModeValue,
+  GroupJoinRequestListResult,
+  GroupJoinRequestUpdateResult,
+  GroupMemberAddModeValue,
+  GroupParticipantsUpdateResult,
+  GroupRevokeInviteResult,
+  GroupSettingValue,
+  ParticipantTarget,
+} from './admin.js'
+
+type MessageContentByKey<K extends string> = Extract<AnyMessageContent, Record<K, unknown>>
+type TextContent = MessageContentByKey<'text'>
+
+export type CommandSendOptions = MiscMessageGenerationOptions & {
+  /**
+   * Quando true (padrão), envia citando a mensagem original do comando.
+   * Defina false para envio "solto" no chat.
+   */
+  quote?: boolean
+}
 
 /**
  * Opções de inicialização do contexto do comando.
@@ -20,6 +47,8 @@ type CommandContextInit = {
   messageId: string | null
   /** Nome público do remetente (push name). */
   pushName: string | null
+  /** Função interna para envio genérico de mensagens (AnyMessageContent). */
+  send: (content: AnyMessageContent, options?: CommandSendOptions) => Promise<WAMessage | undefined>
   /** Função interna para responder à mensagem. */
   reply: (text: string) => Promise<void>
   /** Função interna para reagir à mensagem. */
@@ -53,6 +82,7 @@ export class CommandContext {
   /** Interface de ações administrativas (kick, ban, promote, etc.). */
   public readonly admin: CommandAdminActions
 
+  readonly #sendAction: CommandContextInit['send']
   readonly #replyAction: CommandContextInit['reply']
   readonly #reactAction: CommandContextInit['react']
 
@@ -68,6 +98,7 @@ export class CommandContext {
     commandName,
     messageId,
     pushName,
+    send,
     reply,
     react,
     admin,
@@ -81,8 +112,16 @@ export class CommandContext {
     this.messageId = messageId
     this.pushName = pushName
     this.admin = admin
+    this.#sendAction = send
     this.#replyAction = reply
     this.#reactAction = react
+  }
+
+  /**
+   * Envia qualquer payload suportado pelo Baileys (`AnyMessageContent`).
+   */
+  async send(content: AnyMessageContent, options?: CommandSendOptions): Promise<WAMessage | undefined> {
+    return this.#sendAction(content, options)
   }
 
   /**
@@ -102,11 +141,166 @@ export class CommandContext {
   }
 
   /**
+   * Atalho para envio de texto.
+   */
+  async sendText(
+    text: string,
+    extras: Omit<TextContent, 'text'> = {},
+    options?: CommandSendOptions
+  ): Promise<WAMessage | undefined> {
+    return this.send({ ...extras, text }, options)
+  }
+
+  /**
+   * Atalhos para todos os tipos de conteúdo aceitos em `AnyMessageContent`.
+   */
+  async sendImage(content: MessageContentByKey<'image'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  async sendVideo(content: MessageContentByKey<'video'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  async sendAudio(content: MessageContentByKey<'audio'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  async sendSticker(
+    content: MessageContentByKey<'sticker'>,
+    options?: CommandSendOptions
+  ): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  async sendDocument(
+    content: MessageContentByKey<'document'>,
+    options?: CommandSendOptions
+  ): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  async sendEvent(content: MessageContentByKey<'event'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  async sendPoll(content: MessageContentByKey<'poll'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  async sendContacts(
+    content: MessageContentByKey<'contacts'>,
+    options?: CommandSendOptions
+  ): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  async sendLocation(
+    content: MessageContentByKey<'location'>,
+    options?: CommandSendOptions
+  ): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  async sendReaction(
+    content: MessageContentByKey<'react'>,
+    options?: CommandSendOptions
+  ): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  async sendButtonReply(
+    content: MessageContentByKey<'buttonReply'>,
+    options?: CommandSendOptions
+  ): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  async sendGroupInvite(
+    content: MessageContentByKey<'groupInvite'>,
+    options?: CommandSendOptions
+  ): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  async sendListReply(
+    content: MessageContentByKey<'listReply'>,
+    options?: CommandSendOptions
+  ): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  async sendPin(content: MessageContentByKey<'pin'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  async sendProduct(
+    content: MessageContentByKey<'product'>,
+    options?: CommandSendOptions
+  ): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  async sendSharePhoneNumber(
+    content: MessageContentByKey<'sharePhoneNumber'> = { sharePhoneNumber: true },
+    options?: CommandSendOptions
+  ): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  async sendRequestPhoneNumber(
+    content: MessageContentByKey<'requestPhoneNumber'> = { requestPhoneNumber: true },
+    options?: CommandSendOptions
+  ): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  async sendForward(
+    content: MessageContentByKey<'forward'>,
+    options?: CommandSendOptions
+  ): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  async sendDelete(content: MessageContentByKey<'delete'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  async setDisappearingMessages(
+    content: MessageContentByKey<'disappearingMessagesInChat'>,
+    options?: CommandSendOptions
+  ): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  async setLimitSharing(
+    content: MessageContentByKey<'limitSharing'>,
+    options?: CommandSendOptions
+  ): Promise<WAMessage | undefined> {
+    return this.send(content, options)
+  }
+
+  /**
    * Atalho para verificar se o usuário é administrador.
    * @param jid JID a ser verificado. Omissão verifica o sender.
    */
   async isAdmin(jid?: string): Promise<boolean> {
     return this.admin.isAdmin(jid)
+  }
+
+  /**
+   * Retorna os metadados atuais do grupo.
+   */
+  async getMetadata() {
+    return this.admin.getMetadata()
+  }
+
+  /**
+   * Adiciona participantes ao grupo.
+   * @param participants JID(s) do(s) participante(s).
+   */
+  async add(participants: ParticipantTarget): Promise<GroupParticipantsUpdateResult> {
+    return this.admin.add(participants)
   }
 
   /**
@@ -139,5 +333,96 @@ export class CommandContext {
    */
   async demote(participants: ParticipantTarget): Promise<GroupParticipantsUpdateResult> {
     return this.admin.demote(participants)
+  }
+
+  /**
+   * Atualiza o assunto (nome) do grupo.
+   */
+  async setSubject(subject: string): Promise<void> {
+    return this.admin.setSubject(subject)
+  }
+
+  /**
+   * Atualiza a descrição do grupo.
+   */
+  async setDescription(description?: string): Promise<void> {
+    return this.admin.setDescription(description)
+  }
+
+  /**
+   * Obtém o código de convite atual do grupo.
+   */
+  async getInviteCode(): Promise<GroupInviteCodeResult> {
+    return this.admin.getInviteCode()
+  }
+
+  /**
+   * Revoga o código de convite atual do grupo.
+   */
+  async revokeInvite(): Promise<GroupRevokeInviteResult> {
+    return this.admin.revokeInvite()
+  }
+
+  /**
+   * Define o temporizador de mensagens temporárias do grupo em segundos (0 desativa).
+   */
+  async setEphemeral(expirationSeconds: number): Promise<void> {
+    return this.admin.setEphemeral(expirationSeconds)
+  }
+
+  /**
+   * Atualiza uma configuração bruta de grupo usando o enum do Baileys.
+   */
+  async setGroupSetting(setting: GroupSettingValue): Promise<void> {
+    return this.admin.setGroupSetting(setting)
+  }
+
+  /**
+   * Controla se apenas admins podem enviar mensagens no grupo.
+   */
+  async setAnnouncementMode(enabled: boolean): Promise<void> {
+    return this.admin.setAnnouncementMode(enabled)
+  }
+
+  /**
+   * Controla se apenas admins podem editar informações do grupo.
+   */
+  async setLockedMode(enabled: boolean): Promise<void> {
+    return this.admin.setLockedMode(enabled)
+  }
+
+  /**
+   * Define quem pode adicionar membros diretamente.
+   */
+  async setMemberAddMode(mode: GroupMemberAddModeValue): Promise<void> {
+    return this.admin.setMemberAddMode(mode)
+  }
+
+  /**
+   * Ativa/desativa aprovação manual de entrada.
+   */
+  async setJoinApprovalMode(mode: GroupJoinApprovalModeValue): Promise<void> {
+    return this.admin.setJoinApprovalMode(mode)
+  }
+
+  /**
+   * Lista solicitações pendentes de entrada no grupo.
+   */
+  async listJoinRequests(): Promise<GroupJoinRequestListResult> {
+    return this.admin.listJoinRequests()
+  }
+
+  /**
+   * Aprova solicitações de entrada de participantes.
+   */
+  async approveJoinRequests(participants: ParticipantTarget): Promise<GroupJoinRequestUpdateResult> {
+    return this.admin.approveJoinRequests(participants)
+  }
+
+  /**
+   * Rejeita solicitações de entrada de participantes.
+   */
+  async rejectJoinRequests(participants: ParticipantTarget): Promise<GroupJoinRequestUpdateResult> {
+    return this.admin.rejectJoinRequests(participants)
   }
 }

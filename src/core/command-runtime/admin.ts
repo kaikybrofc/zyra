@@ -9,16 +9,34 @@ export type ParticipantTarget = string | string[]
  * Resultado da atualização de participantes de um grupo.
  */
 export type GroupParticipantsUpdateResult = Awaited<ReturnType<WASocket['groupParticipantsUpdate']>>
+export type GroupJoinRequestListResult = Awaited<ReturnType<WASocket['groupRequestParticipantsList']>>
+export type GroupJoinRequestUpdateResult = Awaited<ReturnType<WASocket['groupRequestParticipantsUpdate']>>
+export type GroupSettingValue = Parameters<WASocket['groupSettingUpdate']>[1]
+export type GroupMemberAddModeValue = Parameters<WASocket['groupMemberAddMode']>[1]
+export type GroupJoinApprovalModeValue = Parameters<WASocket['groupJoinApprovalMode']>[1]
+export type GroupInviteCodeResult = Awaited<ReturnType<WASocket['groupInviteCode']>>
+export type GroupRevokeInviteResult = Awaited<ReturnType<WASocket['groupRevokeInvite']>>
 
 /**
  * Interface que define as ações administrativas disponíveis para um comando.
  */
 export type CommandAdminActions = {
   /**
+   * Obtém os metadados atuais do grupo.
+   */
+  getMetadata: () => Promise<GroupMetadata>
+
+  /**
    * Verifica se um usuário é administrador do grupo.
    * @param jid JID do usuário a ser verificado. Se omitido, verifica o remetente da mensagem.
    */
   isAdmin: (jid?: string) => Promise<boolean>
+
+  /**
+   * Adiciona participantes ao grupo.
+   * @param participants Lista de JIDs ou JID único a ser adicionado.
+   */
+  add: (participants: ParticipantTarget) => Promise<GroupParticipantsUpdateResult>
 
   /**
    * Remove participantes do grupo (kick).
@@ -43,6 +61,71 @@ export type CommandAdminActions = {
    * @param participants Lista de JIDs ou JID único a ser rebaixado.
    */
   demote: (participants: ParticipantTarget) => Promise<GroupParticipantsUpdateResult>
+
+  /**
+   * Atualiza o assunto (nome) do grupo.
+   */
+  setSubject: (subject: string) => Promise<void>
+
+  /**
+   * Atualiza a descrição do grupo. Use undefined para limpar.
+   */
+  setDescription: (description?: string) => Promise<void>
+
+  /**
+   * Busca o código de convite atual do grupo.
+   */
+  getInviteCode: () => Promise<GroupInviteCodeResult>
+
+  /**
+   * Revoga o código de convite atual e retorna o novo, quando disponível.
+   */
+  revokeInvite: () => Promise<GroupRevokeInviteResult>
+
+  /**
+   * Define a duração das mensagens temporárias em segundos (0 para desativar).
+   */
+  setEphemeral: (expirationSeconds: number) => Promise<void>
+
+  /**
+   * Atualiza uma configuração bruta de grupo no formato do Baileys.
+   */
+  setGroupSetting: (setting: GroupSettingValue) => Promise<void>
+
+  /**
+   * Controla se apenas admins podem enviar mensagens.
+   */
+  setAnnouncementMode: (enabled: boolean) => Promise<void>
+
+  /**
+   * Controla se apenas admins podem editar informações do grupo.
+   */
+  setLockedMode: (enabled: boolean) => Promise<void>
+
+  /**
+   * Define quem pode adicionar membros diretamente.
+   */
+  setMemberAddMode: (mode: GroupMemberAddModeValue) => Promise<void>
+
+  /**
+   * Ativa/desativa aprovação de entrada no grupo.
+   */
+  setJoinApprovalMode: (mode: GroupJoinApprovalModeValue) => Promise<void>
+
+  /**
+   * Lista solicitações pendentes para entrar no grupo.
+   */
+  listJoinRequests: () => Promise<GroupJoinRequestListResult>
+
+  /**
+   * Aprova solicitações de entrada de participantes.
+   */
+  approveJoinRequests: (participants: ParticipantTarget) => Promise<GroupJoinRequestUpdateResult>
+
+  /**
+   * Rejeita solicitações de entrada de participantes.
+   */
+  rejectJoinRequests: (participants: ParticipantTarget) => Promise<GroupJoinRequestUpdateResult>
 }
 
 /**
@@ -64,7 +147,7 @@ const toParticipantList = (participants: ParticipantTarget): string[] =>
 
 const ensureGroupChat = (chatId: string, isGroup: boolean): void => {
   if (!isGroup) {
-    throw new Error(`A acao de administracao exige um grupo. Chat atual: ${chatId}`)
+    throw new Error(`A ação de administração exige um grupo. Chat atual: ${chatId}`)
   }
 }
 
@@ -103,11 +186,27 @@ export function createCommandAdminActions({
     return sock.groupParticipantsUpdate(chatId, targetList, action)
   }
 
+  const updateJoinRequests = async (
+    participants: ParticipantTarget,
+    action: 'approve' | 'reject'
+  ): Promise<GroupJoinRequestUpdateResult> => {
+    ensureGroupChat(chatId, isGroup)
+    const targetList = toParticipantList(participants)
+    if (!targetList.length) {
+      return []
+    }
+    return sock.groupRequestParticipantsUpdate(chatId, targetList, action)
+  }
+
   return {
+    getMetadata,
     async isAdmin(jid?: string): Promise<boolean> {
       if (!isGroup) return false
       const metadata = await getMetadata()
       return isAdminParticipant(metadata, jid ?? sender)
+    },
+    add(participants) {
+      return updateParticipants(participants, 'add')
     },
     kick(participants) {
       return updateParticipants(participants, 'remove')
@@ -120,6 +219,56 @@ export function createCommandAdminActions({
     },
     demote(participants) {
       return updateParticipants(participants, 'demote')
+    },
+    async setSubject(subject) {
+      ensureGroupChat(chatId, isGroup)
+      await sock.groupUpdateSubject(chatId, subject)
+    },
+    async setDescription(description) {
+      ensureGroupChat(chatId, isGroup)
+      await sock.groupUpdateDescription(chatId, description)
+    },
+    async getInviteCode() {
+      ensureGroupChat(chatId, isGroup)
+      return sock.groupInviteCode(chatId)
+    },
+    async revokeInvite() {
+      ensureGroupChat(chatId, isGroup)
+      return sock.groupRevokeInvite(chatId)
+    },
+    async setEphemeral(expirationSeconds) {
+      ensureGroupChat(chatId, isGroup)
+      await sock.groupToggleEphemeral(chatId, expirationSeconds)
+    },
+    async setGroupSetting(setting) {
+      ensureGroupChat(chatId, isGroup)
+      await sock.groupSettingUpdate(chatId, setting)
+    },
+    async setAnnouncementMode(enabled) {
+      ensureGroupChat(chatId, isGroup)
+      await sock.groupSettingUpdate(chatId, enabled ? 'announcement' : 'not_announcement')
+    },
+    async setLockedMode(enabled) {
+      ensureGroupChat(chatId, isGroup)
+      await sock.groupSettingUpdate(chatId, enabled ? 'locked' : 'unlocked')
+    },
+    async setMemberAddMode(mode) {
+      ensureGroupChat(chatId, isGroup)
+      await sock.groupMemberAddMode(chatId, mode)
+    },
+    async setJoinApprovalMode(mode) {
+      ensureGroupChat(chatId, isGroup)
+      await sock.groupJoinApprovalMode(chatId, mode)
+    },
+    async listJoinRequests() {
+      ensureGroupChat(chatId, isGroup)
+      return sock.groupRequestParticipantsList(chatId)
+    },
+    approveJoinRequests(participants) {
+      return updateJoinRequests(participants, 'approve')
+    },
+    rejectJoinRequests(participants) {
+      return updateJoinRequests(participants, 'reject')
     },
   }
 }

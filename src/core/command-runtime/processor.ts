@@ -5,7 +5,7 @@ import { createSqlStore, type SqlStore } from '../../store/sql-store.js'
 import { config } from '../../config/index.js'
 import { getMessageText, getNormalizedMessage } from '../../utils/message.js'
 import { createCommandAdminActions } from './admin.js'
-import { CommandContext } from './context.js'
+import { CommandContext, type CommandSendOptions } from './context.js'
 
 const ANSI_RESET = '\x1b[0m'
 const ANSI_BOLD = '\x1b[1m'
@@ -151,6 +151,12 @@ const createRuntimeContext = (context: IncomingCommandEnvelope): CommandContext 
     isGroup: context.isGroup,
   })
 
+  const send = async (content: Parameters<CommandContext['send']>[0], options?: CommandSendOptions) => {
+    const { quote = true, ...sendOptions } = options ?? {}
+    const finalOptions = quote ? { quoted: context.message, ...sendOptions } : sendOptions
+    return context.sock.sendMessage(context.chatId, content, finalOptions)
+  }
+
   return new CommandContext({
     chatId: context.chatId,
     sender: context.sender,
@@ -161,13 +167,17 @@ const createRuntimeContext = (context: IncomingCommandEnvelope): CommandContext 
     messageId: context.message.key.id ?? null,
     pushName: context.message.pushName ?? null,
     admin,
+    send,
     reply: async (text) => {
-      await context.sock.sendMessage(context.chatId, { text }, { quoted: context.message })
+      await send({ text })
     },
     react: async (emoji) => {
-      await context.sock.sendMessage(context.chatId, {
-        react: { text: emoji, key: context.message.key },
-      })
+      await send(
+        {
+          react: { text: emoji, key: context.message.key },
+        },
+        { quote: false }
+      )
     },
   })
 }
