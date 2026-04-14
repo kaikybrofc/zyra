@@ -137,6 +137,7 @@ CREATE TABLE messages (
   INDEX idx_messages_feed (connection_id, chat_jid, id DESC),
   INDEX idx_messages_lookup (connection_id, message_id),
   INDEX idx_messages_sender (connection_id, sender_user_id, timestamp),
+  INDEX idx_messages_conn_sender_id (connection_id, sender_user_id, id),
   CONSTRAINT fk_messages_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
   CONSTRAINT fk_messages_sender FOREIGN KEY (sender_user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

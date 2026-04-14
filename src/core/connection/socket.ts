@@ -235,6 +235,7 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
     fireInitQueries: false,
     syncFullHistory: false,
     shouldSyncHistoryMessage: historySyncPolicy.shouldSyncHistoryMessage,
+    shouldIgnoreJid: (jid) => config.ignoreStatusBroadcast && jid === 'status@broadcast',
     getMessage: store.getMessage,
     cachedGroupMetadata: store.getGroupMetadata,
     msgRetryCounterCache: store.caches.msgRetryCounterCache,

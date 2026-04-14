@@ -6,6 +6,7 @@ import { config } from '../../config/index.js'
 import { ensureMysqlConnection } from './connection.js'
 import { createLogger } from '../../observability/logger.js'
 import type { AppLogger } from '../../observability/logger.js'
+import type { RowDataPacket } from 'mysql2/promise'
 
 const extractCreateTableStatements = (schema: string): string[] => {
   const matches = schema.match(/CREATE TABLE[\s\S]*?;(?=\s|$)/gi)
@@ -45,6 +46,23 @@ const buildServerConfig = (urlValue: string) => {
   }
 }
 
+const ensureIndex = async (pool: mysql.Pool, options: { table: string; index: string; ddl: string }, logger?: AppLogger) => {
+  type IndexRow = RowDataPacket & { count: number }
+  const [rows] = await pool.query<IndexRow[]>(
+    `SELECT COUNT(*) AS count
+     FROM information_schema.statistics
+     WHERE table_schema = DATABASE()
+       AND table_name = ?
+       AND index_name = ?`,
+    [options.table, options.index]
+  )
+  const exists = (rows[0]?.count ?? 0) > 0
+  if (exists) return false
+  await pool.query(options.ddl)
+  logger?.info('indice criado', { table: options.table, index: options.index })
+  return true
+}
+
 /**
  * Cria o schema do MySQL (se necessario) usando o modelo em docs/exemplodbmodel.md.
  */
@@ -77,6 +95,15 @@ export async function initMysqlSchema(logger?: AppLogger): Promise<void> {
     for (const statement of statements) {
       await pool.query(statement)
     }
+    await ensureIndex(
+      pool,
+      {
+        table: 'messages',
+        index: 'idx_messages_conn_sender_id',
+        ddl: 'CREATE INDEX idx_messages_conn_sender_id ON messages (connection_id, sender_user_id, id)',
+      },
+      logger
+    )
     await ensureMysqlConnection(pool)
     logger?.info('schema mysql verificado/criado', { tables: statements.length, database: dbName })
   } finally {

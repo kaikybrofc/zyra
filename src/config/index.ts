@@ -54,6 +54,8 @@ export const config = {
   connectionId: process.env.WA_CONNECTION_ID ?? 'default',
   /** Se o bot deve processar as próprias mensagens enviadas (WA_ACCEPT_OWN_MESSAGES). */
   allowOwnMessages: readBoolean(process.env.WA_ACCEPT_OWN_MESSAGES, false),
+  /** Se deve ignorar mensagens de status@broadcast para reduzir ruído de sessão/decriptação (WA_IGNORE_STATUS_BROADCAST). */
+  ignoreStatusBroadcast: readBoolean(process.env.WA_IGNORE_STATUS_BROADCAST, true),
   /** Se deve persistir as chaves de autenticação no disco mesmo usando Redis/MySQL (WA_AUTH_PERSIST_KEYS). */
   authPersistKeysOnDisk: readBoolean(process.env.WA_AUTH_PERSIST_KEYS, false),
   /** Se o módulo Anti-Ban está ativado (WA_ANTIBAN_ENABLED). */

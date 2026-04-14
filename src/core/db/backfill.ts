@@ -100,6 +100,12 @@ const toTinyInt = (value: boolean | null | undefined): number | null => {
   return value ? 1 : 0
 }
 
+const isSortMemoryError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false
+  const candidate = error as { code?: string; errno?: number }
+  return candidate.code === 'ER_OUT_OF_SORTMEMORY' || candidate.errno === 1038
+}
+
 const normalizeIdentifier = (value: string | null | undefined): string | null => normalizeString(value, { maxLength: MAX_LENGTHS.userIdentifier, truncate: true })
 
 const pickString = (obj: Record<string, unknown> | null, keys: string[]) => {
@@ -813,22 +819,40 @@ async function main() {
   }
 
   const backfillMessages = async () => {
-    // Priority 1: Recent messages with NULL sender_user_id (Gap Scan)
     type IdRow = RowDataPacket & { id: number }
-    
-    // Step 1: Fetch only IDs (Very light on memory/sort buffer)
-    const [idRows] = await pool.query<IdRow[]>(
-      `SELECT id FROM messages
-       WHERE connection_id = ? AND sender_user_id IS NULL
-       ORDER BY id DESC LIMIT ${BATCH_SIZE}`,
-      [connectionId]
-    )
-    
+    let idRows: IdRow[] = []
+    try {
+      const [rows] = await pool.query<IdRow[]>(
+        `SELECT id
+         FROM messages
+         WHERE connection_id = ?
+           AND sender_user_id IS NULL
+         ORDER BY id DESC
+         LIMIT ${BATCH_SIZE}`,
+        [connectionId]
+      )
+      idRows = rows
+    } catch (error) {
+      if (!isSortMemoryError(error)) throw error
+      const fallbackBatchSize = Math.max(50, Math.min(BATCH_SIZE, 200))
+      logger.warn('backfillMessages: sort buffer insuficiente, aplicando fallback sem ORDER BY', {
+        connectionId,
+        fallbackBatchSize,
+      })
+      const [rows] = await pool.query<IdRow[]>(
+        `SELECT id
+         FROM messages
+         WHERE connection_id = ?
+           AND sender_user_id IS NULL
+         LIMIT ${fallbackBatchSize}`,
+        [connectionId]
+      )
+      idRows = rows
+    }
+
     if (!idRows.length) return
+    const ids = idRows.map((row) => row.id)
 
-    const ids = idRows.map(r => r.id)
-
-    // Step 2: Fetch full data only for those IDs
     type MessageRow = RowDataPacket & {
       id: number
       chat_jid: string
@@ -843,6 +867,7 @@ async function main() {
        WHERE id IN (?)`,
       [ids]
     )
+    rows.sort((left, right) => right.id - left.id)
 
     for (const row of rows) {
       const message = deserialize<WAMessage>(row.data_json)
