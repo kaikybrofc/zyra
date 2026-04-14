@@ -16,7 +16,14 @@ const deserialize = <T>(value: unknown) => {
   return JSON.parse(JSON.stringify(value), BufferJSON.reviver) as T
 }
 
-const storeLogger = createLogger()
+let storeLoggerRef: ReturnType<typeof createLogger> | null = null
+
+const getStoreLogger = () => {
+  if (!storeLoggerRef) {
+    storeLoggerRef = createLogger()
+  }
+  return storeLoggerRef
+}
 
 const MAX_LENGTHS = {
   jid: 128,
@@ -244,7 +251,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
       return await fn(pool)
     } catch (error) {
       if (options?.action) {
-        storeLogger.error('falha na persistencia sql', {
+        getStoreLogger().error('falha na persistencia sql', {
           err: error,
           action: options.action,
           connectionId: resolvedConnectionId,

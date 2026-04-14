@@ -1,19 +1,8 @@
 import { type WASocket, type proto } from '@whiskeysockets/baileys'
 import type { AppLogger } from '../observability/logger.js'
-import { createSqlStore, type SqlStore } from '../store/sql-store.js'
+import type { SqlStore } from '../store/sql-store.js'
 import { createCommandProcessor } from '../core/command-runtime/processor.js'
-import { config } from '../config/index.js'
-
-let defaultSqlStore: SqlStore | null = null
 const chatQueues = new Map<string, Promise<void>>()
-
-const resolveSqlStore = (sqlStore?: SqlStore): SqlStore => {
-  if (sqlStore) return sqlStore
-  if (!defaultSqlStore) {
-    defaultSqlStore = createSqlStore()
-  }
-  return defaultSqlStore
-}
 
 const resolveQueueKey = (message: proto.IWebMessageInfo, connectionId: string): string => {
   const chatKey = message.key?.remoteJid ?? message.key?.id ?? '__unknown_chat__'
@@ -53,11 +42,10 @@ export async function handleIncomingMessages(
   sock: WASocket,
   messages: proto.IWebMessageInfo[],
   logger: AppLogger,
-  connectionId: string = config.connectionId ?? 'default',
-  sqlStore?: SqlStore
+  connectionId: string,
+  sqlStore: SqlStore
 ): Promise<void> {
-  const resolvedSqlStore = resolveSqlStore(sqlStore)
-  const processor = createCommandProcessor({ logger, sqlStore: resolvedSqlStore })
+  const processor = createCommandProcessor({ logger, sqlStore })
   if (!messages.length) {
     logger.info('messages.upsert sem mensagens')
     return

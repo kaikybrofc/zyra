@@ -1,11 +1,11 @@
 import type { WASocket } from '@whiskeysockets/baileys'
-import { createLogger } from '../observability/logger.js'
+import { createLogger, type AppLogger } from '../observability/logger.js'
 import { createSocket } from '../core/connection/socket.js'
 import { registerEvents } from '../events/register.js'
 import { initMysqlSchema } from '../core/db/init.js'
 import { config } from '../config/index.js'
 
-const logger = createLogger()
+let loggerRef: AppLogger | null = null
 const RECONNECT_MIN_DELAY_MS = Math.max(500, Number(process.env.WA_RECONNECT_MIN_DELAY_MS ?? 2500))
 let schemaInitPromise: Promise<void> | null = null
 let reconnectPromise: Promise<void> | null = null
@@ -13,12 +13,20 @@ let activeSocket: WASocket | null = null
 let socketGeneration = 0
 let lastReconnectAt = 0
 
+const getLogger = (): AppLogger => {
+  if (!loggerRef) {
+    loggerRef = createLogger()
+  }
+  return loggerRef
+}
+
 const wait = (ms: number) =>
   new Promise<void>((resolve) => {
     setTimeout(resolve, ms)
   })
 
 const ensureSchemaReady = async () => {
+  const logger = getLogger()
   if (!schemaInitPromise) {
     schemaInitPromise = initMysqlSchema(logger).catch((error) => {
       schemaInitPromise = null
@@ -29,6 +37,7 @@ const ensureSchemaReady = async () => {
 }
 
 const replaceSocket = async (reason: string) => {
+  const logger = getLogger()
   await ensureSchemaReady()
   const connectionId = config.connectionId ?? 'default'
   const generation = ++socketGeneration
@@ -80,6 +89,7 @@ const replaceSocket = async (reason: string) => {
 }
 
 const scheduleReconnect = async (reason: string) => {
+  const logger = getLogger()
   if (reconnectPromise) {
     logger.warn('reconexão já em andamento, ignorando solicitação paralela', { reason })
     return reconnectPromise

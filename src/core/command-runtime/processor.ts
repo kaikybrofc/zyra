@@ -1,7 +1,7 @@
 import { type WAMessage, type WASocket, type proto } from '@whiskeysockets/baileys'
 import { commands } from '../../commands/index.js'
 import type { AppLogger } from '../../observability/logger.js'
-import { createSqlStore, type SqlStore } from '../../store/sql-store.js'
+import type { SqlStore } from '../../store/sql-store.js'
 import { config } from '../../config/index.js'
 import { getMessageText, getNormalizedMessage } from '../../utils/message.js'
 import { createCommandAdminActions } from './admin.js'
@@ -25,8 +25,6 @@ const MEDIA_TYPES = new Set([
   'locationMessage',
   'liveLocationMessage',
 ])
-
-let defaultSqlStore: SqlStore | null = null
 
 /**
  * Envelope de comando recebido, contendo dados extraídos e normalizados da mensagem.
@@ -56,19 +54,11 @@ export type IncomingCommandEnvelope = {
 type CreateCommandProcessorOptions = {
   /** Logger da aplicação. */
   logger: AppLogger
-  /** Store SQL opcional para persistência de logs. */
-  sqlStore?: SqlStore
+  /** Store SQL para persistência de logs. Deve ser injetada pelo contexto da conexão. */
+  sqlStore: SqlStore
 }
 
 const colorize = (value: string, color: string): string => (process.stdout.isTTY ? `${color}${value}${ANSI_RESET}` : value)
-
-const resolveSqlStore = (sqlStore?: SqlStore): SqlStore => {
-  if (sqlStore) return sqlStore
-  if (!defaultSqlStore) {
-    defaultSqlStore = createSqlStore()
-  }
-  return defaultSqlStore
-}
 
 const parseTimestamp = (raw: unknown): number | null => {
   if (!raw) return null
@@ -222,8 +212,6 @@ export type CommandProcessor = {
  * @returns Um objeto CommandProcessor.
  */
 export function createCommandProcessor({ logger, sqlStore }: CreateCommandProcessorOptions): CommandProcessor {
-  const resolvedSqlStore = resolveSqlStore(sqlStore)
-
   return {
     async process(sock, message) {
       const context = buildIncomingCommandEnvelope(sock, message)
@@ -261,7 +249,7 @@ export function createCommandProcessor({ logger, sqlStore }: CreateCommandProces
           })
         }
       } finally {
-        recordCommandExecution(resolvedSqlStore, context, Date.now() - startedAt, success)
+        recordCommandExecution(sqlStore, context, Date.now() - startedAt, success)
       }
     },
   }

@@ -7,6 +7,7 @@ import { createBaileysLogger } from '../../observability/baileys-logger.js'
 import { createBaileysStore } from '../../store/baileys-store.js'
 import { getAuthState } from '../auth/state.js'
 import { resolveAuthDir } from '../auth/auth-dir.js'
+import { closeRedisClient } from '../redis/client.js'
 import { loadAntiBanWarmUpState, saveAntiBanWarmUpState, wrapSocketWithAntiBan } from './antiban.js'
 import { createHistorySyncPolicy } from './history-sync.js'
 
@@ -182,6 +183,7 @@ const registerGracefulShutdown = () => {
           }
         })
       )
+      await closeRedisClient()
     } catch (error) {
       if (baseLogger) {
         baseLogger.error('falha durante shutdown gracioso', { err: error })
