@@ -13,6 +13,7 @@ const ANSI_CYAN = '\x1b[36m'
 const ANSI_GREEN = '\x1b[32m'
 const ANSI_MAGENTA = '\x1b[35m'
 const ANSI_GRAY = '\x1b[90m'
+const REACHOUT_TIMELOCK_STATUS_CODE = 463
 const MEDIA_TYPES = new Set([
   'imageMessage',
   'videoMessage',
@@ -73,6 +74,12 @@ const parseTimestamp = (raw: unknown): number | null => {
   }
   const value = Number(raw)
   return Number.isFinite(value) ? value : null
+}
+
+const getErrorStatusCode = (error: unknown): number | null => {
+  const candidate = (error as { output?: { statusCode?: unknown }; statusCode?: unknown } | null | undefined)
+  const raw = candidate?.output?.statusCode ?? candidate?.statusCode
+  return typeof raw === 'number' && Number.isFinite(raw) ? raw : null
 }
 
 const extractTargetHintsFromMessage = (message: proto.IWebMessageInfo): { mentionedJids: string[]; quotedSender: string | null } => {
@@ -154,7 +161,7 @@ const logIncomingMessage = async (context: IncomingCommandEnvelope, logger: AppL
   logger.info(`\n\n${title} | ${logParts.join(' ')}`)
 }
 
-const createRuntimeContext = (context: IncomingCommandEnvelope): CommandContext => {
+const createRuntimeContext = (context: IncomingCommandEnvelope, logger: AppLogger): CommandContext => {
   const admin = createCommandAdminActions({
     sock: context.sock,
     chatId: context.chatId,
@@ -165,7 +172,22 @@ const createRuntimeContext = (context: IncomingCommandEnvelope): CommandContext 
   const send = async (content: Parameters<CommandContext['send']>[0], options?: CommandSendOptions) => {
     const { quote = true, ...sendOptions } = options ?? {}
     const finalOptions = quote ? { quoted: context.message, ...sendOptions } : sendOptions
-    return context.sock.sendMessage(context.chatId, content, finalOptions)
+    try {
+      return await context.sock.sendMessage(context.chatId, content, finalOptions)
+    } catch (error) {
+      const statusCode = getErrorStatusCode(error)
+      if (statusCode === REACHOUT_TIMELOCK_STATUS_CODE) {
+        logger.error('alerta de envio com restricao de conta (463)', {
+          statusCode,
+          chatId: context.chatId,
+          sender: context.sender,
+          commandName: context.commandName,
+          recommendation: 'evite reachout para novos contatos e valide timelock/tctoken da conta',
+          err: error,
+        })
+      }
+      throw error
+    }
   }
 
   return new CommandContext({
@@ -256,7 +278,7 @@ export function createCommandProcessor({ logger, sqlStore }: CreateCommandProces
 
       const startedAt = Date.now()
       let success = true
-      const cmdCtx = createRuntimeContext(context)
+      const cmdCtx = createRuntimeContext(context, logger)
 
       try {
         await command.execute(cmdCtx)

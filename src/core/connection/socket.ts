@@ -44,6 +44,8 @@ const VERSION_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const SHUTDOWN_TIMEOUT_MS = Math.max(0, Number(process.env.WA_SHUTDOWN_TIMEOUT_MS ?? 10_000))
 /** Debounce para evitar tempestade de gravações em creds.update em milissegundos */
 const CREDS_DEBOUNCE_MS = Math.max(0, Number(process.env.WA_CREDS_DEBOUNCE_MS ?? 1_500))
+/** Código de erro associado a reach-out timelock/restrição de conta em envios/chamadas */
+const REACHOUT_TIMELOCK_STATUS_CODE = 463
 
 /** Cache volátil da versão do WhatsApp Web */
 let cachedVersion: { version: SocketVersion; fetchedAt: number } | null = null
@@ -345,6 +347,13 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
       void saveAntibanState('connection_close')
       const statusCode = (update.lastDisconnect?.error as Boom | undefined)?.output?.statusCode
       logger.warn('status da conexao: encerrada', { connectionId, statusCode })
+      if (statusCode === REACHOUT_TIMELOCK_STATUS_CODE) {
+        logger.error('alerta de restricao de conta detectado (463)', {
+          connectionId,
+          statusCode,
+          recommendation: 'validar timelock da conta e reduzir envios para novos contatos',
+        })
+      }
 
       if (statusCode === DisconnectReason.restartRequired) {
         forceCredsSave('restart_required')

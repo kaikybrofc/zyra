@@ -70,6 +70,7 @@ type SocketWithNewsletterMetadata = WASocket & {
 }
 
 const ALL_EVENTS = ['connection.update', 'creds.update', 'messaging-history.set', 'chats.upsert', 'chats.update', 'lid-mapping.update', 'chats.delete', 'presence.update', 'contacts.upsert', 'contacts.update', 'messages.delete', 'messages.update', 'messages.media-update', 'messages.upsert', 'messages.reaction', 'message-receipt.update', 'groups.upsert', 'groups.update', 'group-participants.update', 'group.join-request', 'group.member-tag.update', 'blocklist.set', 'blocklist.update', 'call', 'labels.edit', 'labels.association', 'newsletter.reaction', 'newsletter.view', 'newsletter-participants.update', 'newsletter-settings.update', 'chats.lock', 'settings.update'] as const satisfies readonly (keyof BaileysEventMap)[]
+const REACHOUT_TIMELOCK_STATUS_CODE = 463
 
 type MissingEvents = Exclude<keyof BaileysEventMap, (typeof ALL_EVENTS)[number]>
 const _allEventsCovered: MissingEvents extends never ? true : never = true
@@ -281,6 +282,13 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
         const restartRequired = statusCode === DisconnectReason.restartRequired
 
         logger.warn('conexão encerrada', { statusCode, restartRequired })
+        if (statusCode === REACHOUT_TIMELOCK_STATUS_CODE) {
+          logger.error('alerta de restricao de conta detectado (463)', {
+            statusCode,
+            connectionId,
+            recommendation: 'verifique reachout timelock/tctoken e reduza alcance para novos contatos temporariamente',
+          })
+        }
 
         if (shouldReconnect) {
           void (async () => {
