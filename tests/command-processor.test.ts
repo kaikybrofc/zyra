@@ -40,6 +40,8 @@ const createMessage = (text: string, options: { chatId?: string; participant?: s
   }) as const
 
 beforeEach(() => {
+  mockConfig.commandPrefix = '!'
+  mockConfig.allowOwnMessages = false
   for (const key of Object.keys(mockCommands)) {
     delete mockCommands[key]
   }
@@ -192,6 +194,55 @@ describe('CommandProcessor', () => {
     const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
 
     await processor.process(sock as never, createMessage('.ping agora') as never)
+
+    expect(execute).toHaveBeenCalledTimes(1)
+  })
+
+  it('propaga mencoes e remetente citado para o contexto do comando', async () => {
+    const sqlStore = {
+      enabled: false,
+      recordCommandLog: vi.fn(),
+    }
+    const logger = createLogger()
+    const sendMessage = vi.fn().mockResolvedValue(undefined)
+    const execute = vi.fn(async (ctx) => {
+      expect(ctx.mentionedJids).toEqual(['5511999999999@s.whatsapp.net'])
+      expect(ctx.quotedSender).toBe('5511888888888@s.whatsapp.net')
+    })
+
+    mockCommands.ping = { name: 'ping', description: 'ping', execute }
+
+    const sock = {
+      user: { id: 'bot@s.whatsapp.net' },
+      sendMessage,
+      groupMetadata: vi.fn(),
+      groupParticipantsUpdate: vi.fn(),
+    }
+
+    const message = {
+      key: {
+        remoteJid: 'grupo@g.us',
+        fromMe: false,
+        id: 'msg-ctx',
+        participant: 'user@s.whatsapp.net',
+      },
+      pushName: 'Tester',
+      message: {
+        extendedTextMessage: {
+          text: '!ping',
+          contextInfo: {
+            mentionedJid: ['5511999999999@s.whatsapp.net'],
+            participant: '5511888888888@s.whatsapp.net',
+          },
+        },
+      },
+      messageTimestamp: 1,
+    } as const
+
+    const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
+    const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
+
+    await processor.process(sock as never, message as never)
 
     expect(execute).toHaveBeenCalledTimes(1)
   })

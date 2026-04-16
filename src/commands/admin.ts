@@ -17,17 +17,21 @@ const ensureAdminContext = async (ctx: Parameters<Command['execute']>[0]): Promi
   return { ok: true }
 }
 
-const parseParticipants = (args: string[]): string[] => {
-  const normalized = args
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean)
-    .map((value) => {
-      if (value.includes('@')) return value
-      const digits = value.replace(/\D/g, '')
-      return digits ? `${digits}@s.whatsapp.net` : ''
-    })
-    .filter(Boolean)
+const normalizeParticipant = (value: string): string => {
+  const normalized = value.trim().toLowerCase()
+  if (!normalized) return ''
 
+  const explicitJidMatch = normalized.match(/^([a-z0-9._-]+)@(s\.whatsapp\.net|lid)$/)
+  if (explicitJidMatch) {
+    return `${explicitJidMatch[1]}@${explicitJidMatch[2]}`
+  }
+
+  const digits = normalized.replace(/\D/g, '')
+  return digits ? `${digits}@s.whatsapp.net` : ''
+}
+
+const parseParticipants = (values: string[]): string[] => {
+  const normalized = values.map(normalizeParticipant).filter(Boolean)
   return [...new Set(normalized)]
 }
 
@@ -62,9 +66,9 @@ const executeParticipantAction = async (
   const allowed = await ensureAdminContext(ctx)
   if (!allowed.ok) return
 
-  const participants = parseParticipants(ctx.args)
+  const participants = parseParticipants([...ctx.args, ...ctx.mentionedJids, ...(ctx.quotedSender ? [ctx.quotedSender] : [])])
   if (!participants.length) {
-    await ctx.reply(`Uso: !${ctx.commandName} 5511999999999 ou jid@s.whatsapp.net`)
+    await ctx.reply(`Uso: !${ctx.commandName} 5511999999999, @usuario ou respondendo a mensagem do usuário`)
     return
   }
 

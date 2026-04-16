@@ -47,6 +47,10 @@ type CommandContextInit = {
   messageId: string | null
   /** Nome público do remetente (push name). */
   pushName: string | null
+  /** JIDs mencionados na mensagem de comando. */
+  mentionedJids?: string[]
+  /** JID do autor da mensagem citada (quando o comando é enviado como resposta). */
+  quotedSender?: string | null
   /** Função interna para envio genérico de mensagens (AnyMessageContent). */
   send: (content: AnyMessageContent, options?: CommandSendOptions) => Promise<WAMessage | undefined>
   /** Função interna para responder à mensagem. */
@@ -79,6 +83,10 @@ export class CommandContext {
   public readonly messageId: string | null
   /** Nome público do usuário no WhatsApp. */
   public readonly pushName: string | null
+  /** JIDs mencionados na mensagem que disparou o comando. */
+  public readonly mentionedJids: string[]
+  /** JID do autor da mensagem citada (quando existir). */
+  public readonly quotedSender: string | null
   /** Interface de ações administrativas (kick, ban, promote, etc.). */
   public readonly admin: CommandAdminActions
 
@@ -98,6 +106,8 @@ export class CommandContext {
     commandName,
     messageId,
     pushName,
+    mentionedJids = [],
+    quotedSender = null,
     send,
     reply,
     react,
@@ -111,6 +121,8 @@ export class CommandContext {
     this.commandName = commandName
     this.messageId = messageId
     this.pushName = pushName
+    this.mentionedJids = mentionedJids
+    this.quotedSender = quotedSender
     this.admin = admin
     this.#sendAction = send
     this.#replyAction = reply

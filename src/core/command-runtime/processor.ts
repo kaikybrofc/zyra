@@ -46,6 +46,10 @@ export type IncomingCommandEnvelope = {
   commandName: string | null
   /** Argumentos do comando. */
   commandArgs: string[]
+  /** JIDs mencionados na mensagem de comando. */
+  mentionedJids: string[]
+  /** JID do autor da mensagem citada (quando existir). */
+  quotedSender: string | null
 }
 
 /**
@@ -71,6 +75,20 @@ const parseTimestamp = (raw: unknown): number | null => {
   return Number.isFinite(value) ? value : null
 }
 
+const extractTargetHintsFromMessage = (message: proto.IWebMessageInfo): { mentionedJids: string[]; quotedSender: string | null } => {
+  const { content, type } = getNormalizedMessage(message)
+  if (!content || !type) {
+    return { mentionedJids: [], quotedSender: null }
+  }
+
+  const node = (content as Record<string, unknown>)[type] as { contextInfo?: proto.IContextInfo } | null | undefined
+  const contextInfo = node?.contextInfo
+  const mentionedJids = Array.isArray(contextInfo?.mentionedJid) ? contextInfo.mentionedJid.filter(Boolean) : []
+  const quotedSender = contextInfo?.participant ?? null
+
+  return { mentionedJids, quotedSender }
+}
+
 /**
  * Constrói um envelope de comando a partir de uma mensagem bruta do Baileys.
  * @param sock Instância do socket.
@@ -92,6 +110,7 @@ export const buildIncomingCommandEnvelope = (
   const isCommand = text.startsWith(prefix)
   const commandTokens = isCommand ? text.slice(prefix.length).trim().split(/\s+/).filter(Boolean) : []
   const [commandName, ...commandArgs] = commandTokens
+  const { mentionedJids, quotedSender } = extractTargetHintsFromMessage(message)
 
   return {
     sock,
@@ -102,6 +121,8 @@ export const buildIncomingCommandEnvelope = (
     isGroup: chatId.endsWith('@g.us'),
     commandName: commandName?.toLowerCase() ?? null,
     commandArgs,
+    mentionedJids,
+    quotedSender,
   }
 }
 
@@ -156,6 +177,8 @@ const createRuntimeContext = (context: IncomingCommandEnvelope): CommandContext 
     commandName: context.commandName ?? '',
     messageId: context.message.key.id ?? null,
     pushName: context.message.pushName ?? null,
+    mentionedJids: context.mentionedJids,
+    quotedSender: context.quotedSender,
     admin,
     send,
     reply: async (text) => {

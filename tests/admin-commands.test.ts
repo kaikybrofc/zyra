@@ -18,6 +18,8 @@ type AdminCtx = {
   isGroup: boolean
   args: string[]
   commandName: string
+  mentionedJids: string[]
+  quotedSender: string | null
   reply: ReturnType<typeof vi.fn>
   isAdmin: ReturnType<typeof vi.fn>
   add: ReturnType<typeof vi.fn>
@@ -38,6 +40,8 @@ const createCtx = (overrides: Partial<AdminCtx> = {}): AdminCtx => ({
   isGroup: true,
   args: [],
   commandName: 'admincmd',
+  mentionedJids: [],
+  quotedSender: null,
   reply: vi.fn().mockResolvedValue(undefined),
   isAdmin: vi.fn().mockResolvedValue(true),
   add: vi.fn().mockResolvedValue([]),
@@ -88,7 +92,9 @@ describe('admin commands', () => {
 
     await banCommand.execute(ctx as never)
 
-    expect(ctx.reply).toHaveBeenCalledWith('Uso: !ban 5511999999999 ou jid@s.whatsapp.net')
+    expect(ctx.reply).toHaveBeenCalledWith(
+      'Uso: !ban 5511999999999, @usuario ou respondendo a mensagem do usuário'
+    )
     expect(ctx.ban).not.toHaveBeenCalled()
   })
 
@@ -104,6 +110,22 @@ describe('admin commands', () => {
     expect(kickCtx.kick).toHaveBeenCalledWith(['5511111111111@s.whatsapp.net', '5522222222222@s.whatsapp.net'])
     expect(promoteCtx.promote).toHaveBeenCalledWith(['5533333333333@s.whatsapp.net'])
     expect(demoteCtx.demote).toHaveBeenCalledWith(['admin@s.whatsapp.net'])
+  })
+
+  it('aceita alvo por mencao no comando', async () => {
+    const ctx = createCtx({ commandName: 'kick', mentionedJids: ['5511888888888@s.whatsapp.net'] })
+
+    await kickCommand.execute(ctx as never)
+
+    expect(ctx.kick).toHaveBeenCalledWith(['5511888888888@s.whatsapp.net'])
+  })
+
+  it('aceita alvo ao responder mensagem de outro usuario', async () => {
+    const ctx = createCtx({ commandName: 'promote', quotedSender: '5511777777777@s.whatsapp.net' })
+
+    await promoteCommand.execute(ctx as never)
+
+    expect(ctx.promote).toHaveBeenCalledWith(['5511777777777@s.whatsapp.net'])
   })
 
   it('grupo aplica announcement mode e aceita sinonimos de on/off', async () => {
