@@ -134,27 +134,10 @@ O projeto inclui scripts utilitários para operações avançadas:
 
 ---
 
-## 💡 Dicas de Infraestrutura (Pro-Tips)
-
-### Performance SSH
-Se você gerencia o servidor via SSH, habilite a **Multiplexação** no seu computador local para conexões instantâneas:
-```bash
-# Adicione ao seu ~/.ssh/config local
-Host *
-    ControlMaster auto
-    ControlPath ~/.ssh/sockets/%r@%h:%p
-    ControlPersist 1h
-```
-
-### Monitoramento de Logs
-Utilize o `LOG_LEVEL=debug` durante o desenvolvimento para visualizar o fluxo de eventos do Baileys e as interações com o banco de dados.
-
----
-
 ## 🤝 Contribuidores
 
 - **@kaikybrofc** — mantenedor do projeto.
-- **@kobie3717** — feedback e melhorias na integração do [`baileys-antiban`](https://github.com/kobie3717/baileys-antiban) (tipagem e cleanup de timers).
+- **@kobie3717** — integração do [`baileys-antiban`](https://github.com/kobie3717/baileys-antiban)
 
 ---
 
