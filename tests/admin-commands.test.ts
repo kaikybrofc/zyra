@@ -34,6 +34,7 @@ type AdminCtx = {
   getInviteCode: ReturnType<typeof vi.fn>
   revokeInvite: ReturnType<typeof vi.fn>
   setEphemeral: ReturnType<typeof vi.fn>
+  getMetadata: ReturnType<typeof vi.fn>
 }
 
 const createCtx = (overrides: Partial<AdminCtx> = {}): AdminCtx => ({
@@ -56,6 +57,9 @@ const createCtx = (overrides: Partial<AdminCtx> = {}): AdminCtx => ({
   getInviteCode: vi.fn().mockResolvedValue('ABC123'),
   revokeInvite: vi.fn().mockResolvedValue('NEW456'),
   setEphemeral: vi.fn().mockResolvedValue(undefined),
+  getMetadata: vi.fn().mockResolvedValue({
+    participants: [],
+  }),
   ...overrides,
 })
 
@@ -126,6 +130,79 @@ describe('admin commands', () => {
     await promoteCommand.execute(ctx as never)
 
     expect(ctx.promote).toHaveBeenCalledWith(['5511777777777@s.whatsapp.net'])
+  })
+
+  it('trata erro de API em comando de participante sem quebrar a execucao', async () => {
+    const ctx = createCtx({
+      commandName: 'ban',
+      args: ['5511999999999'],
+      ban: vi.fn().mockRejectedValue(new Error('internal-server-error')),
+      getMetadata: vi.fn().mockResolvedValue({
+        participants: [{ id: '5511999999999@s.whatsapp.net' }],
+      }),
+    })
+
+    await expect(banCommand.execute(ctx as never)).resolves.toBeUndefined()
+
+    expect(ctx.reply).toHaveBeenCalledWith(
+      '❌ Falha ao aplicar banimento: erro interno temporário do WhatsApp. Tente novamente em instantes.'
+    )
+  })
+
+  it('confirma sucesso quando API retorna erro mas o usuario ja foi removido', async () => {
+    const ctx = createCtx({
+      commandName: 'ban',
+      args: ['5511999999999'],
+      ban: vi.fn().mockRejectedValue(new Error('internal-server-error')),
+      getMetadata: vi.fn().mockResolvedValue({
+        participants: [],
+      }),
+    })
+
+    await banCommand.execute(ctx as never)
+
+    expect(ctx.reply).toHaveBeenCalledWith('✅ Banimento aplicado para 1 participante(s).')
+  })
+
+  it('traduz erros comuns de permissao e participante nao encontrado', async () => {
+    const notAuthorizedCtx = createCtx({
+      commandName: 'kick',
+      args: ['5511999999999'],
+      kick: vi.fn().mockRejectedValue(new Error('not-authorized')),
+      getMetadata: vi.fn().mockResolvedValue({
+        participants: [{ id: '5511999999999@s.whatsapp.net' }],
+      }),
+    })
+    const notFoundCtx = createCtx({
+      commandName: 'promote',
+      args: ['5511888888888'],
+      promote: vi.fn().mockRejectedValue(new Error('participant-not-found')),
+    })
+
+    await kickCommand.execute(notAuthorizedCtx as never)
+    await promoteCommand.execute(notFoundCtx as never)
+
+    expect(notAuthorizedCtx.reply).toHaveBeenCalledWith(
+      '❌ Falha ao aplicar remoção: sem permissão para executar esta ação. Verifique se o bot é admin do grupo.'
+    )
+    expect(notFoundCtx.reply).toHaveBeenCalledWith('❌ Falha ao aplicar promoção: participante não encontrado no grupo.')
+  })
+
+  it('traduz internal-server-error para mensagem amigavel', async () => {
+    const ctx = createCtx({
+      commandName: 'ban',
+      args: ['5511999999999'],
+      ban: vi.fn().mockRejectedValue(new Error('internal-server-error')),
+      getMetadata: vi.fn().mockResolvedValue({
+        participants: [{ id: '5511999999999@s.whatsapp.net' }],
+      }),
+    })
+
+    await banCommand.execute(ctx as never)
+
+    expect(ctx.reply).toHaveBeenCalledWith(
+      '❌ Falha ao aplicar banimento: erro interno temporário do WhatsApp. Tente novamente em instantes.'
+    )
   })
 
   it('grupo aplica announcement mode e aceita sinonimos de on/off', async () => {

@@ -1,6 +1,7 @@
 import type { Command } from './types.js'
 
 type AdminGuardResult = { ok: true } | { ok: false }
+type ParticipantActionKind = 'add' | 'remove' | 'promote' | 'demote'
 
 const ensureAdminContext = async (ctx: Parameters<Command['execute']>[0]): Promise<AdminGuardResult> => {
   if (!ctx.isGroup) {
@@ -35,6 +36,77 @@ const parseParticipants = (values: string[]): string[] => {
   return [...new Set(normalized)]
 }
 
+const toComparableJid = (jid: string): string => jid.trim().toLowerCase()
+
+const validateParticipantActionResult = async (
+  ctx: Parameters<Command['execute']>[0],
+  participants: string[],
+  actionKind: ParticipantActionKind
+): Promise<boolean> => {
+  const metadata = await ctx.getMetadata()
+  const participantByJid = new Map(metadata.participants.map((participant) => [toComparableJid(participant.id), participant]))
+
+  switch (actionKind) {
+    case 'add':
+      return participants.every((jid) => participantByJid.has(toComparableJid(jid)))
+    case 'remove':
+      return participants.every((jid) => !participantByJid.has(toComparableJid(jid)))
+    case 'promote':
+      return participants.every((jid) => {
+        const participant = participantByJid.get(toComparableJid(jid))
+        return Boolean(participant && (participant.admin === 'admin' || participant.admin === 'superadmin'))
+      })
+    case 'demote':
+      return participants.every((jid) => {
+        const participant = participantByJid.get(toComparableJid(jid))
+        return Boolean(participant && !participant.admin)
+      })
+    default:
+      return false
+  }
+}
+
+const extractErrorMessage = (error: unknown): string => {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim().length > 0) {
+      return message
+    }
+  }
+  return 'erro desconhecido'
+}
+
+const toFriendlyParticipantActionError = (rawReason: string): string => {
+  const reason = rawReason.toLowerCase().trim()
+
+  if (reason.includes('not-authorized') || reason.includes('401') || reason.includes('forbidden')) {
+    return 'sem permissão para executar esta ação. Verifique se o bot é admin do grupo'
+  }
+  if (reason.includes('participant-not-found') || reason.includes('not in group') || reason.includes('404')) {
+    return 'participante não encontrado no grupo'
+  }
+  if (reason.includes('already a participant') || reason.includes('already in group')) {
+    return 'o participante já está no grupo'
+  }
+  if (reason.includes('already admin') || reason.includes('is an admin')) {
+    return 'o participante já é administrador'
+  }
+  if (reason.includes('not admin')) {
+    return 'o participante não é administrador'
+  }
+  if (reason.includes('internal-server-error') || reason === '500') {
+    return 'erro interno temporário do WhatsApp. Tente novamente em instantes'
+  }
+  if (reason.includes('rate-overlimit') || reason.includes('429') || reason.includes('too many requests')) {
+    return 'limite de requisições atingido. Aguarde um pouco e tente novamente'
+  }
+
+  return rawReason
+}
+
 const parseOnOff = (value: string | undefined): boolean | null => {
   if (!value) return null
   const normalized = value.toLowerCase()
@@ -61,6 +133,7 @@ const parseEphemeral = (value: string | undefined): number | null => {
 const executeParticipantAction = async (
   ctx: Parameters<Command['execute']>[0],
   actionLabel: string,
+  actionKind: ParticipantActionKind,
   handler: (participants: string[]) => Promise<unknown>
 ): Promise<void> => {
   const allowed = await ensureAdminContext(ctx)
@@ -72,15 +145,30 @@ const executeParticipantAction = async (
     return
   }
 
-  await handler(participants)
-  await ctx.reply(`✅ ${actionLabel} aplicado para ${participants.length} participante(s).`)
+  try {
+    await handler(participants)
+    await ctx.reply(`✅ ${actionLabel} aplicado para ${participants.length} participante(s).`)
+  } catch (error) {
+    try {
+      const confirmed = await validateParticipantActionResult(ctx, participants, actionKind)
+      if (confirmed) {
+        await ctx.reply(`✅ ${actionLabel} aplicado para ${participants.length} participante(s).`)
+        return
+      }
+    } catch {
+      // Se a validação falhar, mantemos o fluxo de erro amigável abaixo.
+    }
+
+    const reason = toFriendlyParticipantActionError(extractErrorMessage(error))
+    await ctx.reply(`❌ Falha ao aplicar ${actionLabel.toLowerCase()}: ${reason}.`)
+  }
 }
 
 export const addCommand: Command = {
   name: 'add',
   description: 'Adiciona um ou mais participantes no grupo',
   async execute(ctx) {
-    await executeParticipantAction(ctx, 'Adição', (participants) => ctx.add(participants))
+    await executeParticipantAction(ctx, 'Adição', 'add', (participants) => ctx.add(participants))
   },
 }
 
@@ -88,7 +176,7 @@ export const kickCommand: Command = {
   name: 'kick',
   description: 'Remove um ou mais participantes do grupo',
   async execute(ctx) {
-    await executeParticipantAction(ctx, 'Remoção', (participants) => ctx.kick(participants))
+    await executeParticipantAction(ctx, 'Remoção', 'remove', (participants) => ctx.kick(participants))
   },
 }
 
@@ -96,7 +184,7 @@ export const banCommand: Command = {
   name: 'ban',
   description: 'Bane (remove) um ou mais participantes do grupo',
   async execute(ctx) {
-    await executeParticipantAction(ctx, 'Banimento', (participants) => ctx.ban(participants))
+    await executeParticipantAction(ctx, 'Banimento', 'remove', (participants) => ctx.ban(participants))
   },
 }
 
@@ -104,7 +192,7 @@ export const promoteCommand: Command = {
   name: 'promote',
   description: 'Promove um ou mais participantes a admin',
   async execute(ctx) {
-    await executeParticipantAction(ctx, 'Promoção', (participants) => ctx.promote(participants))
+    await executeParticipantAction(ctx, 'Promoção', 'promote', (participants) => ctx.promote(participants))
   },
 }
 
@@ -112,7 +200,7 @@ export const demoteCommand: Command = {
   name: 'demote',
   description: 'Remove cargo de admin de participantes',
   async execute(ctx) {
-    await executeParticipantAction(ctx, 'Rebaixamento', (participants) => ctx.demote(participants))
+    await executeParticipantAction(ctx, 'Rebaixamento', 'demote', (participants) => ctx.demote(participants))
   },
 }
 
