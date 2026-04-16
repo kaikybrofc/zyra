@@ -63,8 +63,14 @@ type CreateCommandProcessorOptions = {
   sqlStore: SqlStore
 }
 
+/** Aplica cor ANSI somente quando a saída suporta TTY. */
 const colorize = (value: string, color: string): string => (process.stdout.isTTY ? `${color}${value}${ANSI_RESET}` : value)
 
+/**
+ * Converte timestamp bruto do Baileys para número em segundos.
+ * @param raw Valor bruto do timestamp.
+ * @returns Timestamp em segundos ou `null` quando inválido.
+ */
 const parseTimestamp = (raw: unknown): number | null => {
   if (!raw) return null
   if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null
@@ -76,12 +82,22 @@ const parseTimestamp = (raw: unknown): number | null => {
   return Number.isFinite(value) ? value : null
 }
 
+/**
+ * Extrai status code de estruturas de erro conhecidas.
+ * @param error Erro capturado durante envio/processamento.
+ * @returns Código HTTP quando disponível.
+ */
 const getErrorStatusCode = (error: unknown): number | null => {
   const candidate = (error as { output?: { statusCode?: unknown }; statusCode?: unknown } | null | undefined)
   const raw = candidate?.output?.statusCode ?? candidate?.statusCode
   return typeof raw === 'number' && Number.isFinite(raw) ? raw : null
 }
 
+/**
+ * Coleta menções e autor citado para comandos que operam em participantes.
+ * @param message Mensagem recebida.
+ * @returns JIDs mencionados e JID citado (se houver).
+ */
 const extractTargetHintsFromMessage = (message: proto.IWebMessageInfo): { mentionedJids: string[]; quotedSender: string | null } => {
   const { content, type } = getNormalizedMessage(message)
   if (!content || !type) {
@@ -133,6 +149,11 @@ export const buildIncomingCommandEnvelope = (
   }
 }
 
+/**
+ * Emite log estruturado de cada mensagem recebida para observabilidade.
+ * @param context Envelope da mensagem normalizada.
+ * @param logger Logger da aplicação.
+ */
 const logIncomingMessage = async (context: IncomingCommandEnvelope, logger: AppLogger): Promise<void> => {
   const { type: messageType } = getNormalizedMessage(context.message)
   const messageKey = context.message.key
@@ -161,6 +182,12 @@ const logIncomingMessage = async (context: IncomingCommandEnvelope, logger: AppL
   logger.info(`\n\n${title} | ${logParts.join(' ')}`)
 }
 
+/**
+ * Cria o `CommandContext` com utilitários de envio e ações administrativas.
+ * @param context Envelope de comando já normalizado.
+ * @param logger Logger para telemetria de falhas de envio.
+ * @returns Contexto pronto para execução de comandos.
+ */
 const createRuntimeContext = (context: IncomingCommandEnvelope, logger: AppLogger): CommandContext => {
   const admin = createCommandAdminActions({
     sock: context.sock,
@@ -217,6 +244,13 @@ const createRuntimeContext = (context: IncomingCommandEnvelope, logger: AppLogge
   })
 }
 
+/**
+ * Registra o resultado da execução de um comando no SQL store.
+ * @param sqlStore Store responsável por persistir logs de comando.
+ * @param context Envelope do comando executado.
+ * @param durationMs Duração total da execução em milissegundos.
+ * @param success Indica sucesso (`true`) ou falha (`false`) da execução.
+ */
 const recordCommandExecution = (
   sqlStore: SqlStore,
   context: IncomingCommandEnvelope,

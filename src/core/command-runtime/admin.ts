@@ -9,12 +9,19 @@ export type ParticipantTarget = string | string[]
  * Resultado da atualização de participantes de um grupo.
  */
 export type GroupParticipantsUpdateResult = Awaited<ReturnType<WASocket['groupParticipantsUpdate']>>
+/** Resultado da listagem de solicitações de entrada no grupo. */
 export type GroupJoinRequestListResult = Awaited<ReturnType<WASocket['groupRequestParticipantsList']>>
+/** Resultado da atualização de solicitações de entrada (aprovar/rejeitar). */
 export type GroupJoinRequestUpdateResult = Awaited<ReturnType<WASocket['groupRequestParticipantsUpdate']>>
+/** Valores aceitos para atualização de setting de grupo no Baileys. */
 export type GroupSettingValue = Parameters<WASocket['groupSettingUpdate']>[1]
+/** Valores aceitos para modo de adição de membros. */
 export type GroupMemberAddModeValue = Parameters<WASocket['groupMemberAddMode']>[1]
+/** Valores aceitos para modo de aprovação de entrada. */
 export type GroupJoinApprovalModeValue = Parameters<WASocket['groupJoinApprovalMode']>[1]
+/** Tipo de retorno do código de convite de grupo. */
 export type GroupInviteCodeResult = Awaited<ReturnType<WASocket['groupInviteCode']>>
+/** Tipo de retorno da revogação de convite de grupo. */
 export type GroupRevokeInviteResult = Awaited<ReturnType<WASocket['groupRevokeInvite']>>
 
 /**
@@ -142,15 +149,34 @@ type CreateCommandAdminActionsOptions = {
   isGroup: boolean
 }
 
+/**
+ * Normaliza alvo(s) de participante para uma lista não vazia de strings.
+ *
+ * @param participants JID único ou lista de JIDs.
+ * @returns Lista filtrada sem entradas vazias.
+ */
 const toParticipantList = (participants: ParticipantTarget): string[] =>
   (Array.isArray(participants) ? participants : [participants]).filter((participant) => participant.trim().length > 0)
 
+/**
+ * Garante que a ação administrativa está sendo feita em contexto de grupo.
+ *
+ * @param chatId JID do chat atual.
+ * @param isGroup Flag indicando se o chat é grupo.
+ */
 const ensureGroupChat = (chatId: string, isGroup: boolean): void => {
   if (!isGroup) {
     throw new Error(`A ação de administração exige um grupo. Chat atual: ${chatId}`)
   }
 }
 
+/**
+ * Verifica se um participante específico possui privilégios administrativos.
+ *
+ * @param metadata Metadados do grupo.
+ * @param jid JID do participante a validar.
+ * @returns `true` quando for admin ou superadmin.
+ */
 const isAdminParticipant = (metadata: GroupMetadata, jid: string): boolean =>
   metadata.participants.some(
     (participant) =>
@@ -169,11 +195,17 @@ export function createCommandAdminActions({
   sender,
   isGroup,
 }: CreateCommandAdminActionsOptions): CommandAdminActions {
+  /**
+   * Busca metadados do grupo atual após validar contexto.
+   */
   const getMetadata = async (): Promise<GroupMetadata> => {
     ensureGroupChat(chatId, isGroup)
     return sock.groupMetadata(chatId)
   }
 
+  /**
+   * Executa uma ação de participantes (add/remove/promote/demote).
+   */
   const updateParticipants = async (
     participants: ParticipantTarget,
     action: ParticipantAction
@@ -186,6 +218,9 @@ export function createCommandAdminActions({
     return sock.groupParticipantsUpdate(chatId, targetList, action)
   }
 
+  /**
+   * Executa atualização de solicitações de entrada (aprovar/rejeitar).
+   */
   const updateJoinRequests = async (
     participants: ParticipantTarget,
     action: 'approve' | 'reject'

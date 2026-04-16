@@ -16,7 +16,9 @@ import type {
   ParticipantTarget,
 } from './admin.js'
 
+/** Extrai de `AnyMessageContent` o shape que contém a chave `K`. */
 type MessageContentByKey<K extends string> = Extract<AnyMessageContent, Record<K, unknown>>
+/** Shape de conteúdo textual aceito pelo Baileys. */
 type TextContent = MessageContentByKey<'text'>
 
 export type CommandSendOptions = MiscMessageGenerationOptions & {
@@ -170,14 +172,17 @@ export class CommandContext {
     return this.send(content, options)
   }
 
+  /** Atalho para envio de vídeo. */
   async sendVideo(content: MessageContentByKey<'video'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send(content, options)
   }
 
+  /** Atalho para envio de áudio. */
   async sendAudio(content: MessageContentByKey<'audio'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send(content, options)
   }
 
+  /** Atalho para envio de sticker. */
   async sendSticker(
     content: MessageContentByKey<'sticker'>,
     options?: CommandSendOptions
@@ -185,6 +190,7 @@ export class CommandContext {
     return this.send(content, options)
   }
 
+  /** Atalho para envio de documento. */
   async sendDocument(
     content: MessageContentByKey<'document'>,
     options?: CommandSendOptions
@@ -192,14 +198,17 @@ export class CommandContext {
     return this.send(content, options)
   }
 
+  /** Atalho para envio de evento. */
   async sendEvent(content: MessageContentByKey<'event'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send(content, options)
   }
 
+  /** Atalho para envio de enquete. */
   async sendPoll(content: MessageContentByKey<'poll'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send(content, options)
   }
 
+  /** Atalho para envio de contatos. */
   async sendContacts(
     content: MessageContentByKey<'contacts'>,
     options?: CommandSendOptions
@@ -207,6 +216,7 @@ export class CommandContext {
     return this.send(content, options)
   }
 
+  /** Atalho para envio de localização. */
   async sendLocation(
     content: MessageContentByKey<'location'>,
     options?: CommandSendOptions
@@ -214,6 +224,7 @@ export class CommandContext {
     return this.send(content, options)
   }
 
+  /** Atalho para envio de reação como conteúdo explícito. */
   async sendReaction(
     content: MessageContentByKey<'react'>,
     options?: CommandSendOptions
@@ -221,6 +232,7 @@ export class CommandContext {
     return this.send(content, options)
   }
 
+  /** Atalho para envio de resposta de botão. */
   async sendButtonReply(
     content: MessageContentByKey<'buttonReply'>,
     options?: CommandSendOptions
@@ -228,6 +240,7 @@ export class CommandContext {
     return this.send(content, options)
   }
 
+  /** Atalho para envio de convite de grupo. */
   async sendGroupInvite(
     content: MessageContentByKey<'groupInvite'>,
     options?: CommandSendOptions
@@ -235,6 +248,7 @@ export class CommandContext {
     return this.send(content, options)
   }
 
+  /** Atalho para envio de resposta de lista. */
   async sendListReply(
     content: MessageContentByKey<'listReply'>,
     options?: CommandSendOptions
@@ -242,10 +256,12 @@ export class CommandContext {
     return this.send(content, options)
   }
 
+  /** Atalho para envio de fixação (`pin`). */
   async sendPin(content: MessageContentByKey<'pin'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send(content, options)
   }
 
+  /** Atalho para envio de produto. */
   async sendProduct(
     content: MessageContentByKey<'product'>,
     options?: CommandSendOptions
@@ -253,6 +269,7 @@ export class CommandContext {
     return this.send(content, options)
   }
 
+  /** Atalho para compartilhar o próprio número no chat. */
   async sendSharePhoneNumber(
     content: MessageContentByKey<'sharePhoneNumber'> = { sharePhoneNumber: true },
     options?: CommandSendOptions
@@ -260,6 +277,7 @@ export class CommandContext {
     return this.send(content, options)
   }
 
+  /** Atalho para solicitar compartilhamento de número. */
   async sendRequestPhoneNumber(
     content: MessageContentByKey<'requestPhoneNumber'> = { requestPhoneNumber: true },
     options?: CommandSendOptions
@@ -267,6 +285,7 @@ export class CommandContext {
     return this.send(content, options)
   }
 
+  /** Atalho para encaminhar mensagem. */
   async sendForward(
     content: MessageContentByKey<'forward'>,
     options?: CommandSendOptions
@@ -274,10 +293,12 @@ export class CommandContext {
     return this.send(content, options)
   }
 
+  /** Atalho para apagar mensagem via payload de delete. */
   async sendDelete(content: MessageContentByKey<'delete'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send(content, options)
   }
 
+  /** Atalho para configurar mensagens temporárias no chat via payload nativo. */
   async setDisappearingMessages(
     content: MessageContentByKey<'disappearingMessagesInChat'>,
     options?: CommandSendOptions
@@ -285,6 +306,7 @@ export class CommandContext {
     return this.send(content, options)
   }
 
+  /** Atalho para limitar compartilhamento via payload nativo. */
   async setLimitSharing(
     content: MessageContentByKey<'limitSharing'>,
     options?: CommandSendOptions

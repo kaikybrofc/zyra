@@ -1,8 +1,17 @@
 import type { Command } from './types.js'
 
+/** Resultado da validação de permissões/contexto administrativo. */
 type AdminGuardResult = { ok: true } | { ok: false }
+
+/** Ações suportadas para gerenciamento de participantes. */
 type ParticipantActionKind = 'add' | 'remove' | 'promote' | 'demote'
 
+/**
+ * Garante que o comando foi executado em grupo por um administrador.
+ *
+ * @param ctx Contexto de execução do comando.
+ * @returns `ok: true` quando o fluxo pode continuar.
+ */
 const ensureAdminContext = async (ctx: Parameters<Command['execute']>[0]): Promise<AdminGuardResult> => {
   if (!ctx.isGroup) {
     await ctx.reply('❌ Este comando só funciona em grupos.')
@@ -18,6 +27,14 @@ const ensureAdminContext = async (ctx: Parameters<Command['execute']>[0]): Promi
   return { ok: true }
 }
 
+/**
+ * Normaliza identificadores de participante para JID do WhatsApp.
+ *
+ * Aceita número puro, texto com símbolos e JID explícito.
+ *
+ * @param value Valor informado no comando.
+ * @returns JID normalizado (`@s.whatsapp.net` ou `@lid`) ou string vazia.
+ */
 const normalizeParticipant = (value: string): string => {
   const normalized = value.trim().toLowerCase()
   if (!normalized) return ''
@@ -31,13 +48,28 @@ const normalizeParticipant = (value: string): string => {
   return digits ? `${digits}@s.whatsapp.net` : ''
 }
 
+/**
+ * Converte uma lista de entradas em JIDs normalizados e únicos.
+ *
+ * @param values Valores brutos recebidos no comando.
+ * @returns Lista de participantes sem duplicidade.
+ */
 const parseParticipants = (values: string[]): string[] => {
   const normalized = values.map(normalizeParticipant).filter(Boolean)
   return [...new Set(normalized)]
 }
 
+/** Padroniza JID para comparação sem sensibilidade a maiúsculas/minúsculas. */
 const toComparableJid = (jid: string): string => jid.trim().toLowerCase()
 
+/**
+ * Valida no metadata do grupo se a ação de participante foi efetivada.
+ *
+ * @param ctx Contexto de execução do comando.
+ * @param participants Participantes alvo da ação.
+ * @param actionKind Tipo de ação executada.
+ * @returns `true` quando o estado final no grupo confirma a ação.
+ */
 const validateParticipantActionResult = async (
   ctx: Parameters<Command['execute']>[0],
   participants: string[],
@@ -66,6 +98,12 @@ const validateParticipantActionResult = async (
   }
 }
 
+/**
+ * Extrai uma mensagem legível de erro desconhecido.
+ *
+ * @param error Erro capturado em `catch`.
+ * @returns Mensagem amigável para logs e resposta ao usuário.
+ */
 const extractErrorMessage = (error: unknown): string => {
   if (error instanceof Error && error.message) {
     return error.message
@@ -79,6 +117,12 @@ const extractErrorMessage = (error: unknown): string => {
   return 'erro desconhecido'
 }
 
+/**
+ * Traduz erros brutos da API para mensagens compreensíveis ao usuário.
+ *
+ * @param rawReason Motivo original do erro.
+ * @returns Descrição amigável da falha.
+ */
 const toFriendlyParticipantActionError = (rawReason: string): string => {
   const reason = rawReason.toLowerCase().trim()
 
@@ -107,6 +151,12 @@ const toFriendlyParticipantActionError = (rawReason: string): string => {
   return rawReason
 }
 
+/**
+ * Interpreta argumentos de liga/desliga para comandos de grupo.
+ *
+ * @param value Argumento textual (`on`, `off`, etc.).
+ * @returns `true` para ativar, `false` para desativar e `null` para inválido.
+ */
 const parseOnOff = (value: string | undefined): boolean | null => {
   if (!value) return null
   const normalized = value.toLowerCase()
@@ -115,6 +165,12 @@ const parseOnOff = (value: string | undefined): boolean | null => {
   return null
 }
 
+/**
+ * Interpreta duração de mensagens temporárias em segundos.
+ *
+ * @param value Argumento textual do usuário.
+ * @returns Duração em segundos, `0` para desativar ou `null` se inválido.
+ */
 const parseEphemeral = (value: string | undefined): number | null => {
   if (!value) return null
   const normalized = value.toLowerCase()
@@ -130,6 +186,14 @@ const parseEphemeral = (value: string | undefined): number | null => {
   return null
 }
 
+/**
+ * Executa uma ação de participantes com validação de permissões e tratamento de erro.
+ *
+ * @param ctx Contexto de execução do comando.
+ * @param actionLabel Rótulo amigável da ação para mensagens.
+ * @param actionKind Tipo da ação (add/remove/promote/demote).
+ * @param handler Função que efetivamente chama a operação no provedor.
+ */
 const executeParticipantAction = async (
   ctx: Parameters<Command['execute']>[0],
   actionLabel: string,
@@ -164,6 +228,7 @@ const executeParticipantAction = async (
   }
 }
 
+/** Comando que adiciona participantes ao grupo. */
 export const addCommand: Command = {
   name: 'add',
   description: 'Adiciona um ou mais participantes no grupo',
@@ -172,6 +237,7 @@ export const addCommand: Command = {
   },
 }
 
+/** Comando que remove participantes do grupo. */
 export const kickCommand: Command = {
   name: 'kick',
   description: 'Remove um ou mais participantes do grupo',
@@ -180,6 +246,7 @@ export const kickCommand: Command = {
   },
 }
 
+/** Comando que bane (remove) participantes do grupo. */
 export const banCommand: Command = {
   name: 'ban',
   description: 'Bane (remove) um ou mais participantes do grupo',
@@ -188,6 +255,7 @@ export const banCommand: Command = {
   },
 }
 
+/** Comando que promove participantes para administrador. */
 export const promoteCommand: Command = {
   name: 'promote',
   description: 'Promove um ou mais participantes a admin',
@@ -196,6 +264,7 @@ export const promoteCommand: Command = {
   },
 }
 
+/** Comando que remove privilégios de administrador de participantes. */
 export const demoteCommand: Command = {
   name: 'demote',
   description: 'Remove cargo de admin de participantes',
@@ -204,6 +273,7 @@ export const demoteCommand: Command = {
   },
 }
 
+/** Comando que abre/fecha o grupo para mensagens de membros. */
 export const groupCommand: Command = {
   name: 'grupo',
   description: 'Abre ou fecha o grupo para envio de mensagens',
@@ -222,6 +292,7 @@ export const groupCommand: Command = {
   },
 }
 
+/** Comando que trava/destrava edição de informações do grupo. */
 export const lockCommand: Command = {
   name: 'lock',
   description: 'Trava ou destrava edição de info do grupo',
@@ -240,6 +311,7 @@ export const lockCommand: Command = {
   },
 }
 
+/** Comando que atualiza o assunto (nome) do grupo. */
 export const subjectCommand: Command = {
   name: 'assunto',
   description: 'Atualiza o assunto (nome) do grupo',
@@ -258,6 +330,7 @@ export const subjectCommand: Command = {
   },
 }
 
+/** Comando que atualiza ou limpa a descrição do grupo. */
 export const descriptionCommand: Command = {
   name: 'descricao',
   description: 'Atualiza ou limpa a descrição do grupo',
@@ -282,6 +355,7 @@ export const descriptionCommand: Command = {
   },
 }
 
+/** Comando que exibe o link atual de convite do grupo. */
 export const inviteCommand: Command = {
   name: 'linkgrupo',
   description: 'Mostra o link de convite atual do grupo',
@@ -294,6 +368,7 @@ export const inviteCommand: Command = {
   },
 }
 
+/** Comando que revoga o link atual e gera um novo convite. */
 export const revokeInviteCommand: Command = {
   name: 'revogarlink',
   description: 'Revoga o link atual e gera um novo',
@@ -306,6 +381,7 @@ export const revokeInviteCommand: Command = {
   },
 }
 
+/** Comando que controla mensagens temporárias do grupo. */
 export const ephemeralCommand: Command = {
   name: 'ephemeral',
   description: 'Controla mensagens temporárias do grupo',
