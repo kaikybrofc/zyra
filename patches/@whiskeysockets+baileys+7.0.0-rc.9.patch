@@ -1,6 +1,140 @@
+diff --git a/node_modules/@whiskeysockets/baileys/lib/Signal/libsignal.js b/node_modules/@whiskeysockets/baileys/lib/Signal/libsignal.js
+index 6f2b2a8..8ee107a 100644
+--- a/node_modules/@whiskeysockets/baileys/lib/Signal/libsignal.js
++++ b/node_modules/@whiskeysockets/baileys/lib/Signal/libsignal.js
+@@ -40,6 +40,23 @@ export function makeLibSignalRepository(auth, logger, pnToLIDFunc) {
+         ttlAutopurge: true,
+         updateAgeOnGet: true
+     });
++    /**
++     * Resolve a JID to its canonical (LID-preferred) form for use as transaction lock key.
++     * This prevents race conditions where PN and LID JIDs for the same contact
++     * acquire different mutex locks, allowing concurrent session modifications.
++     */
++    const resolveCanonicalJid = async (jid) => {
++        if (isLidUser(jid) || isHostedLidUser(jid)) {
++            return jid;
++        }
++        if (isPnUser(jid) || isHostedPnUser(jid)) {
++            const lid = await lidMapping.getLIDForPN(jid);
++            if (lid) {
++                return lid;
++            }
++        }
++        return jid;
++    };
+     const repository = {
+         decryptGroupMessage({ group, authorJid, msg }) {
+             const senderName = jidToSignalSenderKeyName(group, authorJid);
+@@ -95,21 +112,23 @@ export function makeLibSignalRepository(auth, logger, pnToLIDFunc) {
+                 }
+                 return result;
+             }
+-            // If it's not a sync message, we need to ensure atomicity
+-            // For regular messages, we use a transaction to ensure atomicity
++            // Resolve to canonical (LID-preferred) JID for transaction lock key
++            // to prevent PN/LID race conditions on the same logical session
++            const canonicalJid = await resolveCanonicalJid(jid);
+             return parsedKeys.transaction(async () => {
+                 return await doDecrypt();
+-            }, jid);
++            }, canonicalJid);
+         },
+         async encryptMessage({ jid, data }) {
+             const addr = jidToSignalProtocolAddress(jid);
+             const cipher = new libsignal.SessionCipher(storage, addr);
+-            // Use transaction to ensure atomicity
++            // Resolve to canonical (LID-preferred) JID for transaction lock key
++            const canonicalJid = await resolveCanonicalJid(jid);
+             return parsedKeys.transaction(async () => {
+                 const { type: sigType, body } = await cipher.encrypt(data);
+                 const type = sigType === 3 ? 'pkmsg' : 'msg';
+                 return { type, ciphertext: Buffer.from(body, 'binary') };
+-            }, jid);
++            }, canonicalJid);
+         },
+         async encryptGroupMessage({ group, meId, data }) {
+             const senderName = jidToSignalSenderKeyName(group, meId);
+@@ -242,7 +261,7 @@ export function makeLibSignalRepository(auth, logger, pnToLIDFunc) {
+                 // Bulk fetch PN sessions - already exist (verified during device discovery)
+                 const pnAddrStrings = Array.from(new Set(migrationOps.map(op => op.fromAddr.toString())));
+                 const pnSessions = await parsedKeys.get('session', pnAddrStrings);
+-                // Prepare bulk session updates (PN → LID migration + deletion)
++                // Prepare bulk session updates (PN → LID migration)
+                 const sessionUpdates = {};
+                 for (const op of migrationOps) {
+                     const pnAddrStr = op.fromAddr.toString();
+@@ -252,9 +271,10 @@ export function makeLibSignalRepository(auth, logger, pnToLIDFunc) {
+                         // Session exists (guaranteed from device discovery)
+                         const fromSession = libsignal.SessionRecord.deserialize(pnSession);
+                         if (fromSession.haveOpenSession()) {
+-                            // Queue for bulk update: copy to LID, delete from PN
++                            // Copy session to LID address but retain PN session.
++                            // PN session must stay alive so in-flight messages
++                            // addressed to the PN JID can still be decrypted.
+                             sessionUpdates[lidAddrStr] = fromSession.serialize();
+-                            sessionUpdates[pnAddrStr] = null;
+                             migratedCount++;
+                         }
+                     }
+@@ -294,7 +314,38 @@ const jidToSignalProtocolAddress = (jid) => {
+ const jidToSignalSenderKeyName = (group, user) => {
+     return new SenderKeyName(group, jidToSignalProtocolAddress(user));
+ };
++/**
++ * Grace period before actually deleting used pre-keys.
++ * Retransmissions reusing the same pre-key ID will succeed during this window.
++ */
++const PREKEY_GRACE_PERIOD_MS = 5 * 60 * 1000; // 5 minutes
++const PREKEY_CLEANUP_INTERVAL_MS = 60_000; // 1 minute
+ function signalStorage({ creds, keys }, lidMapping) {
++    // Scoped per-instance to prevent multi-account collisions
++    const pendingPreKeyDeletions = new Map(); // preKeyId -> expiry timestamp
++    let preKeyCleanupTimer;
++    function ensurePreKeyCleanup() {
++        if (preKeyCleanupTimer) {
++            return;
++        }
++        preKeyCleanupTimer = setInterval(() => {
++            const now = Date.now();
++            for (const [id, expiry] of pendingPreKeyDeletions) {
++                if (now >= expiry) {
++                    void keys.set({ 'pre-key': { [id]: null } });
++                    pendingPreKeyDeletions.delete(id);
++                }
++            }
++            if (pendingPreKeyDeletions.size === 0 && preKeyCleanupTimer) {
++                clearInterval(preKeyCleanupTimer);
++                preKeyCleanupTimer = undefined;
++            }
++        }, PREKEY_CLEANUP_INTERVAL_MS);
++        // Don't block process exit
++        if (preKeyCleanupTimer && typeof preKeyCleanupTimer.unref === 'function') {
++            preKeyCleanupTimer.unref();
++        }
++    }
+     // Shared function to resolve PN signal address to LID if mapping exists
+     const resolveLIDSignalAddress = async (id) => {
+         if (id.includes('.')) {
+@@ -369,7 +420,12 @@ function signalStorage({ creds, keys }, lidMapping) {
+                 };
+             }
+         },
+-        removePreKey: (id) => keys.set({ 'pre-key': { [id]: null } }),
++        removePreKey: (id) => {
++            // Delay pre-key deletion so retransmissions using the same
++            // pre-key ID can still decrypt during the grace period.
++            pendingPreKeyDeletions.set(id, Date.now() + PREKEY_GRACE_PERIOD_MS);
++            ensurePreKeyCleanup();
++        },
+         loadSignedPreKey: () => {
+             const key = creds.signedPreKey;
+             return {
+diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
+index 3e7334a..948896f 100644
 --- a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
 +++ b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
-@@ -89,20 +89,31 @@
+@@ -89,20 +89,31 @@ export const makeMessagesRecvSocket = (config) => {
      // Handles mex newsletter notifications
      const handleMexNewsletterNotification = async (node) => {
          const mexNode = getBinaryNodeChild(node, 'mex');
@@ -36,7 +170,7 @@
          if (!updates || !operation) {
              logger.warn({ data }, 'Invalid mex newsletter notification content');
              return;
-@@ -132,6 +143,20 @@
+@@ -132,6 +143,20 @@ export const makeMessagesRecvSocket = (config) => {
                      }
                  }
                  break;
