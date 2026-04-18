@@ -32,7 +32,7 @@
     "@hapi/boom": "^10.0.1",
     "@kaikybrofc/logger-module": "^1.0.4",
     "@whiskeysockets/baileys": "github:WhiskeySockets/Baileys#8e5093c198de5c5c0230a76e8a7224f6006ebb2e",
-    "baileys-antiban": "^1.1.0",
+    "baileys-antiban": "^1.6.0",
     "dotenv": "^16.4.5",
     "link-preview-js": "^3.2.0",
     "mysql2": "^3.20.0",
