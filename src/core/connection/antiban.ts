@@ -42,10 +42,22 @@ const resolveStateAdapter = (connectionId: string): FileStateAdapter =>
  * @returns Objeto de configuração compatível com a biblioteca baileys-antiban.
  */
 export function createAntiBanConfig(logger: AppLogger, connectionId: string): AntiBanConfig {
+  const lidResolver = {
+    canonical: config.antibanLidCanonical,
+    ...(config.antibanLidMaxEntries !== undefined ? { maxEntries: config.antibanLidMaxEntries } : {}),
+  } as const
+
   return {
     logging: config.antibanLogging,
     rateLimiter: buildRateLimiterConfig(),
     warmUp: buildWarmUpConfig(),
+    lidResolver,
+    jidCanonicalizer: {
+      enabled: config.antibanJidCanonicalizerEnabled,
+      canonicalizeOutbound: true,
+      learnFromEvents: true,
+      resolverConfig: lidResolver,
+    },
     health: {
       autoPauseAt: config.antibanAutoPauseAt,
       onRiskChange: (status) => {

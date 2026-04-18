@@ -16,6 +16,9 @@ const mockConfig = {
   antibanWarmUpDay1Limit: 20,
   antibanWarmUpGrowthFactor: 1.8,
   antibanInactivityThresholdHours: 72,
+  antibanJidCanonicalizerEnabled: true,
+  antibanLidCanonical: 'pn',
+  antibanLidMaxEntries: 10000,
 }
 
 const adapterSaveMock = vi.fn()
@@ -82,6 +85,13 @@ describe('antiban helper', () => {
       expect.objectContaining({
         logging: false,
         rateLimiter: expect.objectContaining({ maxPerMinute: 8 }),
+        lidResolver: expect.objectContaining({ canonical: 'pn', maxEntries: 10000 }),
+        jidCanonicalizer: expect.objectContaining({
+          enabled: true,
+          canonicalizeOutbound: true,
+          learnFromEvents: true,
+          resolverConfig: expect.objectContaining({ canonical: 'pn', maxEntries: 10000 }),
+        }),
         health: expect.objectContaining({ autoPauseAt: 'high' }),
       }),
       { day: 1 }

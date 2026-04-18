@@ -26,6 +26,15 @@ function readRiskLevel(value: string | undefined, fallback: 'low' | 'medium' | '
   return fallback
 }
 
+function readCanonicalJidMode(value: string | undefined, fallback: 'pn' | 'lid'): 'pn' | 'lid' {
+  if (!value) return fallback
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'pn' || normalized === 'lid') {
+    return normalized
+  }
+  return fallback
+}
+
 /**
  * Configurações globais da aplicação derivadas das variáveis de ambiente.
  * Centraliza o acesso a parâmetros de conexão, banco de dados, segurança e comportamento do bot.
@@ -138,5 +147,17 @@ export const config = {
   /** Horas de inatividade para considerar que o aquecimento foi interrompido (WA_ANTIBAN_INACTIVITY_THRESHOLD_HOURS). */
   get antibanInactivityThresholdHours() {
     return readOptionalNumber(process.env.WA_ANTIBAN_INACTIVITY_THRESHOLD_HOURS)
+  },
+  /** Habilita mitigação LID/PN (JID canonicalizer) no antiban (WA_ANTIBAN_JID_CANONICALIZER_ENABLED). */
+  get antibanJidCanonicalizerEnabled() {
+    return readBoolean(process.env.WA_ANTIBAN_JID_CANONICALIZER_ENABLED, true)
+  },
+  /** Forma canônica usada na mitigação LID/PN: pn ou lid (WA_ANTIBAN_LID_CANONICAL). */
+  get antibanLidCanonical() {
+    return readCanonicalJidMode(process.env.WA_ANTIBAN_LID_CANONICAL, 'pn')
+  },
+  /** Quantidade máxima de mapeamentos LID↔PN em memória (WA_ANTIBAN_LID_MAX_ENTRIES). */
+  get antibanLidMaxEntries() {
+    return readOptionalNumber(process.env.WA_ANTIBAN_LID_MAX_ENTRIES)
   },
 }
