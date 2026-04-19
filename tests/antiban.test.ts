@@ -12,6 +12,9 @@ const mockConfig = {
   antibanMinDelayMs: 1500,
   antibanMaxDelayMs: 5000,
   antibanNewChatDelayMs: 3000,
+  antibanMaxIdenticalMessages: 200,
+  antibanIdenticalMessageWindowMs: 60000,
+  antibanBurstAllowance: 20,
   antibanWarmUpDays: 7,
   antibanWarmUpDay1Limit: 20,
   antibanWarmUpGrowthFactor: 1.8,
@@ -84,7 +87,12 @@ describe('antiban helper', () => {
       sock,
       expect.objectContaining({
         logging: false,
-        rateLimiter: expect.objectContaining({ maxPerMinute: 8 }),
+        rateLimiter: expect.objectContaining({
+          maxPerMinute: 8,
+          maxIdenticalMessages: 200,
+          identicalMessageWindowMs: 60000,
+          burstAllowance: 20,
+        }),
         lidResolver: expect.objectContaining({ canonical: 'pn', maxEntries: 10000 }),
         jidCanonicalizer: expect.objectContaining({
           enabled: true,

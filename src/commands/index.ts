@@ -15,6 +15,7 @@ import {
 } from './admin.js'
 import { createMenuCommand } from './menu.js'
 import { pingCommand } from './ping.js'
+import { stickerAliasCommand, stickerCommand } from './sticker.js'
 
 /**
  * Mapa de todos os comandos disponíveis no sistema.
@@ -26,6 +27,8 @@ const menuCommand = createMenuCommand(() => commandRegistry)
 Object.assign(commandRegistry, {
   [menuCommand.name]: menuCommand,
   [pingCommand.name]: pingCommand,
+  [stickerCommand.name]: stickerCommand,
+  [stickerAliasCommand.name]: stickerAliasCommand,
   [addCommand.name]: addCommand,
   [kickCommand.name]: kickCommand,
   [banCommand.name]: banCommand,

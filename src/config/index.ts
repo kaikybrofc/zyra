@@ -132,6 +132,18 @@ export const config = {
   get antibanNewChatDelayMs() {
     return readOptionalNumber(process.env.WA_ANTIBAN_NEW_CHAT_DELAY_MS)
   },
+  /** Máximo de mensagens idênticas antes de bloquear (WA_ANTIBAN_MAX_IDENTICAL_MESSAGES). */
+  get antibanMaxIdenticalMessages() {
+    return readOptionalNumber(process.env.WA_ANTIBAN_MAX_IDENTICAL_MESSAGES)
+  },
+  /** Janela em ms para contagem de mensagens idênticas (WA_ANTIBAN_IDENTICAL_WINDOW_MS). */
+  get antibanIdenticalMessageWindowMs() {
+    return readOptionalNumber(process.env.WA_ANTIBAN_IDENTICAL_WINDOW_MS)
+  },
+  /** Quantidade de mensagens em burst permitidas (WA_ANTIBAN_BURST_ALLOWANCE). */
+  get antibanBurstAllowance() {
+    return readOptionalNumber(process.env.WA_ANTIBAN_BURST_ALLOWANCE)
+  },
   /** Período de aquecimento da conta em dias (WA_ANTIBAN_WARMUP_DAYS). */
   get antibanWarmUpDays() {
     return readOptionalNumber(process.env.WA_ANTIBAN_WARMUP_DAYS)

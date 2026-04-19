@@ -23,6 +23,9 @@ const buildRateLimiterConfig = () => ({
   ...(config.antibanMinDelayMs !== undefined ? { minDelayMs: config.antibanMinDelayMs } : {}),
   ...(config.antibanMaxDelayMs !== undefined ? { maxDelayMs: config.antibanMaxDelayMs } : {}),
   ...(config.antibanNewChatDelayMs !== undefined ? { newChatDelayMs: config.antibanNewChatDelayMs } : {}),
+  ...(config.antibanMaxIdenticalMessages !== undefined ? { maxIdenticalMessages: config.antibanMaxIdenticalMessages } : {}),
+  ...(config.antibanIdenticalMessageWindowMs !== undefined ? { identicalMessageWindowMs: config.antibanIdenticalMessageWindowMs } : {}),
+  ...(config.antibanBurstAllowance !== undefined ? { burstAllowance: config.antibanBurstAllowance } : {}),
 })
 
 const buildWarmUpConfig = () => ({

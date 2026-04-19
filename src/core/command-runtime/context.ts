@@ -3,6 +3,7 @@ import type {
   MiscMessageGenerationOptions,
   WAMessage,
 } from '@whiskeysockets/baileys'
+import type { StickerSourceMedia } from '../../utils/sticker.js'
 import type {
   CommandAdminActions,
   GroupInviteCodeResult,
@@ -59,6 +60,8 @@ type CommandContextInit = {
   reply: (text: string) => Promise<void>
   /** Função interna para reagir à mensagem. */
   react: (emoji: string) => Promise<void>
+  /** Resolve mídia (da mensagem atual ou citada) para geração de sticker. */
+  resolveStickerSourceMedia: () => Promise<StickerSourceMedia | null>
   /** Ações administrativas disponíveis no contexto. */
   admin: CommandAdminActions
 }
@@ -95,6 +98,7 @@ export class CommandContext {
   readonly #sendAction: CommandContextInit['send']
   readonly #replyAction: CommandContextInit['reply']
   readonly #reactAction: CommandContextInit['react']
+  readonly #resolveStickerSourceMediaAction: CommandContextInit['resolveStickerSourceMedia']
 
   /**
    * @param options Dados iniciais do contexto vindos do processador.
@@ -113,6 +117,7 @@ export class CommandContext {
     send,
     reply,
     react,
+    resolveStickerSourceMedia,
     admin,
   }: CommandContextInit) {
     this.chatId = chatId
@@ -129,6 +134,7 @@ export class CommandContext {
     this.#sendAction = send
     this.#replyAction = reply
     this.#reactAction = react
+    this.#resolveStickerSourceMediaAction = resolveStickerSourceMedia
   }
 
   /**
@@ -152,6 +158,13 @@ export class CommandContext {
    */
   async react(emoji: string): Promise<void> {
     await this.#reactAction(emoji)
+  }
+
+  /**
+   * Resolve a mídia da mensagem atual (ou da mensagem citada) para comandos de sticker.
+   */
+  async getStickerSourceMedia(): Promise<StickerSourceMedia | null> {
+    return this.#resolveStickerSourceMediaAction()
   }
 
   /**

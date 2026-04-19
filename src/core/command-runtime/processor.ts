@@ -4,6 +4,7 @@ import type { AppLogger } from '../../observability/logger.js'
 import type { SqlStore } from '../../store/sql-store.js'
 import { config } from '../../config/index.js'
 import { getMessageText, getNormalizedMessage } from '../../utils/message.js'
+import { resolveStickerSourceMedia as resolveStickerSourceMediaFromMessage } from '../../utils/sticker.js'
 import { createCommandAdminActions } from './admin.js'
 import { CommandContext, type CommandSendOptions } from './context.js'
 
@@ -241,6 +242,7 @@ const createRuntimeContext = (context: IncomingCommandEnvelope, logger: AppLogge
         { quote: false }
       )
     },
+    resolveStickerSourceMedia: async () => resolveStickerSourceMediaFromMessage(context.message),
   })
 }
 
