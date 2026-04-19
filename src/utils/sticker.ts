@@ -24,6 +24,12 @@ type MediaNode = {
   mediaType: StickerInputMediaType
 }
 
+type DownloadableMedia = {
+  url?: string | null
+  directPath?: string | null
+  mediaKey?: Uint8Array | null
+}
+
 function safeKill(child: ReturnType<typeof spawn>, signal: NodeJS.Signals): void {
   try {
     child.kill(signal)
@@ -95,13 +101,13 @@ function extractMediaNode(message: proto.IWebMessageInfo | proto.IMessage | null
   const type = getContentType(content)
   if (!type) return null
 
-  if (type === 'imageMessage' && content.imageMessage) {
+  if (type === 'imageMessage' && content.imageMessage && isDownloadableMedia(content.imageMessage)) {
     return { media: content.imageMessage, mediaType: 'image' }
   }
-  if (type === 'videoMessage' && content.videoMessage) {
+  if (type === 'videoMessage' && content.videoMessage && isDownloadableMedia(content.videoMessage)) {
     return { media: content.videoMessage, mediaType: 'video' }
   }
-  if (type === 'stickerMessage' && content.stickerMessage) {
+  if (type === 'stickerMessage' && content.stickerMessage && isDownloadableMedia(content.stickerMessage)) {
     return { media: content.stickerMessage, mediaType: 'sticker' }
   }
 
@@ -119,6 +125,18 @@ async function mediaNodeToBuffer(node: MediaNode): Promise<Buffer> {
   return Buffer.concat(chunks)
 }
 
+function isDownloadableMedia(value: unknown): value is DownloadableMedia {
+  if (!value || typeof value !== 'object') return false
+  const record = value as DownloadableMedia
+  return Boolean(record.url || record.directPath || record.mediaKey)
+}
+
+function looksLikeWebp(buffer: Buffer): boolean {
+  if (buffer.length < 12) return false
+  return buffer.subarray(0, 4).toString('ascii') === 'RIFF'
+    && buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+}
+
 export async function resolveStickerSourceMedia(message: proto.IWebMessageInfo): Promise<StickerSourceMedia | null> {
   const node = extractMediaNode(message)
   if (!node) return null
@@ -128,22 +146,21 @@ export async function resolveStickerSourceMedia(message: proto.IWebMessageInfo):
 }
 
 async function convertToWebp(inputPath: string, mediaType: StickerInputMediaType, outputPath: string): Promise<void> {
+  if (mediaType === 'sticker') {
+    // Sticker já vem em WEBP na maioria dos casos; evita transcodificar payload potencialmente corrompido.
+    await fs.copyFile(inputPath, outputPath)
+    return
+  }
+
   const scaleFilter = `scale=${STICKER_SIZE}:${STICKER_SIZE}`
   const filter = mediaType === 'video' ? `fps=10,${scaleFilter}` : scaleFilter
 
   const args = ['-hide_banner', '-loglevel', 'error', '-y', '-i', inputPath]
-
-  if (mediaType === 'video') {
-    args.push('-t', '8')
-  }
+  args.push('-t', mediaType === 'video' ? '8' : '1')
 
   args.push('-vcodec', 'libwebp', '-loop', '0', '-preset', 'default', '-an')
 
-  if (mediaType === 'video') {
-    args.push('-vsync', '0', '-lossless', '0', '-q:v', '55', '-compression_level', '6')
-  } else {
-    args.push('-lossless', '1')
-  }
+  args.push('-vsync', '0', '-lossless', '0', '-q:v', '70', '-compression_level', '6')
 
   args.push('-vf', filter, outputPath)
   await runProcess('ffmpeg', args, mediaType === 'video' ? 30_000 : 15_000)
@@ -195,6 +212,10 @@ export async function createStickerFromMedia(
   const webpPath = path.join(tempDir, 'sticker.webp')
 
   try {
+    if (source.mediaType === 'sticker' && !looksLikeWebp(source.buffer)) {
+      throw new Error('A figurinha citada não contém WEBP válido para conversão.')
+    }
+
     await fs.writeFile(inputPath, source.buffer)
     await convertToWebp(inputPath, source.mediaType, webpPath)
     return await addStickerMetadata(webpPath, options.packName ?? 'Zyra', options.packAuthor ?? 'Zyra')
