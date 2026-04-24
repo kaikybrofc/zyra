@@ -23,14 +23,77 @@ const optionalColumns = new Set<string>(['messages.content_type', 'messages.text
 
 const targetColumns = new Set<string>(['groups.owner_user_id', 'lid_mappings.user_id', 'wa_contacts_cache.user_id', 'messages.sender_user_id', 'commands_log.actor_user_id', 'group_events.actor_user_id', 'message_events.actor_user_id', 'message_events.target_user_id', 'message_events.message_db_id', 'chats.display_name', 'users.display_name', 'chat_users.role', 'group_participants.role'])
 
+const contextualColumns = new Set<string>([
+  'events_log.message_db_id',
+  'events_log.group_jid',
+  'events_log.target_user_id',
+  'events_log.chat_jid',
+  'blocklist.actor_user_id',
+  'blocklist.reason',
+  'bot_sessions.platform',
+  'bot_sessions.app_version',
+  'label_associations.message_db_id',
+  'label_associations.target_jid',
+  'label_associations.actor_user_id',
+  'newsletter_events.actor_user_id',
+  'newsletter_events.target_user_id',
+  'commands_log.args_text',
+  'labels.actor_user_id',
+])
+
 const classifyColumn = (table: string, column: string) => {
   if (column === 'deleted_at') return 'ignored'
   const key = `${table}.${column}`
   if (ignoredColumns.has(key)) return 'ignored'
   if (optionalColumns.has(key)) return 'optional'
-  if (table === 'events_log') return 'target'
+  if (contextualColumns.has(key)) return 'contextual'
   if (targetColumns.has(key)) return 'target'
   return 'other'
+}
+
+const COLORS = {
+  reset: '\x1b[0m',
+  red: '\x1b[31m',
+  yellow: '\x1b[33m',
+  green: '\x1b[32m',
+  cyan: '\x1b[36m',
+  bold: '\x1b[1m',
+}
+
+type Category = 'target' | 'optional' | 'contextual' | 'other'
+type Severity = 'good' | 'medium' | 'bad'
+
+const colorize = (text: string, color: keyof typeof COLORS) => `${COLORS[color]}${text}${COLORS.reset}`
+
+const evaluateSeverity = (percent: number, category: Category): Severity => {
+  if (category === 'target') {
+    if (percent < 1) return 'good'
+    if (percent < 5) return 'medium'
+    return 'bad'
+  }
+  if (category === 'optional') {
+    return percent < 60 ? 'good' : 'medium'
+  }
+  if (category === 'contextual') {
+    return percent < 70 ? 'good' : 'medium'
+  }
+  if (percent < 5) return 'good'
+  if (percent < 20) return 'medium'
+  return 'bad'
+}
+
+const formatSeverity = (severity: Severity) => {
+  if (severity === 'bad') return colorize('RUIM', 'red')
+  if (severity === 'medium') return colorize('MEDIO', 'yellow')
+  return colorize('BOM', 'green')
+}
+
+const formatRow = (item: { table: string; column: string; count: number; total: number; percent: number; category: Category }) => {
+  const severity = evaluateSeverity(item.percent, item.category)
+  const percentText = `${item.percent.toFixed(2)}%`
+  const coloredPercent =
+    severity === 'bad' ? colorize(percentText, 'red') : severity === 'medium' ? colorize(percentText, 'yellow') : colorize(percentText, 'green')
+  return `${formatSeverity(severity)} ${item.table}.${item.column} -> ${item.count}/${item.total} (${coloredPercent})`
 }
 
 async function main() {
@@ -65,7 +128,7 @@ async function main() {
     count: number
     total: number
     percent: number
-    category: 'target' | 'optional' | 'other' | 'ignored'
+    category: 'target' | 'optional' | 'contextual' | 'other' | 'ignored'
   }> = []
 
   for (const row of tableRows) {
@@ -121,33 +184,48 @@ async function main() {
 
   const targets = sorted.filter((item) => item.category === 'target')
   const optional = sorted.filter((item) => item.category === 'optional')
+  const contextual = sorted.filter((item) => item.category === 'contextual')
   const other = sorted.filter((item) => item.category === 'other')
 
   logger.info('verificacao de NULL concluida', {
     total: sorted.length,
     target: targets.length,
     optional: optional.length,
+    contextual: contextual.length,
     other: other.length,
   })
 
+  console.log(`\n${colorize('Legenda:', 'bold')} ${colorize('BOM', 'green')} ${colorize('MEDIO', 'yellow')} ${colorize('RUIM', 'red')}`)
+  console.log(`${colorize('Regra ALVO:', 'cyan')} bom < 1%, medio < 5%, ruim >= 5%`)
+  console.log(`${colorize('Regra OPCIONAL:', 'cyan')} bom < 60%, medio >= 60%`)
+  console.log(`${colorize('Regra CONTEXTUAL:', 'cyan')} bom < 70%, medio >= 70%`)
+  console.log(`${colorize('Regra OUTROS:', 'cyan')} bom < 5%, medio < 20%, ruim >= 20%`)
+
   if (targets.length) {
-    console.log('\n[ALVO <1%]')
+    console.log(`\n${colorize('[ALVO <1%]', 'bold')}`)
     for (const item of targets) {
-      console.log(`${item.table}.${item.column} -> ${item.count}/${item.total} (${item.percent}%)`)
+      console.log(formatRow(item))
     }
   }
 
   if (optional.length) {
-    console.log('\n[OPCIONAL]')
+    console.log(`\n${colorize('[OPCIONAL]', 'bold')}`)
     for (const item of optional) {
-      console.log(`${item.table}.${item.column} -> ${item.count}/${item.total} (${item.percent}%)`)
+      console.log(formatRow(item))
+    }
+  }
+
+  if (contextual.length) {
+    console.log(`\n${colorize('[CONTEXTUAL]', 'bold')}`)
+    for (const item of contextual) {
+      console.log(formatRow(item))
     }
   }
 
   if (other.length) {
-    console.log('\n[OUTROS]')
+    console.log(`\n${colorize('[OUTROS]', 'bold')}`)
     for (const item of other) {
-      console.log(`${item.table}.${item.column} -> ${item.count}/${item.total} (${item.percent}%)`)
+      console.log(formatRow(item))
     }
   }
 }
