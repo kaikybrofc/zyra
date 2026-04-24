@@ -41,7 +41,10 @@ const contextualColumns = new Set<string>([
   'labels.actor_user_id',
 ])
 
-const classifyColumn = (table: string, column: string) => {
+type Category = 'target' | 'optional' | 'contextual' | 'other'
+type ClassifiedCategory = Category | 'ignored'
+
+const classifyColumn = (table: string, column: string): ClassifiedCategory => {
   if (column === 'deleted_at') return 'ignored'
   const key = `${table}.${column}`
   if (ignoredColumns.has(key)) return 'ignored'
@@ -60,7 +63,6 @@ const COLORS = {
   bold: '\x1b[1m',
 }
 
-type Category = 'target' | 'optional' | 'contextual' | 'other'
 type Severity = 'good' | 'medium' | 'bad'
 
 const colorize = (text: string, color: keyof typeof COLORS) => `${COLORS[color]}${text}${COLORS.reset}`
@@ -128,7 +130,7 @@ async function main() {
     count: number
     total: number
     percent: number
-    category: 'target' | 'optional' | 'contextual' | 'other' | 'ignored'
+    category: ClassifiedCategory
   }> = []
 
   for (const row of tableRows) {
@@ -175,7 +177,9 @@ async function main() {
   }
 
   await pool.end()
-  const filtered = findings.filter((item) => item.category !== 'ignored')
+  const filtered = findings.filter(
+    (item): item is (typeof findings)[number] & { category: Category } => item.category !== 'ignored'
+  )
   const sorted = filtered.sort((a, b) => b.percent - a.percent)
   if (!sorted.length) {
     logger.info('verificacao de NULL concluida (nenhum NULL encontrado)')
