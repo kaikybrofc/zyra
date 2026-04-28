@@ -9,16 +9,24 @@ vi.mock('../src/utils/sticker.js', () => ({
 
 type StickerCtx = {
   pushName: string | null
+  sender: string
+  args: string[]
+  isGroup: boolean
   reply: ReturnType<typeof vi.fn>
   sendSticker: ReturnType<typeof vi.fn>
   getStickerSourceMedia: ReturnType<typeof vi.fn>
+  getMetadata: ReturnType<typeof vi.fn>
 }
 
 const createCtx = (): StickerCtx => ({
   pushName: 'Tester',
+  sender: '5511999999999@s.whatsapp.net',
+  args: [],
+  isGroup: false,
   reply: vi.fn().mockResolvedValue(undefined),
   sendSticker: vi.fn().mockResolvedValue(undefined),
   getStickerSourceMedia: vi.fn(),
+  getMetadata: vi.fn().mockResolvedValue({ subject: 'Grupo Teste' }),
 })
 
 describe('sticker command', () => {
@@ -28,7 +36,14 @@ describe('sticker command', () => {
 
     await stickerCommand.execute(ctx as never)
 
-    expect(ctx.reply).toHaveBeenCalledWith('Uso: envie `!sticker` na legenda de uma mídia ou responda uma mídia com `!sticker`.')
+    expect(ctx.reply).toHaveBeenCalledWith(
+      'Uso: envie `!s pack/autor` na legenda de uma mídia ou respondendo uma mídia.\n'
+      + 'Exemplos:\n'
+      + '- `!s Zyra/#nome`\n'
+      + '- `!s Pack #grupo/#nome - #numero`\n'
+      + '- `!s Evento #data/#hora`\n'
+      + 'Placeholders: #data #hora #nome #grupo #numero'
+    )
     expect(ctx.sendSticker).not.toHaveBeenCalled()
   })
 
