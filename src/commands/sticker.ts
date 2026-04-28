@@ -1,6 +1,8 @@
 import { createStickerFromMedia } from '../utils/sticker.js'
 import type { Command } from './types.js'
 
+const MAX_STICKER_SIZE_BYTES = 1.5 * 1024 * 1024
+
 const executeStickerCommand: Command['execute'] = async (ctx) => {
   const safeReply = async (text: string): Promise<void> => {
     try {
@@ -21,6 +23,12 @@ const executeStickerCommand: Command['execute'] = async (ctx) => {
       packName: 'Zyra',
       packAuthor: ctx.pushName ?? 'Zyra',
     })
+
+    if (sticker.length >= MAX_STICKER_SIZE_BYTES) {
+      await safeReply('❌ A figurinha convertida ficou com 1.5MB ou mais. Envie uma mídia menor.')
+      return
+    }
+
     await ctx.sendSticker({ sticker })
   } catch (error) {
     const reason = error instanceof Error ? error.message : 'erro desconhecido'
