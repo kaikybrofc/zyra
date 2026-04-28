@@ -52,7 +52,14 @@ const executeStickerCommand: Command['execute'] = async (ctx) => {
 
   const source = await ctx.getStickerSourceMedia()
   if (!source) {
-    await safeReply('Uso: `!s pack/autor` na legenda de uma mídia ou respondendo uma mídia. Placeholders: #data #hora #nome #grupo #numero')
+    await safeReply(
+      'Uso: envie `!s pack/autor` na legenda de uma mídia ou respondendo uma mídia.\n'
+      + 'Exemplos:\n'
+      + '- `!s Zyra/#nome`\n'
+      + '- `!s Pack #grupo/#nome - #numero`\n'
+      + '- `!s Evento #data/#hora`\n'
+      + 'Placeholders: #data #hora #nome #grupo #numero'
+    )
     return
   }
 
