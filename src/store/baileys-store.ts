@@ -475,6 +475,42 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
       }
     })
 
+    ev.on('messages.media-update', (updates) => {
+      for (const item of updates) {
+        const key = (item as { key?: WAMessage['key'] }).key
+        const update = (item as { update?: Partial<WAMessage> }).update
+        if (!key || !update) continue
+        const messageKey = toMessageKey(key)
+        if (!messageKey) continue
+
+        void (async () => {
+          const existingInMemory = messages.get(messageKey)
+          const existingFromRedis = !existingInMemory && redisStore.enabled ? await redisStore.getMessage(messageKey) : undefined
+          const base = existingInMemory ?? existingFromRedis
+          const merged = base ? { ...base, ...update, key } : ({ ...update, key } as WAMessage)
+
+          messages.set(messageKey, merged)
+          if (redisStore.enabled) {
+            void redisStore.setMessage(messageKey, merged)
+          }
+          if (sqlStore.enabled) {
+            void sqlStore.setMessage(merged)
+            const chatJid = normalizeJid(key.remoteJid)
+            const messageId = normalizeMessageId(key.id)
+            if (chatJid && messageId) {
+              const actorJid = key.fromMe ? selfJid : (key.participant ?? key.remoteJid ?? null)
+              void sqlStore.recordMessageEvent({
+                key: { chatJid, messageId, fromMe: Boolean(key.fromMe) },
+                type: 'media_update',
+                actorJid: normalizeJid(actorJid),
+                data: update,
+              })
+            }
+          }
+        })()
+      }
+    })
+
     ev.on('messages.delete', (item) => {
       if ('all' in item && item.all) {
         const chatJid = normalizeJid(item.jid)

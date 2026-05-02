@@ -172,4 +172,12 @@ export const config = {
   get antibanLidMaxEntries() {
     return readOptionalNumber(process.env.WA_ANTIBAN_LID_MAX_ENTRIES)
   },
+  /** Se deve baixar automaticamente mídias recebidas para disco local (WA_MEDIA_AUTO_DOWNLOAD). */
+  get mediaAutoDownload() {
+    return readBoolean(process.env.WA_MEDIA_AUTO_DOWNLOAD, false)
+  },
+  /** Diretório base para salvar mídias baixadas localmente (WA_MEDIA_DOWNLOAD_DIR). */
+  get mediaDownloadDir() {
+    return process.env.WA_MEDIA_DOWNLOAD_DIR ?? 'data/media'
+  },
 }

@@ -311,4 +311,72 @@ describe('baileys-store', () => {
     expect(await store.lidMapping.getLidsForPns(['8800'])).toEqual([{ pn: '8800', lid: '8800@external' }])
     expect(await store.lidMapping.getPnsForLids(['8800@external'])).toEqual([{ lid: '8800@external', pn: '8800' }])
   })
+
+  it('propaga messages.media-update com fallback redis para memoria, redis e sql', async () => {
+    const redisStore = createRedisStoreStub()
+    const sqlStore = createSqlStoreStub()
+    createRedisStoreMock.mockReturnValue(redisStore)
+    createSqlStoreMock.mockReturnValue(sqlStore)
+
+    redisStore.getMessage.mockResolvedValueOnce({
+      key: {
+        remoteJid: 'chat@s.whatsapp.net',
+        id: 'm-1',
+        fromMe: false,
+        participant: 'user@s.whatsapp.net',
+      },
+      message: { imageMessage: { url: 'https://example.com/file.enc' } },
+    })
+
+    const { createBaileysStore } = await import('../src/store/baileys-store.ts')
+    const store = createBaileysStore('tenant')
+    const ev = new EventEmitter()
+    store.bind(ev as never)
+
+    ev.emit('messages.media-update', [
+      {
+        key: {
+          remoteJid: 'chat@s.whatsapp.net',
+          id: 'm-1',
+          fromMe: false,
+          participant: 'user@s.whatsapp.net',
+        },
+        update: {
+          message: {
+            imageMessage: {
+              url: 'https://example.com/file.enc',
+              directPath: '/v/t62.7119/file',
+              mediaKey: Buffer.from('key'),
+            },
+          },
+        },
+      },
+    ])
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(redisStore.getMessage).toHaveBeenCalledWith('chat@s.whatsapp.net:user@s.whatsapp.net:0:m-1')
+    expect(redisStore.setMessage).toHaveBeenCalled()
+    expect(sqlStore.setMessage).toHaveBeenCalled()
+    expect(sqlStore.recordMessageEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: { chatJid: 'chat@s.whatsapp.net', messageId: 'm-1', fromMe: false },
+        type: 'media_update',
+      })
+    )
+    await expect(
+      store.getMessage({
+        remoteJid: 'chat@s.whatsapp.net',
+        id: 'm-1',
+        fromMe: false,
+        participant: 'user@s.whatsapp.net',
+      } as never)
+    ).resolves.toEqual(
+      expect.objectContaining({
+        imageMessage: expect.objectContaining({
+          directPath: '/v/t62.7119/file',
+        }),
+      })
+    )
+  })
 })

@@ -5,6 +5,7 @@ import { config } from '../config/index.js'
 import { ensureMysqlConnection } from '../core/db/connection.js'
 import { getMysqlPool } from '../core/db/mysql.js'
 import { createLogger } from '../observability/logger.js'
+import { downloadIncomingMediaToDisk } from '../utils/media-download.js'
 import { getMessageText, getNormalizedMessage } from '../utils/message.js'
 
 const serialize = (value: unknown) => JSON.stringify(value, BufferJSON.replacer)
@@ -758,6 +759,29 @@ export function createSqlStore(connectionId?: string): SqlStore {
               await setMessageUsers(pool, messageDbId, senderUserId, mentionedJids, quotedJid, participantJids)
 
               if (mediaInfo) {
+                let localPath: string | null = null
+                if (config.mediaAutoDownload && normalized.type) {
+                  try {
+                    localPath = await downloadIncomingMediaToDisk({
+                      messageId,
+                      messageDbId,
+                      mediaType: normalized.type as 'imageMessage' | 'videoMessage' | 'audioMessage' | 'documentMessage' | 'stickerMessage' | 'ptvMessage',
+                      mediaNode: mediaInfo.data,
+                      fileName: mediaInfo.fileName,
+                      mimeType: mediaInfo.mimeType,
+                      connectionId: resolvedConnectionId,
+                    })
+                  } catch (error) {
+                    getStoreLogger().warn('falha ao baixar midia para disco local', {
+                      err: error,
+                      action: 'downloadIncomingMediaToDisk',
+                      connectionId: resolvedConnectionId,
+                      messageId,
+                      messageDbId,
+                      mediaType: mediaInfo.mediaType,
+                    })
+                  }
+                }
                 await pool.execute(
                   `DELETE FROM message_media
                  WHERE connection_id = ?
@@ -777,9 +801,20 @@ export function createSqlStore(connectionId?: string): SqlStore {
                    local_path,
                    data_json
                  )
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `,
-                  [resolvedConnectionId, messageDbId, mediaInfo.mediaType, mediaInfo.mimeType, mediaInfo.fileSha256, mediaInfo.fileLength, mediaInfo.fileName, mediaInfo.url, serialize(mediaInfo.data)]
+                  [
+                    resolvedConnectionId,
+                    messageDbId,
+                    mediaInfo.mediaType,
+                    mediaInfo.mimeType,
+                    mediaInfo.fileSha256,
+                    mediaInfo.fileLength,
+                    mediaInfo.fileName,
+                    mediaInfo.url,
+                    localPath,
+                    serialize(mediaInfo.data),
+                  ]
                 )
               }
               if (messageText && messageText.trim().length) {

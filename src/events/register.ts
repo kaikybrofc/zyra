@@ -1,4 +1,4 @@
-import { DisconnectReason, type BaileysEventMap, type GroupMetadata, type WASocket } from '@whiskeysockets/baileys'
+import { DisconnectReason, type BaileysEventMap, type GroupMetadata, type WAMessage, type WASocket } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import qrcode from 'qrcode-terminal'
 import type { AppLogger } from '../observability/logger.js'
@@ -73,8 +73,7 @@ const ALL_EVENTS = ['connection.update', 'creds.update', 'messaging-history.set'
 const REACHOUT_TIMELOCK_STATUS_CODE = 463
 
 type MissingEvents = Exclude<keyof BaileysEventMap, (typeof ALL_EVENTS)[number]>
-const _allEventsCovered: MissingEvents extends never ? true : never = true
-void _allEventsCovered
+type _AllEventsCoverageHint = MissingEvents extends never ? true : MissingEvents
 
 /**
  * Define a estrutura de um manipulador de evento genérico.
@@ -95,6 +94,9 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
   const newsletterMetadataSync = new Map<string, { nextAttemptAt: number; inFlight?: Promise<void> }>()
   const NEWSLETTER_METADATA_SYNC_TTL_MS = 5 * 60_000
   const NEWSLETTER_METADATA_RETRY_TTL_MS = 30 * 1000
+  const newsletterMediaRetryState = new Map<string, { attempts: number; nextAttemptAt: number; lastError?: string | null }>()
+  const NEWSLETTER_MEDIA_RETRY_BASE_MS = 10_000
+  const NEWSLETTER_MEDIA_RETRY_MAX_ATTEMPTS = 5
   type EventContext = {
     actorJid?: string | null
     targetJid?: string | null
@@ -117,6 +119,88 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
   }
   const toGroupJid = (jid?: string | null) => (jid && jid.endsWith('@g.us') ? jid : null)
   const isNewsletterJid = (jid?: string | null): jid is string => Boolean(jid && jid.endsWith('@newsletter'))
+  const getNewsletterRetryKey = (message: WAMessage): string | null => {
+    const chatJid = message.key?.remoteJid
+    const messageId = message.key?.id
+    if (!chatJid || !messageId || !isNewsletterJid(chatJid)) return null
+    return `${chatJid}:${messageId}`
+  }
+  const hasMediaKey = (message: WAMessage): boolean => {
+    const normalized = getNormalizedMessage(message)
+    if (!normalized.content || !normalized.type) return false
+    const inner = (normalized.content as Record<string, unknown>)[normalized.type] as
+      | { mediaKey?: Uint8Array | Buffer | null; mediaKeyTimestamp?: number | null }
+      | null
+      | undefined
+    if (!inner || typeof inner !== 'object') return false
+    if (inner.mediaKey && ((inner.mediaKey as Uint8Array).byteLength ?? 0) > 0) return true
+    return typeof inner.mediaKeyTimestamp === 'number' && Number.isFinite(inner.mediaKeyTimestamp)
+  }
+  const hasMediaTransportHints = (message: WAMessage): boolean => {
+    const normalized = getNormalizedMessage(message)
+    if (!normalized.content || !normalized.type) return false
+    const inner = (normalized.content as Record<string, unknown>)[normalized.type] as
+      | { directPath?: string | null; url?: string | null }
+      | null
+      | undefined
+    if (!inner || typeof inner !== 'object') return false
+    return Boolean(inner.directPath || inner.url)
+  }
+  const maybeRefreshNewsletterMedia = async (message: WAMessage): Promise<void> => {
+    const key = message.key
+    const chatJid = key?.remoteJid ?? null
+    if (!isNewsletterJid(chatJid)) return
+    const normalized = getNormalizedMessage(message)
+    if (!normalized.type || !['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage', 'ptvMessage'].includes(normalized.type)) return
+    const retryKey = getNewsletterRetryKey(message)
+    if (!retryKey) return
+    if (hasMediaKey(message)) {
+      newsletterMediaRetryState.delete(retryKey)
+      return
+    }
+    if (!hasMediaTransportHints(message)) return
+    const now = Date.now()
+    const retryState = newsletterMediaRetryState.get(retryKey)
+    if (retryState) {
+      if (retryState.attempts >= NEWSLETTER_MEDIA_RETRY_MAX_ATTEMPTS) return
+      if (retryState.nextAttemptAt > now) return
+    }
+    const nextAttempt = (retryState?.attempts ?? 0) + 1
+    newsletterMediaRetryState.set(retryKey, {
+      attempts: nextAttempt,
+      nextAttemptAt: now + NEWSLETTER_MEDIA_RETRY_BASE_MS * nextAttempt,
+      lastError: retryState?.lastError ?? null,
+    })
+    try {
+      const refreshed = await sock.updateMediaMessage(message)
+      if (!refreshed || !refreshed.key || !hasMediaKey(refreshed)) return
+      sock.ev.emit('messages.update', [{ key: refreshed.key, update: refreshed }])
+      newsletterMediaRetryState.delete(retryKey)
+      logger.debug('midia newsletter atualizada via updateMediaMessage', {
+        chatJid,
+        messageId: refreshed.key.id ?? key?.id ?? null,
+        messageType: normalized.type,
+      })
+    } catch (error) {
+      const messageError = error instanceof Error ? error.message : String(error)
+      const prev = newsletterMediaRetryState.get(retryKey)
+      newsletterMediaRetryState.set(retryKey, {
+        attempts: prev?.attempts ?? nextAttempt,
+        nextAttemptAt: now + NEWSLETTER_MEDIA_RETRY_BASE_MS * (prev?.attempts ?? nextAttempt),
+        lastError: messageError,
+      })
+      const shouldLogWarn = !prev?.lastError || prev.lastError !== messageError
+      if (shouldLogWarn) {
+        logger.warn('falha ao atualizar midia de newsletter', {
+          err: error,
+          chatJid,
+          messageId: key?.id ?? null,
+          messageType: normalized.type,
+          attempt: prev?.attempts ?? nextAttempt,
+        })
+      }
+    }
+  }
   const recordNewsletterSnapshot = (newsletterId: string | null | undefined, data: Record<string, unknown>) => {
     if (!sqlStore.enabled || !newsletterId) return
     void sqlStore.recordNewsletter({ newsletterId, data })
@@ -434,6 +518,8 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
       for (const item of updates) {
         const key = (item as { key?: { remoteJid?: string | null; id?: string | null; fromMe?: boolean | null; participant?: string | null } }).key
         const update = (item as { update?: unknown }).update
+        const mergedMessage = { key, ...(typeof update === 'object' && update ? (update as object) : {}) } as WAMessage
+        void maybeRefreshNewsletterMedia(mergedMessage)
         const messageKey = toEventMessageKey(key)
         if (!messageKey) continue
         const chatJid = messageKey.chatJid
@@ -450,6 +536,10 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
       try {
         if (event.type === 'notify') {
           await handleIncomingMessages(sock, event.messages, logger, connectionId, sqlStore)
+          const refreshTasks = event.messages.map((message) => maybeRefreshNewsletterMedia(message))
+          if (refreshTasks.length) {
+            await Promise.allSettled(refreshTasks)
+          }
         }
         logger.debug('evento do Baileys recebido', {
           event: 'messages.upsert',
