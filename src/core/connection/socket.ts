@@ -382,8 +382,32 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
   ;(sock as SocketWithCredsFlush).flushCredsNow = flushCredsNow
 
   // Registro para encerramento seguro do processo
-  shutdownTargets.add({ sock, store, saveCreds, saveAntiBanState: config.antibanEnabled ? saveAntibanState : undefined, cleanup: clearAntibanStateTimer, logger, connectionId })
+  shutdownTargets.add({
+    sock,
+    store,
+    saveCreds,
+    saveAntiBanState: config.antibanEnabled ? saveAntibanState : undefined,
+    cleanup: clearAntibanStateTimer,
+    logger,
+    connectionId,
+  })
   registerGracefulShutdown()
 
   return sock
 }
+
+/**
+ * Remove um alvo de shutdown da conexão atual caso ele ainda aponte para o mesmo socket.
+ */
+export const unregisterShutdownTarget = (connectionId: string, sock?: ReturnType<typeof makeWASocket>) => {
+  for (const target of shutdownTargets) {
+    if (target.connectionId !== connectionId) continue
+    if (sock && target.sock !== sock) continue
+    shutdownTargets.delete(target)
+  }
+}
+
+/**
+ * Indica se o processo está em ciclo de encerramento gracioso.
+ */
+export const isShutdownInProgress = () => shutdownInProgress

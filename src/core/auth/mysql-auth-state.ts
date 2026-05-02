@@ -111,6 +111,28 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
   await ensureAuthFolder(authDir)
   const redisClient = config.redisUrl ? await getRedisClient() : null
   const { redisCredsKey, legacyRedisCredsKey, redisKeysKey } = buildRedisKeys(connectionId)
+  let redisFailureLogged = false
+
+  const markRedisUnavailable = (error: unknown) => {
+    if (redisFailureLogged) return
+    redisFailureLogged = true
+    console.warn('[auth] falha ao acessar redis, seguindo com mysql/disco', { error })
+  }
+
+  const withRedis = async <T>(fn: (client: NonNullable<typeof redisClient>) => Promise<T>, fallback: T): Promise<T> => {
+    if (!redisClient) return fallback
+    try {
+      const result = await fn(redisClient)
+      if (redisFailureLogged) {
+        redisFailureLogged = false
+        console.info('[auth] redis recuperado, reativando cache')
+      }
+      return result
+    } catch (error) {
+      markRedisUnavailable(error)
+      return fallback
+    }
+  }
 
   const markMysqlUnhealthy = (error: unknown) => {
     mysqlHealthy = false
@@ -175,8 +197,8 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
 
   // --- Recuperação das Credenciais ---
   const credsFromMysql = await fetchCredsFromMysql()
-  const credsFromRedisRaw = redisClient ? await redisClient.get(redisCredsKey) : null
-  const credsFromLegacyRaw = redisClient && legacyRedisCredsKey ? await redisClient.get(legacyRedisCredsKey) : null
+  const credsFromRedisRaw = await withRedis((client) => client.get(redisCredsKey), null)
+  const credsFromLegacyRaw = legacyRedisCredsKey ? await withRedis((client) => client.get(legacyRedisCredsKey), null) : null
 
   const credsFromRedis = credsFromRedisRaw ? deserialize<AuthenticationCreds>(credsFromRedisRaw) : credsFromLegacyRaw ? deserialize<AuthenticationCreds>(credsFromLegacyRaw) : null
 
@@ -198,8 +220,8 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
   if (!serializedMysql || serializedMysql !== serializedCurrent) {
     await storeCredsInMysql(creds)
   }
-  if (redisClient && credsFromRedisRaw !== serializedCurrent) {
-    await redisClient.set(redisCredsKey, serializedCurrent)
+  if (credsFromRedisRaw !== serializedCurrent) {
+    await withRedis((client) => client.set(redisCredsKey, serializedCurrent), 'OK')
   }
   const serializedDisk = credsFromDisk ? serialize(credsFromDisk) : null
   if (!serializedDisk || serializedDisk !== serializedCurrent) {
@@ -221,7 +243,7 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
       // L1: Redis
       if (redisClient) {
         const redisKey = redisKeysKey(type)
-        const values = await redisClient.hmGet(redisKey, ids)
+        const values = await withRedis<Array<string | null>>((client) => client.hmGet(redisKey, ids), new Array(ids.length).fill(null))
         values.forEach((raw, index) => {
           const id = ids[index]
           if (!id || !raw) return
@@ -282,7 +304,7 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
 
       // Cache Warming: Sincroniza L2/L3 de volta para L1
       if (redisClient && Object.keys(toWarm).length) {
-        await redisClient.hSet(redisKeysKey(type), toWarm)
+        await withRedis((client) => client.hSet(redisKeysKey(type), toWarm), 0)
       }
 
       return data
@@ -351,13 +373,18 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
           }
         }
       }
-      if (redisPipeline) await redisPipeline.exec()
+      if (redisPipeline) {
+        await withRedis((client) => {
+          void client
+          return redisPipeline.exec()
+        }, null)
+      }
     },
   }
 
   const saveCreds = async () => {
     const tasks: Array<Promise<unknown>> = [storeCredsInMysql(creds)]
-    if (redisClient) tasks.push(redisClient.set(redisCredsKey, serialize(creds)))
+    if (redisClient) tasks.push(withRedis((client) => client.set(redisCredsKey, serialize(creds)), 'OK'))
     tasks.push(writeData(authDir, 'creds.json', creds))
     await Promise.all(tasks)
   }
