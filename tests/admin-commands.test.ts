@@ -132,6 +132,19 @@ describe('admin commands', () => {
     expect(ctx.promote).toHaveBeenCalledWith(['5511777777777@s.whatsapp.net'])
   })
 
+  it('nao duplica alvo quando o mesmo usuario chega em formatos diferentes (lid e pn)', async () => {
+    const ctx = createCtx({
+      commandName: 'ban',
+      mentionedJids: ['5511666666666@lid'],
+      quotedSender: '5511666666666@s.whatsapp.net',
+    })
+
+    await banCommand.execute(ctx as never)
+
+    expect(ctx.ban).toHaveBeenCalledWith(['5511666666666@lid'])
+    expect(ctx.reply).toHaveBeenCalledWith('✅ Banimento aplicado para 1 participante(s).')
+  })
+
   it('trata erro de API em comando de participante sem quebrar a execucao', async () => {
     const ctx = createCtx({
       commandName: 'ban',

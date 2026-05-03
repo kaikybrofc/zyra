@@ -55,8 +55,17 @@ const normalizeParticipant = (value: string): string => {
  * @returns Lista de participantes sem duplicidade.
  */
 const parseParticipants = (values: string[]): string[] => {
-  const normalized = values.map(normalizeParticipant).filter(Boolean)
-  return [...new Set(normalized)]
+  const uniqueByBase = new Map<string, string>()
+  for (const value of values) {
+    const normalized = normalizeParticipant(value)
+    if (!normalized) continue
+    const [base] = normalized.split('@')
+    const dedupeKey = base ?? normalized
+    if (!uniqueByBase.has(dedupeKey)) {
+      uniqueByBase.set(dedupeKey, normalized)
+    }
+  }
+  return [...uniqueByBase.values()]
 }
 
 /** Padroniza JID para comparação sem sensibilidade a maiúsculas/minúsculas. */
