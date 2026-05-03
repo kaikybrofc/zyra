@@ -146,6 +146,12 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
     if (!inner || typeof inner !== 'object') return false
     return Boolean(inner.directPath || inner.url)
   }
+  const isKnownNewsletterMediaRefreshError = (error: unknown): boolean => {
+    const message = error instanceof Error ? error.message : String(error)
+    if (message.includes("Cannot read properties of null (reading 'length')")) return true
+    if (!(error instanceof Error) || !error.stack) return false
+    return error.stack.includes('passArray8ToWasm0') && error.stack.includes('messages-media.js')
+  }
   const maybeRefreshNewsletterMedia = async (message: WAMessage): Promise<void> => {
     const key = message.key
     const chatJid = key?.remoteJid ?? null
@@ -189,6 +195,17 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
         nextAttemptAt: now + NEWSLETTER_MEDIA_RETRY_BASE_MS * (prev?.attempts ?? nextAttempt),
         lastError: messageError,
       })
+      const isKnownError = isKnownNewsletterMediaRefreshError(error)
+      if (isKnownError) {
+        logger.debug('falha conhecida ao atualizar midia de newsletter (ignorada)', {
+          chatJid,
+          messageId: key?.id ?? null,
+          messageType: normalized.type,
+          attempt: prev?.attempts ?? nextAttempt,
+          error: messageError,
+        })
+        return
+      }
       const shouldLogWarn = !prev?.lastError || prev.lastError !== messageError
       if (shouldLogWarn) {
         logger.warn('falha ao atualizar midia de newsletter', {
