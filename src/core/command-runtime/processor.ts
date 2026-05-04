@@ -189,7 +189,7 @@ const logIncomingMessage = async (context: IncomingCommandEnvelope, logger: AppL
  * @param logger Logger para telemetria de falhas de envio.
  * @returns Contexto pronto para execução de comandos.
  */
-const createRuntimeContext = (context: IncomingCommandEnvelope, logger: AppLogger): CommandContext => {
+const createRuntimeContext = (context: IncomingCommandEnvelope, logger: AppLogger, sqlStore: SqlStore): CommandContext => {
   const admin = createCommandAdminActions({
     sock: context.sock,
     chatId: context.chatId,
@@ -243,6 +243,29 @@ const createRuntimeContext = (context: IncomingCommandEnvelope, logger: AppLogge
       )
     },
     resolveStickerSourceMedia: async () => resolveStickerSourceMediaFromMessage(context.message),
+    saveStickerTemplate: async (templateText) => {
+      if (!sqlStore.enabled) return
+      await sqlStore.setUserStickerTemplate({ userJid: context.sender, templateText })
+    },
+    loadStickerTemplate: async () => {
+      if (!sqlStore.enabled) return null
+      return sqlStore.getUserStickerTemplate(context.sender)
+    },
+    recordGeneratedSticker: async (entry) => {
+      if (!sqlStore.enabled) return
+      await sqlStore.recordUserGeneratedSticker({
+        userJid: context.sender,
+        chatJid: context.chatId,
+        packName: entry.packName,
+        packAuthor: entry.packAuthor,
+        templateText: entry.templateText ?? null,
+        localPath: entry.localPath,
+        fileSha256: entry.fileSha256,
+        fileLength: entry.fileLength,
+        mimeType: entry.mimeType ?? null,
+        data: entry.data,
+      })
+    },
   })
 }
 
@@ -314,7 +337,7 @@ export function createCommandProcessor({ logger, sqlStore }: CreateCommandProces
 
       const startedAt = Date.now()
       let success = true
-      const cmdCtx = createRuntimeContext(context, logger)
+      const cmdCtx = createRuntimeContext(context, logger, sqlStore)
 
       try {
         await command.execute(cmdCtx)

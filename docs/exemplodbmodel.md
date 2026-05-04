@@ -375,6 +375,37 @@ CREATE TABLE commands_log (
   CONSTRAINT fk_commands_conn FOREIGN KEY (connection_id) REFERENCES connections(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE user_sticker_templates (
+  connection_id VARCHAR(64) NOT NULL,
+  user_id BINARY(16) NOT NULL,
+  template_text VARCHAR(512) NOT NULL,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (connection_id, user_id),
+  INDEX idx_sticker_template_user (connection_id, user_id),
+  CONSTRAINT fk_sticker_templates_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
+  CONSTRAINT fk_sticker_templates_user FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE user_generated_stickers (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  connection_id VARCHAR(64) NOT NULL,
+  user_id BINARY(16) NOT NULL,
+  chat_jid VARCHAR(128) NULL,
+  pack_name VARCHAR(255) NULL,
+  pack_author VARCHAR(255) NULL,
+  template_text VARCHAR(512) NULL,
+  local_path VARCHAR(1024) NOT NULL,
+  file_sha256 VARCHAR(128) NOT NULL,
+  mime_type VARCHAR(128) NULL,
+  file_length BIGINT NOT NULL,
+  data_json JSON NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_user_generated_stickers_user (connection_id, user_id, created_at),
+  INDEX idx_user_generated_stickers_hash (connection_id, file_sha256),
+  CONSTRAINT fk_user_generated_stickers_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
+  CONSTRAINT fk_user_generated_stickers_user FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE newsletters (
   connection_id VARCHAR(64) NOT NULL,
   newsletter_id VARCHAR(128) NOT NULL,

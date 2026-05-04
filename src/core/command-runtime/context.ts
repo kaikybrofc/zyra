@@ -62,6 +62,21 @@ type CommandContextInit = {
   react: (emoji: string) => Promise<void>
   /** Resolve mídia (da mensagem atual ou citada) para geração de sticker. */
   resolveStickerSourceMedia: () => Promise<StickerSourceMedia | null>
+  /** Persiste o template de pack/autor escolhido pelo usuário para o comando de sticker. */
+  saveStickerTemplate: (templateText: string) => Promise<void>
+  /** Recupera o último template de pack/autor salvo pelo usuário para o comando de sticker. */
+  loadStickerTemplate: () => Promise<string | null>
+  /** Registra metadados da figurinha gerada para uso futuro em sticker packs. */
+  recordGeneratedSticker: (entry: {
+    packName: string
+    packAuthor: string
+    templateText?: string | null
+    localPath: string
+    fileSha256: string
+    fileLength: number
+    mimeType?: string | null
+    data?: unknown
+  }) => Promise<void>
   /** Ações administrativas disponíveis no contexto. */
   admin: CommandAdminActions
 }
@@ -99,6 +114,9 @@ export class CommandContext {
   readonly #replyAction: CommandContextInit['reply']
   readonly #reactAction: CommandContextInit['react']
   readonly #resolveStickerSourceMediaAction: CommandContextInit['resolveStickerSourceMedia']
+  readonly #saveStickerTemplateAction: CommandContextInit['saveStickerTemplate']
+  readonly #loadStickerTemplateAction: CommandContextInit['loadStickerTemplate']
+  readonly #recordGeneratedStickerAction: CommandContextInit['recordGeneratedSticker']
 
   /**
    * @param options Dados iniciais do contexto vindos do processador.
@@ -118,6 +136,9 @@ export class CommandContext {
     reply,
     react,
     resolveStickerSourceMedia,
+    saveStickerTemplate,
+    loadStickerTemplate,
+    recordGeneratedSticker,
     admin,
   }: CommandContextInit) {
     this.chatId = chatId
@@ -135,6 +156,9 @@ export class CommandContext {
     this.#replyAction = reply
     this.#reactAction = react
     this.#resolveStickerSourceMediaAction = resolveStickerSourceMedia
+    this.#saveStickerTemplateAction = saveStickerTemplate
+    this.#loadStickerTemplateAction = loadStickerTemplate
+    this.#recordGeneratedStickerAction = recordGeneratedSticker
   }
 
   /**
@@ -165,6 +189,36 @@ export class CommandContext {
    */
   async getStickerSourceMedia(): Promise<StickerSourceMedia | null> {
     return this.#resolveStickerSourceMediaAction()
+  }
+
+  /**
+   * Salva o template de pack/autor para reutilização no comando de sticker.
+   */
+  async saveStickerTemplate(templateText: string): Promise<void> {
+    await this.#saveStickerTemplateAction(templateText)
+  }
+
+  /**
+   * Carrega o template de pack/autor salvo anteriormente para o comando de sticker.
+   */
+  async loadStickerTemplate(): Promise<string | null> {
+    return this.#loadStickerTemplateAction()
+  }
+
+  /**
+   * Registra metadados da figurinha gerada para biblioteca local/futuro sticker pack.
+   */
+  async recordGeneratedSticker(entry: {
+    packName: string
+    packAuthor: string
+    templateText?: string | null
+    localPath: string
+    fileSha256: string
+    fileLength: number
+    mimeType?: string | null
+    data?: unknown
+  }): Promise<void> {
+    await this.#recordGeneratedStickerAction(entry)
   }
 
   /**

@@ -187,6 +187,20 @@ export type SqlStore = {
   recordMessageFailure: (entry: { chatJid: string; messageId?: string | null; senderJid?: string | null; actorJid?: string | null; reason?: string | null; data?: unknown }) => Promise<void>
   recordBotSession: (entry: { deviceLabel?: string | null; platform?: string | null; appVersion?: string | null; lastLogin?: Date | null; data?: unknown }) => Promise<void>
   recordCommandLog: (entry: { actorJid?: string | null; chatJid: string; commandName: string; argsText?: string | null; success: boolean; durationMs?: number | null; data?: unknown }) => Promise<void>
+  setUserStickerTemplate: (entry: { userJid: string; templateText: string }) => Promise<void>
+  getUserStickerTemplate: (userJid: string) => Promise<string | null>
+  recordUserGeneratedSticker: (entry: {
+    userJid: string
+    chatJid?: string | null
+    packName?: string | null
+    packAuthor?: string | null
+    templateText?: string | null
+    localPath: string
+    fileSha256: string
+    fileLength: number
+    mimeType?: string | null
+    data?: unknown
+  }) => Promise<void>
   setUserDevice: (entry: { userJid: string; deviceId: string; data?: unknown }) => Promise<void>
   setChatUser: (chatJid: string, userJid: string, role?: string | null) => Promise<void>
   deleteChatUser: (chatJid: string, userJid: string) => Promise<void>
@@ -230,6 +244,9 @@ export function createSqlStore(connectionId?: string): SqlStore {
       recordMessageFailure: async () => undefined,
       recordBotSession: async () => undefined,
       recordCommandLog: async () => undefined,
+      setUserStickerTemplate: async () => undefined,
+      getUserStickerTemplate: async () => null,
+      recordUserGeneratedSticker: async () => undefined,
       setUserDevice: async () => undefined,
       setChatUser: async () => undefined,
       deleteChatUser: async () => undefined,
@@ -1573,6 +1590,110 @@ export function createSqlStore(connectionId?: string): SqlStore {
            )
            VALUES (?, IF(?, UNHEX(REPLACE(?, '-', '')), NULL), ?, ?, ?, ?, ?, ?)`,
             [resolvedConnectionId, actorId ? 1 : 0, actorId, chatJid, commandName, entry.argsText ?? null, entry.success ? 1 : 0, durationMs, entry.data ? serialize(entry.data) : null]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
+    setUserStickerTemplate: async (entry) =>
+      safe(
+        async (pool) => {
+          const userJid = normalizeJid(entry.userJid)
+          const templateText = normalizeString(entry.templateText, {
+            maxLength: 512,
+            truncate: true,
+          })
+          if (!userJid || !templateText) return
+          const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: userJid }], null)
+          if (!userId) return
+          await pool.execute(
+            `INSERT INTO user_sticker_templates (
+             connection_id,
+             user_id,
+             template_text
+           )
+           VALUES (?, UNHEX(REPLACE(?, '-', '')), ?)
+           ON DUPLICATE KEY UPDATE
+             template_text = VALUES(template_text),
+             updated_at = CURRENT_TIMESTAMP`,
+            [resolvedConnectionId, userId, templateText]
+          )
+        },
+        undefined,
+        { ensureConnection: true }
+      ),
+    getUserStickerTemplate: async (userJid) =>
+      safe(
+        async (pool) => {
+          const normalizedUser = normalizeJid(userJid)
+          if (!normalizedUser) return null
+          const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedUser }], null)
+          if (!userId) return null
+          type StickerTemplateRow = RowDataPacket & { template_text: string | null }
+          const [rows] = await pool.query<StickerTemplateRow[]>(
+            `SELECT template_text
+             FROM user_sticker_templates
+             WHERE connection_id = ?
+               AND user_id = UNHEX(REPLACE(?, '-', ''))
+             LIMIT 1`,
+            [resolvedConnectionId, userId]
+          )
+          const templateText = rows[0]?.template_text
+          return normalizeString(templateText, { maxLength: 512 }) ?? null
+        },
+        null,
+        { ensureConnection: true }
+      ),
+    recordUserGeneratedSticker: async (entry) =>
+      safe(
+        async (pool) => {
+          const userJid = normalizeJid(entry.userJid)
+          const localPath = normalizeString(entry.localPath, { maxLength: 1024, truncate: true })
+          const fileSha256 = normalizeString(entry.fileSha256, { maxLength: MAX_LENGTHS.fileSha256 })
+          if (!userJid || !localPath || !fileSha256) return
+          const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: userJid }], null)
+          if (!userId) return
+          const chatJid = normalizeJid(entry.chatJid ?? null)
+          const packName = normalizeString(entry.packName ?? null, { maxLength: MAX_LENGTHS.displayName, truncate: true })
+          const packAuthor = normalizeString(entry.packAuthor ?? null, { maxLength: MAX_LENGTHS.displayName, truncate: true })
+          const templateText = normalizeString(entry.templateText ?? null, { maxLength: 512, truncate: true })
+          const mimeType = normalizeString(entry.mimeType ?? null, { maxLength: MAX_LENGTHS.mimeType })
+          const fileLength = typeof entry.fileLength === 'number' && Number.isFinite(entry.fileLength) && entry.fileLength >= 0
+            ? entry.fileLength
+            : 0
+          const dataJson = {
+            link: localPath,
+            hash: fileSha256,
+            ...(entry.data && typeof entry.data === 'object' ? (entry.data as Record<string, unknown>) : {}),
+          }
+          await pool.execute(
+            `INSERT INTO user_generated_stickers (
+             connection_id,
+             user_id,
+             chat_jid,
+             pack_name,
+             pack_author,
+             template_text,
+             local_path,
+             file_sha256,
+             mime_type,
+             file_length,
+             data_json
+           )
+           VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              resolvedConnectionId,
+              userId,
+              chatJid,
+              packName,
+              packAuthor,
+              templateText,
+              localPath,
+              fileSha256,
+              mimeType,
+              fileLength,
+              serialize(dataJson),
+            ]
           )
         },
         undefined,
