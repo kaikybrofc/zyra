@@ -16,6 +16,9 @@ type StickerCtx = {
   sendSticker: ReturnType<typeof vi.fn>
   getStickerSourceMedia: ReturnType<typeof vi.fn>
   getMetadata: ReturnType<typeof vi.fn>
+  saveStickerTemplate: ReturnType<typeof vi.fn>
+  loadStickerTemplate: ReturnType<typeof vi.fn>
+  recordGeneratedSticker: ReturnType<typeof vi.fn>
 }
 
 const createCtx = (): StickerCtx => ({
@@ -27,6 +30,9 @@ const createCtx = (): StickerCtx => ({
   sendSticker: vi.fn().mockResolvedValue(undefined),
   getStickerSourceMedia: vi.fn(),
   getMetadata: vi.fn().mockResolvedValue({ subject: 'Grupo Teste' }),
+  saveStickerTemplate: vi.fn().mockResolvedValue(undefined),
+  loadStickerTemplate: vi.fn().mockResolvedValue(null),
+  recordGeneratedSticker: vi.fn().mockResolvedValue(undefined),
 })
 
 describe('sticker command', () => {
@@ -37,12 +43,10 @@ describe('sticker command', () => {
     await stickerCommand.execute(ctx as never)
 
     expect(ctx.reply).toHaveBeenCalledWith(
-      'Uso: envie `!s pack/autor` na legenda de uma mídia ou respondendo uma mídia.\n'
-      + 'Exemplos:\n'
-      + '- `!s Zyra/#nome`\n'
-      + '- `!s Pack #grupo/#nome - #numero`\n'
-      + '- `!s Evento #data/#hora`\n'
-      + 'Placeholders: #data #hora #nome #grupo #numero'
+      'Não encontrei mídia para converter em figurinha.\n'
+      + 'Use `!s` na legenda da mídia ou respondendo uma imagem/vídeo/sticker.\n'
+      + 'Dica: `!s` sozinho reutiliza seu template salvo.\n'
+      + 'Para ajuda completa use `!s -h`.'
     )
     expect(ctx.sendSticker).not.toHaveBeenCalled()
   })
