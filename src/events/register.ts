@@ -92,7 +92,6 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
   const sqlStore = createSqlStore(connectionId)
   let restartedAfterNewLogin = false
   const newsletterMetadataSync = new Map<string, { nextAttemptAt: number; inFlight?: Promise<void> }>()
-<<<<<<< HEAD
   const NEWSLETTER_METADATA_SYNC_TTL_MS = config.newsletterMetadataSyncTtlMs
   const NEWSLETTER_METADATA_RETRY_TTL_MS = config.newsletterMetadataRetryTtlMs
   const MAX_NEWSLETTER_METADATA_ENTRIES = 1_000
