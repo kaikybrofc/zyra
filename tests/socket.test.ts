@@ -203,15 +203,19 @@ describe('socket', () => {
     expect(useMultiFileAuthStateMock).toHaveBeenCalledTimes(1)
     expect(useMultiFileAuthStateMock).toHaveBeenCalledWith('/tmp/auth-test/conn')
 
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code?: number) => undefined as never)
+
     handlers.SIGTERM?.()
-    await new Promise((resolve) => setImmediate(resolve))
+    await vi.waitFor(() => expect(exitSpy).toHaveBeenCalled(), { timeout: 500 })
 
     expect(fallbackSaveCreds).toHaveBeenCalled()
     expect(saveCreds).toHaveBeenCalled()
     expect(sock1.end).toHaveBeenCalled()
     expect(sock2.end).toHaveBeenCalled()
+    expect(exitSpy).toHaveBeenCalledWith(0)
 
     onceSpy.mockRestore()
+    exitSpy.mockRestore()
   })
 
   it('registra warning de versao e loga erro ao falhar saveCreds', async () => {
