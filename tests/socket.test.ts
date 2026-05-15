@@ -408,6 +408,39 @@ describe('socket', () => {
     mockConfig.antibanStateSaveIntervalMs = 300000
   })
 
+  it('cancela o timer de credenciais ao fechar conexao (nao-restartRequired)', async () => {
+    vi.useFakeTimers()
+    process.env.WA_CREDS_DEBOUNCE_MS = '1000'
+
+    const ev = new EventEmitter()
+    const sock = { ev, user: { id: 'close@s.whatsapp.net' }, end: vi.fn() }
+    makeWASocketMock.mockReturnValue(sock)
+    fetchLatestMock.mockResolvedValue({ version: [2, 0, 0], isLatest: true })
+
+    const saveCreds = vi.fn().mockResolvedValue(undefined)
+    getAuthStateMock.mockResolvedValue({ state: createState(), saveCreds })
+    createBaileysStoreMock.mockReturnValue(createStore())
+
+    const logger = createLogger()
+    const { createSocket } = await import('../src/core/connection/socket.ts')
+    await createSocket('conn', logger)
+
+    // trigger debounced save
+    ev.emit('creds.update')
+    await vi.advanceTimersByTimeAsync(400)
+    expect(saveCreds).not.toHaveBeenCalled()
+
+    // close with a network-error-style disconnect (not restartRequired)
+    ev.emit('connection.update', {
+      connection: 'close',
+      lastDisconnect: { error: { output: { statusCode: 503 } } },
+    })
+
+    // advance past the original debounce window — timer must have been cleared
+    await vi.advanceTimersByTimeAsync(800)
+    expect(saveCreds).not.toHaveBeenCalled()
+  })
+
   it('debounce agrupa atualizacoes de credenciais', async () => {
     vi.useFakeTimers()
     process.env.WA_CREDS_DEBOUNCE_MS = '1000'
