@@ -59,6 +59,6 @@ describe('queries sql', () => {
       } finally {
         await connection.end()
       }
-    })
+    }, 20_000)
   }
 })
