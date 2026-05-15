@@ -5,8 +5,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /build
 
-# Install build deps for native modules (libsignal, mysql2)
-RUN apk add --no-cache python3 make g++
+# Install build deps for native modules (libsignal, mysql2, canvas)
+RUN apk add --no-cache \
+    python3 make g++ pkgconf \
+    cairo-dev pango-dev pixman-dev jpeg-dev giflib-dev
 
 COPY package*.json .npmrc ./
 # postinstall runs patch-package automatically
@@ -26,7 +28,9 @@ RUN npm run build
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM node:20-alpine AS runtime
 
-RUN apk add --no-cache python3 make g++ && \
+RUN apk add --no-cache \
+    python3 make g++ pkgconf \
+    cairo-dev pango-dev pixman-dev jpeg-dev giflib-dev && \
     addgroup -S zyra && adduser -S zyra -G zyra
 
 WORKDIR /app
