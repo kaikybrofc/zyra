@@ -23,21 +23,51 @@ const createRedisClient = () => {
     return hash
   }
 
+  const makeBaseOps = () => ({
+    hGet: vi.fn(async (hash: string, field: string) => ensure(hash).get(field) ?? null),
+    hSet: vi.fn((hash: string, fieldOrObj: string | Record<string, string>, value?: string) => {
+      if (typeof fieldOrObj === 'object') {
+        for (const [f, v] of Object.entries(fieldOrObj)) ensure(hash).set(f, v)
+      } else {
+        ensure(hash).set(fieldOrObj, value ?? '')
+      }
+      return 1
+    }),
+    hDel: vi.fn(async (hash: string, fields: string | string[]) => {
+      const list = Array.isArray(fields) ? fields : [fields]
+      const target = ensure(hash)
+      for (const field of list) target.delete(field)
+      return list.length
+    }),
+    hKeys: vi.fn(async (hash: string) => Array.from(ensure(hash).keys())),
+  })
+
+  const base = makeBaseOps()
+
+  const makePipeline = () => {
+    const ops: Array<() => void> = []
+    const pipeline: Record<string, unknown> = {
+      hSet: (hash: string, fieldOrObj: string | Record<string, string>, value?: string) => {
+        ops.push(() => base.hSet(hash, fieldOrObj, value))
+        return pipeline
+      },
+      hDel: (hash: string, fields: string | string[]) => {
+        ops.push(() => base.hDel(hash, fields))
+        return pipeline
+      },
+      exec: async () => {
+        for (const op of ops) op()
+        return []
+      },
+    }
+    return pipeline
+  }
+
   return {
     hashes,
     client: {
-      hGet: vi.fn(async (hash: string, field: string) => ensure(hash).get(field) ?? null),
-      hSet: vi.fn(async (hash: string, field: string, value: string) => {
-        ensure(hash).set(field, value)
-        return 1
-      }),
-      hDel: vi.fn(async (hash: string, fields: string | string[]) => {
-        const list = Array.isArray(fields) ? fields : [fields]
-        const target = ensure(hash)
-        for (const field of list) target.delete(field)
-        return list.length
-      }),
-      hKeys: vi.fn(async (hash: string) => Array.from(ensure(hash).keys())),
+      ...base,
+      multi: vi.fn(() => makePipeline()),
     },
   }
 }
@@ -111,5 +141,21 @@ describe('redis-store', () => {
     getRedisClientMock.mockRejectedValueOnce(new Error('redis down'))
     await expect(store.getMessage('missing')).resolves.toBeUndefined()
     await expect(store.getPnForLid('x')).resolves.toBeNull()
+  })
+
+  it('setLidMapping writes both directions atomically via pipeline', async () => {
+    mockConfig.redisUrl = 'redis://test'
+    const redis = createRedisClient()
+    getRedisClientMock.mockResolvedValue(redis.client)
+
+    const { createRedisStore } = await import('../src/store/redis-store.ts')
+    const store = createRedisStore('tenant')
+
+    await store.setLidMapping({ lid: '99@lid', pn: '99' })
+
+    expect(await store.getLidForPn('99')).toBe('99@lid')
+    expect(await store.getPnForLid('99@lid')).toBe('99')
+    // both written via a single multi() call
+    expect(redis.client.multi).toHaveBeenCalledTimes(1)
   })
 })

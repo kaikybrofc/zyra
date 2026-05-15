@@ -116,8 +116,7 @@ export function createRedisStore(connectionId?: string): RedisStore {
       }, undefined),
     setLidMapping: async ({ lid, pn }) =>
       safe(async (client) => {
-        await client.hSet(storeKeys.lidByPn, pn, lid)
-        await client.hSet(storeKeys.pnByLid, lid, pn)
+        await client.multi().hSet(storeKeys.lidByPn, pn, lid).hSet(storeKeys.pnByLid, lid, pn).exec()
       }, undefined),
     getLidForPn: async (pn) =>
       safe(async (client) => {
