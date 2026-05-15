@@ -1,7 +1,7 @@
-diff --git a/node_modules/@whiskeysockets/baileys/lib/Signal/libsignal.js b/node_modules/@whiskeysockets/baileys/lib/Signal/libsignal.js
+diff --git a/node_modules/baileys/lib/Signal/libsignal.js b/node_modules/baileys/lib/Signal/libsignal.js
 index beadd06..623fdb5 100644
---- a/node_modules/@whiskeysockets/baileys/lib/Signal/libsignal.js
-+++ b/node_modules/@whiskeysockets/baileys/lib/Signal/libsignal.js
+--- a/node_modules/baileys/lib/Signal/libsignal.js
++++ b/node_modules/baileys/lib/Signal/libsignal.js
 @@ -40,6 +40,23 @@ export function makeLibSignalRepository(auth, logger, pnToLIDFunc) {
          ttlAutopurge: true,
          updateAgeOnGet: true
