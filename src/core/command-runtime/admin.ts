@@ -1,4 +1,4 @@
-import { jidNormalizedUser, type GroupMetadata, type ParticipantAction, type WASocket } from '@whiskeysockets/baileys'
+import { jidNormalizedUser, type GroupMetadata, type ParticipantAction, type WASocket } from 'baileys'
 
 /**
  * Alvo de um participante, pode ser um único JID ou uma lista de JIDs.

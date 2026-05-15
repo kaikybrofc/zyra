@@ -1,4 +1,4 @@
-import { type WASocket, type proto } from '@whiskeysockets/baileys'
+import { type WASocket, type proto } from 'baileys'
 import type { AppLogger } from '../observability/logger.js'
 import type { SqlStore } from '../store/sql-store.js'
 import { createCommandProcessor } from '../core/command-runtime/processor.js'

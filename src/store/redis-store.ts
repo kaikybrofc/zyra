@@ -1,4 +1,4 @@
-import { BufferJSON, type Chat, type Contact, type GroupMetadata, type LIDMapping, type WAMessage } from '@whiskeysockets/baileys'
+import { BufferJSON, type Chat, type Contact, type GroupMetadata, type LIDMapping, type WAMessage } from 'baileys'
 import { config } from '../config/index.js'
 import { getRedisClient } from '../core/redis/client.js'
 import { getRedisNamespace } from '../core/redis/prefix.js'

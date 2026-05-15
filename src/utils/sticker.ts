@@ -1,4 +1,4 @@
-import { downloadContentFromMessage, extractMessageContent, getContentType, normalizeMessageContent, type proto } from '@whiskeysockets/baileys'
+import { downloadContentFromMessage, extractMessageContent, getContentType, normalizeMessageContent, type proto } from 'baileys'
 import { randomUUID } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'

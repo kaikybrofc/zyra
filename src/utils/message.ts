@@ -1,4 +1,4 @@
-import { extractMessageContent, getContentType, normalizeMessageContent, proto } from '@whiskeysockets/baileys'
+import { extractMessageContent, getContentType, normalizeMessageContent, proto } from 'baileys'
 
 type NormalizedMessage = {
   content: proto.IMessage | undefined

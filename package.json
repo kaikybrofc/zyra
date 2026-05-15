@@ -33,8 +33,9 @@
     "@caed0/webp-conv": "^2.2.3",
     "@hapi/boom": "^10.0.1",
     "@kaikybrofc/logger-module": "^1.0.4",
-    "@whiskeysockets/baileys": "github:WhiskeySockets/Baileys#v7.0.0-rc10",
-    "baileys-antiban": "github:kobie3717/baileys-antiban#master",
+    "baileys": "npm:@whiskeysockets/baileys@7.0.0-rc11",
+    "baileys-antiban": "^1.0.0",
+    "libsignal": "2.0.1",
     "dotenv": "^16.4.5",
     "fflate": "^0.8.2",
     "link-preview-js": "4.0.1",
@@ -59,11 +60,8 @@
   "overrides": {
     "vite": "8.0.5",
     "basic-ftp": "5.3.1",
-    "libsignal": {
-      "protobufjs": "7.5.8"
-    },
-    "@whiskeysockets/libsignal-node": {
-      "protobufjs": "7.5.8"
+    "baileys": {
+      "libsignal": "$libsignal"
     },
     "link-preview-js": "4.0.1"
   }

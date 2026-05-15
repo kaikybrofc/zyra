@@ -1,4 +1,4 @@
-import makeWASocket, { Browsers, DEFAULT_CONNECTION_CONFIG, DisconnectReason, fetchLatestBaileysVersion, useMultiFileAuthState, type SignalRepositoryWithLIDStore } from '@whiskeysockets/baileys'
+import makeWASocket, { Browsers, DEFAULT_CONNECTION_CONFIG, DisconnectReason, fetchLatestBaileysVersion, useMultiFileAuthState, type SignalRepositoryWithLIDStore } from 'baileys'
 import type { WarmUpState } from 'baileys-antiban'
 import { Boom } from '@hapi/boom'
 import { config } from '../../config/index.js'

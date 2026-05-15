@@ -2,7 +2,7 @@ import type {
   AnyMessageContent,
   MiscMessageGenerationOptions,
   WAMessage,
-} from '@whiskeysockets/baileys'
+} from 'baileys'
 import type { StickerSourceMedia } from '../../utils/sticker.js'
 import type {
   CommandAdminActions,

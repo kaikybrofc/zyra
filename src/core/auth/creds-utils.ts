@@ -1,4 +1,4 @@
-import { initAuthCreds, type AuthenticationCreds } from '@whiskeysockets/baileys'
+import { initAuthCreds, type AuthenticationCreds } from 'baileys'
 
 /**
  * Representa a origem de onde as credenciais foram recuperadas.

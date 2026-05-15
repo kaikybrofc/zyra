@@ -1,4 +1,4 @@
-import { BufferJSON, type Chat, type Contact, type GroupMetadata, type GroupParticipant, type LIDMapping, type WAMessage, type proto } from '@whiskeysockets/baileys'
+import { BufferJSON, type Chat, type Contact, type GroupMetadata, type GroupParticipant, type LIDMapping, type WAMessage, type proto } from 'baileys'
 import type { RowDataPacket } from 'mysql2/promise'
 import { randomUUID } from 'node:crypto'
 import { config } from '../config/index.js'

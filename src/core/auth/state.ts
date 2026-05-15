@@ -1,4 +1,4 @@
-import { useMultiFileAuthState, type AuthenticationState } from '@whiskeysockets/baileys'
+import { useMultiFileAuthState, type AuthenticationState } from 'baileys'
 import { config } from '../../config/index.js'
 import { resolveAuthDir } from './auth-dir.js'
 import { useMysqlAuthState } from './mysql-auth-state.js'

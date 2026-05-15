@@ -31,8 +31,8 @@ const useMultiFileAuthState = vi.fn(async (_authDir: string) => ({
   state: { creds: { from: 'disk' } } as never,
   saveCreds: vi.fn(async () => undefined),
 }))
-vi.mock('@whiskeysockets/baileys', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@whiskeysockets/baileys')>()
+vi.mock('baileys', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('baileys')>()
   return { ...actual, useMultiFileAuthState }
 })
 

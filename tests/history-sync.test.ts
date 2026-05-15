@@ -1,4 +1,4 @@
-import { initAuthCreds } from '@whiskeysockets/baileys'
+import { initAuthCreds } from 'baileys'
 import { describe, expect, it } from 'vitest'
 
 describe('history-sync', () => {

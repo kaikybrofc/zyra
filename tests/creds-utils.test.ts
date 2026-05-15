@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { initAuthCreds, type AuthenticationCreds } from '@whiskeysockets/baileys'
+import { initAuthCreds, type AuthenticationCreds } from 'baileys'
 import { normalizeCreds, scoreCreds, selectBestCreds } from '../src/core/auth/creds-utils.js'
 
 describe('creds-utils', () => {

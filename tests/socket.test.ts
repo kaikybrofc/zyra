@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DisconnectReason, initAuthCreds, type AuthenticationState } from '@whiskeysockets/baileys'
+import { DisconnectReason, initAuthCreds, type AuthenticationState } from 'baileys'
 
 let makeWASocketMock: ReturnType<typeof vi.fn>
 let fetchLatestMock: ReturnType<typeof vi.fn>
@@ -22,8 +22,8 @@ const mockConfig = {
   antibanStateSaveIntervalMs: 300000,
 }
 
-vi.mock('@whiskeysockets/baileys', async () => {
-  const actual = await vi.importActual<typeof import('@whiskeysockets/baileys')>('@whiskeysockets/baileys')
+vi.mock('baileys', async () => {
+  const actual = await vi.importActual<typeof import('baileys')>('baileys')
   return {
     ...actual,
     default: (...args: unknown[]) => makeWASocketMock(...args),

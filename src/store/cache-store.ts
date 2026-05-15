@@ -1,4 +1,4 @@
-import { BufferJSON, type CacheStore, type PossiblyExtendedCacheStore } from '@whiskeysockets/baileys'
+import { BufferJSON, type CacheStore, type PossiblyExtendedCacheStore } from 'baileys'
 import { config } from '../config/index.js'
 import { getRedisClient } from '../core/redis/client.js'
 

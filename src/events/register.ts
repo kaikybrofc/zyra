@@ -1,4 +1,4 @@
-import { DisconnectReason, jidDecode, type BaileysEventMap, type GroupMetadata, type WAMessage, type WASocket } from '@whiskeysockets/baileys'
+import { DisconnectReason, jidDecode, type BaileysEventMap, type GroupMetadata, type WAMessage, type WASocket } from 'baileys'
 import { Boom } from '@hapi/boom'
 import qrcode from 'qrcode-terminal'
 import type { AppLogger } from '../observability/logger.js'

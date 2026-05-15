@@ -1,4 +1,4 @@
-import type { proto, AuthenticationCreds } from '@whiskeysockets/baileys'
+import type { proto, AuthenticationCreds } from 'baileys'
 
 export type HistorySyncPolicy = {
   allowOnceForNewLogin: () => void

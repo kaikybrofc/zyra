@@ -1,4 +1,4 @@
-import { type AuthenticationCreds, type AuthenticationState, type SignalDataSet, type SignalDataTypeMap, type SignalKeyStore } from '@whiskeysockets/baileys'
+import { type AuthenticationCreds, type AuthenticationState, type SignalDataSet, type SignalDataTypeMap, type SignalKeyStore } from 'baileys'
 import type { RowDataPacket } from 'mysql2/promise'
 import { config } from '../../config/index.js'
 import { ensureMysqlConnection } from '../db/connection.js'

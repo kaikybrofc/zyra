@@ -1,4 +1,4 @@
-import type { ILogger } from '@whiskeysockets/baileys/lib/Utils/logger.js'
+import type { ILogger } from 'baileys/lib/Utils/logger.js'
 import type { AppLogger } from './logger.js'
 
 type Meta = Record<string, unknown>

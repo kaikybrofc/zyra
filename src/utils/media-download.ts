@@ -1,4 +1,4 @@
-import { downloadContentFromMessage } from '@whiskeysockets/baileys'
+import { downloadContentFromMessage } from 'baileys'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { config } from '../config/index.js'

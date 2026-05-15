@@ -1,4 +1,4 @@
-import { BufferJSON, proto, type SignalDataTypeMap } from '@whiskeysockets/baileys'
+import { BufferJSON, proto, type SignalDataTypeMap } from 'baileys'
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 

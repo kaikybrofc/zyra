@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { BufferJSON, initAuthCreds, type AuthenticationCreds } from '@whiskeysockets/baileys'
+import { BufferJSON, initAuthCreds, type AuthenticationCreds } from 'baileys'
 import { join } from 'node:path'
 
 const serialize = (value: unknown) => JSON.stringify(value, BufferJSON.replacer)

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { stat } from 'node:fs/promises'
 import path from 'node:path'
-import { type AuthenticationCreds, BufferJSON, type GroupMetadata, type WAMessage } from '@whiskeysockets/baileys'
+import { type AuthenticationCreds, BufferJSON, type GroupMetadata, type WAMessage } from 'baileys'
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
 import { loadEnv } from '../../bootstrap/env.js'
 import { config } from '../../config/index.js'

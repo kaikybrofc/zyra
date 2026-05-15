@@ -10,7 +10,7 @@ const mockConfig = {
   mediaDownloadDir: 'data/media',
 }
 
-vi.mock('@whiskeysockets/baileys', () => ({
+vi.mock('baileys', () => ({
   downloadContentFromMessage: (...args: unknown[]) => downloadContentFromMessageMock(...args),
 }))
 

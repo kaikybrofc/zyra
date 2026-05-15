@@ -1,4 +1,4 @@
-import { DEFAULT_CACHE_TTLS, type BaileysEventEmitter, type CacheStore, type Chat, type ChatUpdate, type Contact, type GroupMetadata, type GroupParticipant, type LIDMapping, type PossiblyExtendedCacheStore, type WAMessage, type WAMessageKey } from '@whiskeysockets/baileys'
+import { DEFAULT_CACHE_TTLS, type BaileysEventEmitter, type CacheStore, type Chat, type ChatUpdate, type Contact, type GroupMetadata, type GroupParticipant, type LIDMapping, type PossiblyExtendedCacheStore, type WAMessage, type WAMessageKey } from 'baileys'
 import { createCacheStore, createExtendedCacheStore } from './cache-store.js'
 import { createRedisStore } from './redis-store.js'
 import { createSqlStore } from './sql-store.js'

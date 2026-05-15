@@ -1,4 +1,4 @@
-import type { WASocket } from '@whiskeysockets/baileys'
+import type { WASocket } from 'baileys'
 import { createLogger, type AppLogger } from '../observability/logger.js'
 import { createSocket, isShutdownInProgress, unregisterShutdownTarget } from '../core/connection/socket.js'
 import { registerEvents } from '../events/register.js'

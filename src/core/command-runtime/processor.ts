@@ -1,4 +1,4 @@
-import { type WAMessage, type WASocket, type proto } from '@whiskeysockets/baileys'
+import { type WAMessage, type WASocket, type proto } from 'baileys'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import linkify from 'linkifyjs'
