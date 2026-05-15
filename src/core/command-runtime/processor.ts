@@ -454,6 +454,9 @@ export type CommandProcessor = {
  * @param options Dependências do processador.
  * @returns Um objeto CommandProcessor.
  */
+const MAX_SENDER_TRACKING_ENTRIES = 5_000
+const MAX_CHAT_TRACKING_ENTRIES = 2_000
+
 export function createCommandProcessor({ logger, sqlStore }: CreateCommandProcessorOptions): CommandProcessor {
   const recentMessagesBySender = new Map<string, proto.IMessageKey[]>()
   const recentStickerMessagesByChat = new Map<string, WAMessage[]>()
@@ -487,6 +490,10 @@ export function createCommandProcessor({ logger, sqlStore }: CreateCommandProces
     })
     const lastFive = current.slice(-5)
     recentMessagesBySender.set(senderKey, lastFive)
+    if (recentMessagesBySender.size > MAX_SENDER_TRACKING_ENTRIES) {
+      const oldest = recentMessagesBySender.keys().next().value
+      if (oldest !== undefined) recentMessagesBySender.delete(oldest)
+    }
   }
 
   const trackRecentStickerMessage = (context: IncomingCommandEnvelope): void => {
@@ -495,6 +502,10 @@ export function createCommandProcessor({ logger, sqlStore }: CreateCommandProces
     const list = recentStickerMessagesByChat.get(context.chatId) ?? []
     list.push(context.message)
     recentStickerMessagesByChat.set(context.chatId, list.slice(-8))
+    if (recentStickerMessagesByChat.size > MAX_CHAT_TRACKING_ENTRIES) {
+      const oldest = recentStickerMessagesByChat.keys().next().value
+      if (oldest !== undefined) recentStickerMessagesByChat.delete(oldest)
+    }
   }
 
   const trackRecentChatMessage = (context: IncomingCommandEnvelope): void => {
@@ -502,6 +513,10 @@ export function createCommandProcessor({ logger, sqlStore }: CreateCommandProces
     const list = recentMessagesByChat.get(context.chatId) ?? []
     list.push(context.message)
     recentMessagesByChat.set(context.chatId, list.slice(-200))
+    if (recentMessagesByChat.size > MAX_CHAT_TRACKING_ENTRIES) {
+      const oldest = recentMessagesByChat.keys().next().value
+      if (oldest !== undefined) recentMessagesByChat.delete(oldest)
+    }
   }
 
   const getRecentStickerMessage = (chatId: string): WAMessage | null => {
