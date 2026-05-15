@@ -195,7 +195,7 @@ const registerGracefulShutdown = () => {
     } finally {
       if (forceExit) clearTimeout(forceExit)
     }
-    // Opcional: process.exit(0) se este for o único serviço
+    process.exit(0)
   }
 
   process.once('SIGINT', () => void handler('SIGINT'))
@@ -344,6 +344,10 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
 
     if (update.connection === 'close') {
       clearAntibanStateTimer()
+      if (credsSaveTimer) {
+        clearTimeout(credsSaveTimer)
+        credsSaveTimer = null
+      }
       void saveAntibanState('connection_close')
       const statusCode = (update.lastDisconnect?.error as Boom | undefined)?.output?.statusCode
       logger.warn('status da conexao: encerrada', { connectionId, statusCode })

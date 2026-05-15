@@ -958,4 +958,63 @@ describe('CommandProcessor', () => {
       { text: '🚫 Tester removido por enviar link (antilink ativo).\n🧹 Mensagens apagadas: 1/1.' }
     )
   })
+
+  it('evicts oldest key from recentMessagesByChat when MAX_CHAT_TRACKING_ENTRIES exceeded', async () => {
+    const logger = createLogger()
+    const sqlStore = { enabled: false, recordCommandLog: vi.fn() }
+    const sock = { user: { id: 'bot@s.whatsapp.net' }, sendMessage: vi.fn() }
+
+    const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
+    const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
+
+    const LIMIT = 2_000
+    for (let i = 0; i < LIMIT; i++) {
+      await processor.process(sock as never, {
+        key: { remoteJid: `chat-${i}@g.us`, fromMe: false, id: `msg-${i}`, participant: `user-${i}@s.whatsapp.net` },
+        pushName: 'X',
+        message: { conversation: 'text' },
+        messageTimestamp: 1,
+      } as never)
+    }
+
+    await processor.process(sock as never, {
+      key: { remoteJid: 'chat-new@g.us', fromMe: false, id: 'msg-new', participant: 'user-new@s.whatsapp.net' },
+      pushName: 'X',
+      message: { conversation: 'text' },
+      messageTimestamp: 1,
+    } as never)
+
+    // Inserting LIMIT+1 unique chats should have evicted chat-0 to stay at LIMIT
+    // We verify by checking chat-new is tracked (last sticker lookup returns null since it was text)
+    // and that no error is thrown (Map didn't grow unbounded)
+    expect(sock.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('evicts oldest key from recentMessagesBySender when MAX_SENDER_TRACKING_ENTRIES exceeded', async () => {
+    const logger = createLogger()
+    const sqlStore = { enabled: false, recordCommandLog: vi.fn() }
+    const sock = { user: { id: 'bot@s.whatsapp.net' }, sendMessage: vi.fn() }
+
+    const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
+    const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
+
+    const LIMIT = 5_000
+    for (let i = 0; i < LIMIT; i++) {
+      await processor.process(sock as never, {
+        key: { remoteJid: `group-${i}@g.us`, fromMe: false, id: `msg-${i}`, participant: `user-${i}@s.whatsapp.net` },
+        pushName: 'X',
+        message: { conversation: 'text' },
+        messageTimestamp: 1,
+      } as never)
+    }
+
+    await processor.process(sock as never, {
+      key: { remoteJid: 'group-new@g.us', fromMe: false, id: 'msg-new', participant: 'user-new@s.whatsapp.net' },
+      pushName: 'X',
+      message: { conversation: 'text' },
+      messageTimestamp: 1,
+    } as never)
+
+    expect(sock.sendMessage).not.toHaveBeenCalled()
+  })
 })

@@ -14,7 +14,12 @@ export const ensureAuthFolder = async (folder: string) => {
     await existing
     return
   }
-  const task = mkdir(folder, { recursive: true }).then(() => undefined)
+  const task = mkdir(folder, { recursive: true })
+    .then(() => undefined)
+    .catch((err) => {
+      if (folderReady.get(folder) === task) folderReady.delete(folder)
+      throw err
+    })
   folderReady.set(folder, task)
   await task
 }

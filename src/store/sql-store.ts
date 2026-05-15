@@ -38,13 +38,14 @@ const withLidPnPairLock = async <T>(pairKey: string, fn: () => Promise<T>): Prom
   const current = new Promise<void>((resolve) => {
     release = resolve
   })
-  lidPnPairLocks.set(pairKey, previous.then(() => current))
+  const lock = previous.then(() => current)
+  lidPnPairLocks.set(pairKey, lock)
   await previous
   try {
     return await fn()
   } finally {
     release()
-    if (lidPnPairLocks.get(pairKey) === current) {
+    if (lidPnPairLocks.get(pairKey) === lock) {
       lidPnPairLocks.delete(pairKey)
     }
   }

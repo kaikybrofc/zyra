@@ -132,9 +132,14 @@ export async function downloadIncomingMediaToDisk(params: {
   if (!streamType || !params.mediaNode || typeof params.mediaNode !== 'object') return null
 
   const chunks: Buffer[] = []
+  let totalSize = 0
+  const maxBytes = config.mediaMaxBytes
   const stream = await downloadContentFromMessage(params.mediaNode as never, streamType as never)
   for await (const chunk of stream) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    totalSize += buf.length
+    if (maxBytes > 0 && totalSize > maxBytes) return null
+    chunks.push(buf)
   }
   const buffer = Buffer.concat(chunks)
   if (!buffer.length) return null

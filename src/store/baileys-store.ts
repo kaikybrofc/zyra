@@ -1,4 +1,5 @@
 import { DEFAULT_CACHE_TTLS, type BaileysEventEmitter, type CacheStore, type Chat, type ChatUpdate, type Contact, type GroupMetadata, type GroupParticipant, type LIDMapping, type PossiblyExtendedCacheStore, type WAMessage, type WAMessageKey } from 'baileys'
+import { config } from '../config/index.js'
 import { createCacheStore, createExtendedCacheStore } from './cache-store.js'
 import { createRedisStore } from './redis-store.js'
 import { createSqlStore } from './sql-store.js'
@@ -116,6 +117,7 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
   const contacts = new Map<string, Contact>()
   const groups = new Map<string, GroupMetadata>()
   const messages = new Map<string, WAMessage>()
+  const MAX_CACHED_MESSAGES = config.maxCachedMessages
   const pnToLid = new Map<string, string>()
   const lidToPn = new Map<string, string>()
   let externalLidMapping: LidMappingStore | undefined
@@ -131,6 +133,10 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
     const key = toMessageKey(message.key)
     if (!key) return
     messages.set(key, message)
+    if (MAX_CACHED_MESSAGES > 0 && messages.size > MAX_CACHED_MESSAGES) {
+      const oldest = messages.keys().next().value
+      if (oldest !== undefined) messages.delete(oldest)
+    }
     if (redisStore.enabled) {
       void redisStore.setMessage(key, message)
     }
@@ -291,11 +297,6 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
     })
 
     ev.on('groups.upsert', (groupList) => {
-      const idsPreview = groupList
-        .slice(0, 3)
-        .map((group) => group.id ?? '')
-        .filter(Boolean)
-      console.log('[groups.upsert]', { count: groupList.length, idsPreview, hasId: groupList.some((g) => Boolean(g.id)) })
       for (const group of groupList) {
         const groupId = normalizeJid(group.id)
         if (!groupId) continue
