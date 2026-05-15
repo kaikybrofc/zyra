@@ -80,6 +80,53 @@ sudo systemctl enable redis-server
 npm run dev
 ```
 
+### Docker
+
+O repositório já inclui `Dockerfile` (multi-stage) e `docker-compose.yml` com:
+- `zyra` (bot principal)
+- `backfill` (worker de backfill)
+- `mysql` (MySQL 8)
+- `redis` (Redis 7)
+
+#### 1. Criar `.env`
+```bash
+cp .env.example .env
+```
+
+#### 2. Build das imagens
+O `Dockerfile` usa pacote privado no `npm ci`, então passe o token como secret:
+
+```bash
+export NPM_TOKEN=seu_token_aqui
+DOCKER_BUILDKIT=1 docker build --secret id=npm_token,env=NPM_TOKEN -t zyra:local .
+```
+
+#### 3. Subir stack com Compose
+```bash
+docker compose up -d --build
+```
+
+#### 4. Inicializar banco (primeira execução)
+```bash
+docker compose exec zyra node dist/core/db/init.js
+```
+
+#### 5. Ver logs e status
+```bash
+docker compose ps
+docker compose logs -f zyra
+docker compose logs -f backfill
+```
+
+#### 6. Parar stack
+```bash
+docker compose down
+```
+
+Observações:
+- Persistência de sessão/mídia: volume `zyra-data` em `/app/data`.
+- Métricas do antiban expostas em `9108` (`http://localhost:9108/metrics`).
+
 ### Produção
 ```bash
 npm run build
