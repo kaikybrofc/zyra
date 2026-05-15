@@ -20,6 +20,23 @@ services:
     env_file:
       - .env
 
+  backfill:
+    build: .
+    restart: unless-stopped
+    command: ["node", "dist/core/db/backfill.js"]
+    volumes:
+      - zyra-data:/app/data
+    environment:
+      WA_CONNECTION_ID: default
+      MYSQL_URL: mysql://zyra:zyra@mysql:3306/zyra
+      WA_BACKFILL_ONCE: "false"
+      WA_BACKFILL_INTERVAL_MS: "30000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    env_file:
+      - .env
+
   mysql:
     image: mysql:8.0
     restart: unless-stopped
