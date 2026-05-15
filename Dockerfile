@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 # ── Build stage ──────────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
 
@@ -8,7 +10,8 @@ RUN apk add --no-cache python3 make g++
 
 COPY package*.json .npmrc ./
 # postinstall runs patch-package automatically
-RUN npm ci
+RUN --mount=type=secret,id=npm_token \
+    NODE_AUTH_TOKEN="$(cat /run/secrets/npm_token)" npm ci
 
 COPY tsconfig.json ./
 COPY src/ ./src/
@@ -23,7 +26,8 @@ RUN apk add --no-cache python3 make g++ && \
 WORKDIR /app
 
 COPY package*.json .npmrc patches/ ./
-RUN npm ci --omit=dev
+RUN --mount=type=secret,id=npm_token \
+    NODE_AUTH_TOKEN="$(cat /run/secrets/npm_token)" npm ci --omit=dev
 
 COPY --from=builder /build/dist ./dist/
 
