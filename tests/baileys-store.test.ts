@@ -312,6 +312,61 @@ describe('baileys-store', () => {
     expect(await store.lidMapping.getPnsForLids(['8800@external'])).toEqual([{ lid: '8800@external', pn: '8800' }])
   })
 
+  it('evicts oldest message when in-memory cache exceeds maxCachedMessages', async () => {
+    process.env.WA_MAX_CACHED_MESSAGES = '3'
+    try {
+      createRedisStoreMock.mockReturnValue({ ...createRedisStoreStub(), enabled: false })
+      createSqlStoreMock.mockReturnValue({ ...createSqlStoreStub(), enabled: false })
+
+      const { createBaileysStore } = await import('../src/store/baileys-store.ts')
+      const store = createBaileysStore('tenant')
+      const ev = new EventEmitter()
+      store.bind(ev as never)
+
+      const makeMsg = (id: string) => ({
+        key: { remoteJid: 'chat@s.whatsapp.net', id, fromMe: false },
+        message: { conversation: id },
+      })
+
+      ev.emit('messages.upsert', { messages: [makeMsg('msg-1'), makeMsg('msg-2'), makeMsg('msg-3')] })
+      ev.emit('messages.upsert', { messages: [makeMsg('msg-4')] })
+
+      expect(await store.getMessage({ remoteJid: 'chat@s.whatsapp.net', id: 'msg-1', fromMe: false } as never)).toBeUndefined()
+      expect(await store.getMessage({ remoteJid: 'chat@s.whatsapp.net', id: 'msg-2', fromMe: false } as never)).toEqual({ conversation: 'msg-2' })
+      expect(await store.getMessage({ remoteJid: 'chat@s.whatsapp.net', id: 'msg-3', fromMe: false } as never)).toEqual({ conversation: 'msg-3' })
+      expect(await store.getMessage({ remoteJid: 'chat@s.whatsapp.net', id: 'msg-4', fromMe: false } as never)).toEqual({ conversation: 'msg-4' })
+    } finally {
+      delete process.env.WA_MAX_CACHED_MESSAGES
+    }
+  })
+
+  it('retains all messages when maxCachedMessages is 0 (unlimited)', async () => {
+    process.env.WA_MAX_CACHED_MESSAGES = '0'
+    try {
+      createRedisStoreMock.mockReturnValue({ ...createRedisStoreStub(), enabled: false })
+      createSqlStoreMock.mockReturnValue({ ...createSqlStoreStub(), enabled: false })
+
+      const { createBaileysStore } = await import('../src/store/baileys-store.ts')
+      const store = createBaileysStore('tenant')
+      const ev = new EventEmitter()
+      store.bind(ev as never)
+
+      const msgs = Array.from({ length: 10 }, (_, i) => ({
+        key: { remoteJid: 'chat@s.whatsapp.net', id: `msg-${i + 1}`, fromMe: false },
+        message: { conversation: `msg-${i + 1}` },
+      }))
+      ev.emit('messages.upsert', { messages: msgs })
+
+      for (let i = 1; i <= 10; i++) {
+        expect(
+          await store.getMessage({ remoteJid: 'chat@s.whatsapp.net', id: `msg-${i}`, fromMe: false } as never)
+        ).toEqual({ conversation: `msg-${i}` })
+      }
+    } finally {
+      delete process.env.WA_MAX_CACHED_MESSAGES
+    }
+  })
+
   it('propaga messages.media-update com fallback redis para memoria, redis e sql', async () => {
     const redisStore = createRedisStoreStub()
     const sqlStore = createSqlStoreStub()

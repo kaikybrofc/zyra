@@ -222,4 +222,60 @@ export const config = {
   get mediaRetentionDays() {
     return readNumber(process.env.WA_MEDIA_RETENTION_DAYS, 7)
   },
+  /** TTL in ms for newsletter metadata cache (WA_NEWSLETTER_METADATA_SYNC_TTL_MS). */
+  get newsletterMetadataSyncTtlMs() {
+    return readNumber(process.env.WA_NEWSLETTER_METADATA_SYNC_TTL_MS, 5 * 60_000)
+  },
+  /** TTL in ms for newsletter metadata retry after failure (WA_NEWSLETTER_METADATA_RETRY_TTL_MS). */
+  get newsletterMetadataRetryTtlMs() {
+    return readNumber(process.env.WA_NEWSLETTER_METADATA_RETRY_TTL_MS, 30_000)
+  },
+  /** Base in ms for newsletter media retry backoff (WA_NEWSLETTER_MEDIA_RETRY_BASE_MS). */
+  get newsletterMediaRetryBaseMs() {
+    return readNumber(process.env.WA_NEWSLETTER_MEDIA_RETRY_BASE_MS, 10_000)
+  },
+  /** Maximum retry attempts for newsletter media (WA_NEWSLETTER_MEDIA_RETRY_MAX_ATTEMPTS). */
+  get newsletterMediaRetryMaxAttempts() {
+    return readNumber(process.env.WA_NEWSLETTER_MEDIA_RETRY_MAX_ATTEMPTS, 5)
+  },
+  /** Maximum consecutive failures in backfill worker before shutdown (WA_BACKFILL_MAX_FAILURES). */
+  get backfillMaxFailures() {
+    return readNumber(process.env.WA_BACKFILL_MAX_FAILURES, 5)
+  },
+  /** Wait in ms between failed backfill cycles (WA_BACKFILL_FAILURE_BACKOFF_MS). */
+  get backfillFailureBackoffMs() {
+    return readNumber(process.env.WA_BACKFILL_FAILURE_BACKOFF_MS, 60_000)
+  },
+  /** Timeout in ms for a single command execution, 0 = disabled (WA_COMMAND_TIMEOUT_MS). */
+  get commandTimeoutMs() {
+    return readNumber(process.env.WA_COMMAND_TIMEOUT_MS, 60_000)
+  },
+  /** Base delay in ms for reconnect exponential backoff (WA_RECONNECT_BASE_DELAY_MS). */
+  get reconnectBaseDelayMs() {
+    return readNumber(process.env.WA_RECONNECT_BASE_DELAY_MS, 2_500)
+  },
+  /** Maximum delay cap in ms for reconnect backoff (WA_RECONNECT_MAX_DELAY_MS). */
+  get reconnectMaxDelayMs() {
+    return readNumber(process.env.WA_RECONNECT_MAX_DELAY_MS, 60_000)
+  },
+  /** Maximum reconnect attempts before giving up, 0 = unlimited (WA_RECONNECT_MAX_ATTEMPTS). */
+  get reconnectMaxAttempts() {
+    return readNumber(process.env.WA_RECONNECT_MAX_ATTEMPTS, 0)
+  },
+  /** Maximum number of messages kept in the in-memory cache, 0 = unlimited (WA_MAX_CACHED_MESSAGES). */
+  get maxCachedMessages() {
+    return readNumber(process.env.WA_MAX_CACHED_MESSAGES, 10_000)
+  },
+  /** Enables HTTP /health endpoint for liveness probes (WA_HEALTH_ENABLED). */
+  get healthEnabled() {
+    return readBoolean(process.env.WA_HEALTH_ENABLED, true)
+  },
+  /** Port for health check server (WA_HEALTH_PORT). */
+  get healthPort() {
+    return readNumber(process.env.WA_HEALTH_PORT, 9109)
+  },
+  /** Bind host for health check server (WA_HEALTH_HOST). */
+  get healthHost() {
+    return process.env.WA_HEALTH_HOST ?? '0.0.0.0'
+  },
 }
