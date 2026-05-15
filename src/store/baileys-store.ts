@@ -291,11 +291,6 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
     })
 
     ev.on('groups.upsert', (groupList) => {
-      const idsPreview = groupList
-        .slice(0, 3)
-        .map((group) => group.id ?? '')
-        .filter(Boolean)
-      console.log('[groups.upsert]', { count: groupList.length, idsPreview, hasId: groupList.some((g) => Boolean(g.id)) })
       for (const group of groupList) {
         const groupId = normalizeJid(group.id)
         if (!groupId) continue
