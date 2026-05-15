@@ -11,7 +11,13 @@ RUN apk add --no-cache python3 make g++
 COPY package*.json .npmrc ./
 # postinstall runs patch-package automatically
 RUN --mount=type=secret,id=npm_token \
-    NODE_AUTH_TOKEN="$(cat /run/secrets/npm_token)" npm ci
+    sh -c 'TOKEN="$(cat /run/secrets/npm_token)" && \
+    printf "%s\n%s\n%s\n" \
+      "legacy-peer-deps=true" \
+      "@kaikybrofc:registry=https://npm.pkg.github.com" \
+      "//npm.pkg.github.com/:_authToken=${TOKEN}" > /tmp/.npmrc && \
+    NPM_CONFIG_USERCONFIG=/tmp/.npmrc npm ci && \
+    rm -f /tmp/.npmrc'
 
 COPY tsconfig.json ./
 COPY src/ ./src/
@@ -27,7 +33,13 @@ WORKDIR /app
 
 COPY package*.json .npmrc patches/ ./
 RUN --mount=type=secret,id=npm_token \
-    NODE_AUTH_TOKEN="$(cat /run/secrets/npm_token)" npm ci --omit=dev
+    sh -c 'TOKEN="$(cat /run/secrets/npm_token)" && \
+    printf "%s\n%s\n%s\n" \
+      "legacy-peer-deps=true" \
+      "@kaikybrofc:registry=https://npm.pkg.github.com" \
+      "//npm.pkg.github.com/:_authToken=${TOKEN}" > /tmp/.npmrc && \
+    NPM_CONFIG_USERCONFIG=/tmp/.npmrc npm ci --omit=dev && \
+    rm -f /tmp/.npmrc'
 
 COPY --from=builder /build/dist ./dist/
 
