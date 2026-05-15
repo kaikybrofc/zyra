@@ -134,6 +134,27 @@ const wait = async (ms: number): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+const resolveUnwrappedSocket = (sock: WASocket): WASocket => {
+  const prototype = Object.getPrototypeOf(sock) as WASocket | null
+  if (!prototype) return sock
+  if (typeof prototype.sendMessage !== 'function') return sock
+  if (prototype.sendMessage === sock.sendMessage) return sock
+  return prototype
+}
+
+const sendModerationMessage = async (
+  sock: WASocket,
+  chatId: string,
+  content: Parameters<WASocket['sendMessage']>[1],
+  options?: Parameters<WASocket['sendMessage']>[2]
+) => {
+  const rawSock = resolveUnwrappedSocket(sock)
+  if (options === undefined) {
+    return rawSock.sendMessage(chatId, content)
+  }
+  return rawSock.sendMessage(chatId, content, options)
+}
+
 const parseLinkToUrl = (value: string): URL | null => {
   const trimmed = value.trim()
   if (!trimmed) return null
@@ -542,7 +563,7 @@ export function createCommandProcessor({ logger, sqlStore }: CreateCommandProces
 
     const firstPass = await Promise.allSettled(
       recentKeys.map(async (key) => {
-        await context.sock.sendMessage(context.chatId, { delete: key })
+        await sendModerationMessage(context.sock, context.chatId, { delete: key })
       })
     )
 
@@ -561,7 +582,7 @@ export function createCommandProcessor({ logger, sqlStore }: CreateCommandProces
       const key = recentKeys[index]
       if (!key) continue
       try {
-        await context.sock.sendMessage(context.chatId, { delete: key })
+        await sendModerationMessage(context.sock, context.chatId, { delete: key })
         deleted += 1
       } catch (error) {
         logger.warn('falha ao revalidar delete de mensagem no antilink', {
@@ -680,9 +701,17 @@ export function createCommandProcessor({ logger, sqlStore }: CreateCommandProces
 
     if (senderIsAdmin) {
       logger.info('antilink ignorado: remetente admin', { chatId: context.chatId, sender: context.sender, links })
-      await context.sock.sendMessage(context.chatId, {
-        text: `ℹ️ Link detectado na mensagem de ${context.message.pushName ?? 'um administrador'}, mas nenhuma remoção foi aplicada porque o remetente é admin.`,
-      })
+      try {
+        await sendModerationMessage(context.sock, context.chatId, {
+          text: `ℹ️ Link detectado na mensagem de ${context.message.pushName ?? 'um administrador'}, mas nenhuma remoção foi aplicada porque o remetente é admin.`,
+        })
+      } catch (error) {
+        logger.warn('falha ao enviar aviso de antilink para admin', {
+          chatId: context.chatId,
+          sender: context.sender,
+          err: error,
+        })
+      }
       return
     }
     try {
@@ -698,9 +727,19 @@ export function createCommandProcessor({ logger, sqlStore }: CreateCommandProces
       return
     }
     const { deleted, total } = await deleteRecentMessagesFromSender(context)
-    await context.sock.sendMessage(context.chatId, {
-      text: `🚫 ${context.message.pushName ?? 'Usuário'} removido por enviar link (antilink ativo).\n🧹 Mensagens apagadas: ${deleted}/${total}.`,
-    })
+    try {
+      await sendModerationMessage(context.sock, context.chatId, {
+        text: `🚫 ${context.message.pushName ?? 'Usuário'} removido por enviar link (antilink ativo).\n🧹 Mensagens apagadas: ${deleted}/${total}.`,
+      })
+    } catch (error) {
+      logger.warn('falha ao enviar confirmacao de acao do antilink', {
+        chatId: context.chatId,
+        sender: context.sender,
+        deleted,
+        total,
+        err: error,
+      })
+    }
   }
 
   return {
