@@ -25,6 +25,10 @@ type StoredMediaFile = {
   mtimeMs: number
 }
 
+/**
+ * Deriva uma extensão de arquivo segura a partir do MIME type.
+ * Retorna `bin` quando o formato é desconhecido.
+ */
 const extensionFromMime = (mimeType?: string | null): string => {
   if (!mimeType) return 'bin'
   const clean = mimeType.split(';')[0]?.trim().toLowerCase()
@@ -33,6 +37,10 @@ const extensionFromMime = (mimeType?: string | null): string => {
   return safeName(subType) || 'bin'
 }
 
+/**
+ * Monta um nome de arquivo seguro para persistência local da mídia.
+ * Prioriza o nome explícito e aplica fallback para `{messageId}-{mediaType}.{ext}`.
+ */
 const buildFileName = (params: { messageId: string; mediaType: MediaMessageType; fileName?: string | null; mimeType?: string | null }) => {
   const explicitFileName = params.fileName?.trim()
   if (explicitFileName) return safeName(explicitFileName)
@@ -40,11 +48,17 @@ const buildFileName = (params: { messageId: string; mediaType: MediaMessageType;
   return `${safeName(params.messageId)}-${params.mediaType}.${ext}`
 }
 
+/**
+ * Converte caminho absoluto para relativo ao `cwd` quando possível.
+ */
 const toRelativePath = (absolutePath: string) => {
   const relative = path.relative(process.cwd(), absolutePath)
   return relative && !relative.startsWith('..') ? relative : absolutePath
 }
 
+/**
+ * Percorre recursivamente um diretório e coleta metadados dos arquivos armazenados.
+ */
 const collectStoredMediaFiles = async (dir: string): Promise<StoredMediaFile[]> => {
   const entries = await fs.readdir(dir, { withFileTypes: true })
   const files: StoredMediaFile[] = []
@@ -65,6 +79,9 @@ const collectStoredMediaFiles = async (dir: string): Promise<StoredMediaFile[]> 
   return files
 }
 
+/**
+ * Garante exclusão mútua de poda por diretório para evitar concorrência entre chamadas.
+ */
 const withPruneLock = async (dir: string, worker: () => Promise<void>): Promise<void> => {
   const running = pruneInFlightByDir.get(dir)
   if (running) {
@@ -79,6 +96,13 @@ const withPruneLock = async (dir: string, worker: () => Promise<void>): Promise<
   await next
 }
 
+/**
+ * Aplica políticas de retenção e limite de espaço no armazenamento de mídia.
+ *
+ * Regras:
+ * - remove arquivos expirados por idade (`WA_MEDIA_RETENTION_DAYS`)
+ * - remove arquivos mais antigos até respeitar o limite (`WA_MEDIA_MAX_BYTES`)
+ */
 const pruneMediaStorage = async (baseDir: string): Promise<void> => {
   const maxBytes = config.mediaMaxBytes
   const retentionDays = config.mediaRetentionDays
@@ -118,6 +142,16 @@ const pruneMediaStorage = async (baseDir: string): Promise<void> => {
   })
 }
 
+/**
+ * Faz download da mídia recebida, persiste em disco e retorna o caminho salvo.
+ *
+ * O fluxo respeita as configurações de runtime:
+ * - só executa quando `WA_MEDIA_AUTO_DOWNLOAD=true`
+ * - interrompe o download se exceder `WA_MEDIA_MAX_BYTES`
+ * - aplica poda após gravação (retenção e limite de armazenamento)
+ *
+ * @returns Caminho relativo do arquivo salvo, ou `null` quando não aplicável/falha de validação.
+ */
 export async function downloadIncomingMediaToDisk(params: {
   messageId: string
   messageDbId: number
