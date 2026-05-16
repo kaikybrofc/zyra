@@ -127,6 +127,13 @@ export async function start(): Promise<void> {
     metricsServerHandle = startAntiBanMetricsServer({
       logger,
       getStats: () => (activeSocket as { antiban?: { getStats?: () => unknown } } | null)?.antiban?.getStats?.() ?? {},
+      getOperationalSnapshot: () => ({
+        connectionId: config.connectionId ?? 'default',
+        socketActive: Boolean(activeSocket),
+        reconnectInFlight: Boolean(reconnectPromise),
+        socketGeneration,
+        lastReconnectAtMs: lastReconnectAt || 0,
+      }),
     })
   }
   await scheduleReconnect('startup')
