@@ -611,7 +611,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
             await Promise.allSettled(newsletterTasks)
           }
         }
-        if (sqlStore.enabled && event.type === 'notify') {
+        if (sqlStore.enabled) {
           const selfJid = resolveSelfJid()
           for (const message of event.messages) {
             const key = message.key
