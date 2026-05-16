@@ -1,6 +1,7 @@
 import { type WAMessage, type WASocket, type proto } from 'baileys'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { domainToASCII } from 'node:url'
 import linkify from 'linkifyjs'
 import { commands } from '../../commands/index.js'
 import type { AppLogger } from '../../observability/logger.js'
@@ -620,11 +621,29 @@ export function createCommandProcessor({ logger, sqlStore }: CreateCommandProces
   }
 
   const isAllowedByDomain = (url: URL, allowedDomains: string[]): boolean => {
-    const host = url.hostname.toLowerCase()
+    const normalizeDomainCandidate = (value: string): { host: string; wildcard: boolean } | null => {
+      const trimmed = value.trim().toLowerCase()
+      if (!trimmed) return null
+      const wildcard = trimmed.startsWith('*.')
+      const raw = wildcard ? trimmed.slice(2) : trimmed
+      const withoutProtocol = raw.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
+      const hostPart = withoutProtocol.split('/')[0]?.split(':')[0]?.replace(/\.+$/, '') ?? ''
+      if (!hostPart) return null
+      const asciiHost = domainToASCII(hostPart).toLowerCase()
+      if (!asciiHost) return null
+      return { host: asciiHost, wildcard }
+    }
+
+    const normalizedHost = domainToASCII(url.hostname.replace(/\.+$/, '')).toLowerCase()
+    if (!normalizedHost) return false
+
     return allowedDomains.some((domain) => {
-      const normalizedDomain = domain.trim().toLowerCase()
+      const normalizedDomain = normalizeDomainCandidate(domain)
       if (!normalizedDomain) return false
-      return host === normalizedDomain || host.endsWith(`.${normalizedDomain}`)
+      if (normalizedDomain.wildcard) {
+        return normalizedHost.endsWith(`.${normalizedDomain.host}`) && normalizedHost !== normalizedDomain.host
+      }
+      return normalizedHost === normalizedDomain.host || normalizedHost.endsWith(`.${normalizedDomain.host}`)
     })
   }
 
@@ -641,6 +660,11 @@ export function createCommandProcessor({ logger, sqlStore }: CreateCommandProces
     return host === 'whatsapp.net' || host.endsWith('.whatsapp.net') || INTERNAL_WHATSAPP_HOSTS.has(host)
   }
 
+  type GroupWithLinkedParent = {
+    id?: string | null
+    linkedParent?: string | null
+  }
+
   const enforceAntilink = async (context: IncomingCommandEnvelope): Promise<void> => {
     if (!context.isGroup) return
     if (!context.text) return
@@ -652,6 +676,9 @@ export function createCommandProcessor({ logger, sqlStore }: CreateCommandProces
     }
     const links = extractLinks(context.text)
     if (!links.length) return
+    const messageKey = context.message.key
+    const messageTimestamp = parseTimestamp(context.message.messageTimestamp)
+    const messageTextPreview = context.text.length > 500 ? `${context.text.slice(0, 500)}...` : context.text
     const { type: messageType } = getNormalizedMessage(context.message)
     const allowedDomains = await groupFeatureStore.getAntilinkAllowedDomains(context.chatId)
     const allowOwnInvite = await groupFeatureStore.isAntilinkAllowOwnGroupInviteEnabled(context.chatId)
@@ -701,6 +728,18 @@ export function createCommandProcessor({ logger, sqlStore }: CreateCommandProces
 
     if (senderIsAdmin) {
       logger.info('antilink ignorado: remetente admin', { chatId: context.chatId, sender: context.sender, links })
+      logger.info('antilink: evento detalhado (admin ignorado)', {
+        chatId: context.chatId,
+        sender: context.sender,
+        pushName: context.message.pushName ?? null,
+        messageId: messageKey.id ?? null,
+        messageTimestamp,
+        messageType: messageType ?? null,
+        textPreview: messageTextPreview,
+        links,
+        allowedDomains,
+        allowOwnInvite,
+      })
       try {
         await sendModerationMessage(context.sock, context.chatId, {
           text: `ℹ️ Link detectado na mensagem de ${context.message.pushName ?? 'um administrador'}, mas nenhuma remoção foi aplicada porque o remetente é admin.`,
@@ -726,7 +765,69 @@ export function createCommandProcessor({ logger, sqlStore }: CreateCommandProces
       })
       return
     }
+
+    const removeFromLinkedCommunityGroups = async () => {
+      const communityJid = (metadata as GroupWithLinkedParent | null | undefined)?.linkedParent ?? null
+      if (!communityJid) return { communityJid: null as string | null, cascadedGroups: [] as string[] }
+      const fetchAll = (context.sock as { groupFetchAllParticipating?: () => Promise<Record<string, GroupWithLinkedParent>> })
+        .groupFetchAllParticipating
+      if (typeof fetchAll !== 'function') return { communityJid, cascadedGroups: [] as string[] }
+
+      try {
+        const groupMap = await fetchAll()
+        const siblingGroupJids = Object.values(groupMap)
+          .map((group) => group.id ?? null)
+          .filter((groupJid): groupJid is string => Boolean(groupJid))
+          .filter((groupJid) => groupJid !== context.chatId)
+          .filter((groupJid) => (groupMap[groupJid]?.linkedParent ?? null) === communityJid)
+
+        const removedFromGroups: string[] = []
+        for (const siblingJid of siblingGroupJids) {
+          try {
+            await context.sock.groupParticipantsUpdate(siblingJid, [context.sender], 'remove')
+            removedFromGroups.push(siblingJid)
+          } catch (error) {
+            logger.warn('antilink: falha ao remover participante de grupo vinculado da comunidade', {
+              sourceChatId: context.chatId,
+              targetChatId: siblingJid,
+              communityJid,
+              sender: context.sender,
+              err: error,
+            })
+          }
+        }
+        return { communityJid, cascadedGroups: removedFromGroups }
+      } catch (error) {
+        logger.warn('antilink: falha ao listar grupos da comunidade para remocao em cascata', {
+          chatId: context.chatId,
+          communityJid,
+          sender: context.sender,
+          err: error,
+        })
+        return { communityJid, cascadedGroups: [] as string[] }
+      }
+    }
+
+    const cascadeResult = await removeFromLinkedCommunityGroups()
+
     const { deleted, total } = await deleteRecentMessagesFromSender(context)
+    logger.warn('antilink: usuario removido por violacao de link (detalhado)', {
+      sourceChatId: context.chatId,
+      sender: context.sender,
+      pushName: context.message.pushName ?? null,
+      messageId: messageKey.id ?? null,
+      messageTimestamp,
+      messageType: messageType ?? null,
+      textPreview: messageTextPreview,
+      links,
+      allowedDomains,
+      allowOwnInvite,
+      communityJid: cascadeResult.communityJid,
+      removedFromLinkedGroups: cascadeResult.cascadedGroups,
+      removedFromLinkedGroupsCount: cascadeResult.cascadedGroups.length,
+      deletedMessagesCount: deleted,
+      trackedMessagesCount: total,
+    })
     try {
       await sendModerationMessage(context.sock, context.chatId, {
         text: `🚫 ${context.message.pushName ?? 'Usuário'} removido por enviar link (antilink ativo).\n🧹 Mensagens apagadas: ${deleted}/${total}.`,
