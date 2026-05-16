@@ -1,100 +1,50 @@
-# 📦 Arquitetura Modular de Comandos - Zyra System
+# Zyra Platform Guide
 
-Este documento consolida a visão arquitetural e a implementação atual do sistema modular de comandos do Zyra. A proposta é desacoplar o núcleo de conexão do código de cada comando, permitindo evolução mais segura, manutenção mais simples e uma base preparada para expansão.
+Guia técnico unificado da plataforma Zyra, consolidando:
+- arquitetura modular de comandos
+- modelo de dados MySQL
+- práticas de operação e evolução
 
----
+Este documento é a visão de alto nível para desenvolvimento e manutenção.
 
-## 🧠 Visão Geral e Benefícios
+## Escopo
 
-Antes, os comandos dependiam diretamente do socket do Baileys (`WASocket`), o que criava acoplamento forte com a biblioteca de conexão e espalhava detalhes de transporte pelo projeto.
+O Zyra foi projetado para:
+- processar eventos WhatsApp em tempo real com Baileys
+- executar comandos desacoplados do transporte
+- manter persistência híbrida e auditável
+- operar em múltiplas instâncias com isolamento por `connection_id`
 
-Com a arquitetura atual, o comando passa a receber um `CommandContext` (`ctx`) e o Core assume a responsabilidade pelas operações pesadas.
+## Arquitetura de Comandos
 
-Principais benefícios:
+### Objetivo
 
-1. **Desacoplamento:** o comando interage com uma interface estável, não com a implementação do socket.
-2. **Independência:** cada comando fica isolado em `src/commands/`.
-3. **Inversão de Controle:** o Core injeta capacidades e utilidades no contexto.
-4. **Escalabilidade:** adicionar novos comandos não exige alterar o fluxo principal.
-5. **Resiliência:** falhas podem ser tratadas centralmente no processor.
-6. **Evolução futura:** a base já favorece middlewares, plugins e hot-swap.
+A camada de comandos remove o acoplamento direto com `WASocket`.
+Cada comando recebe um `CommandContext` (`ctx`) com APIs estáveis.
 
----
+Benefícios:
+1. desacoplamento da lib de transporte
+2. manutenção centralizada de regras comuns
+3. evolução segura para middlewares, plugins e hot-reload
+4. redução de código repetido nos comandos
 
-## 🏛️ Anatomia da Arquitetura
+### Fluxo de Execução
 
-### 1. Event Parser
-O Core intercepta os eventos recebidos e normaliza a mensagem para consumo interno.
+1. Event Parser normaliza eventos recebidos.
+2. Command Processor detecta comando, resolve alias e argumentos.
+3. Core cria `ctx` e executa o comando de forma isolada.
+4. Tratamento de erro e observabilidade ficam centralizados.
 
-Responsabilidades:
+Componentes principais:
+- `src/core/command-runtime/context.ts`
+- `src/core/command-runtime/processor.ts`
+- `src/core/command-runtime/admin.ts`
+- `src/commands/types.ts`
+- `src/commands/`
 
-- extrair remetente, chat, texto e metadados relevantes
-- reduzir dependência de formatos específicos do Baileys
-- produzir uma estrutura estável para o restante do pipeline
+### Contrato de Comando
 
-### 2. Command Processor
-O processor gerencia o ciclo de vida da execução do comando.
-
-Responsabilidades:
-
-- identificar se a mensagem corresponde a um comando
-- resolver aliases e argumentos
-- criar o `ctx`
-- executar o comando de forma isolada
-- centralizar tratamento de erro e observabilidade
-
-### 3. Contexto (`ctx`)
-O contexto funciona como fachada para o desenvolvedor de comandos.
-
-Em vez de cada comando repetir lógica de quoted, chatId, permissões ou ações administrativas, o Core oferece métodos diretos e previsíveis.
-
-### 4. Helpers e serviços do Core
-Operações privilegiadas ou reutilizáveis ficam concentradas no Core, e não espalhadas em cada comando.
-
-Exemplos:
-
-- resposta e reação a mensagens
-- verificação de admin
-- kick, ban, promote e demote
-- futuras integrações com segurança, banco e cache
-
----
-
-## 🛠️ Implementação Atual no Projeto
-
-Hoje a arquitetura está organizada principalmente em:
-
-- `src/core/command-runtime/context.ts`: expõe o `ctx` normalizado para os comandos
-- `src/core/command-runtime/processor.ts`: identifica, cria o contexto e executa os comandos
-- `src/core/command-runtime/admin.ts`: centraliza ações administrativas reutilizáveis
-- `src/commands/types.ts`: define o contrato de cada comando
-- `src/commands/`: reúne os comandos desacoplados do núcleo
-
-Se o Baileys for atualizado ou substituído, a tendência é concentrar os ajustes nessas camadas, mantendo os comandos estáveis.
-
----
-
-## ⚙️ Configurações Importantes
-
-### Prefixo de comandos
-
-O prefixo padrão de comando é `!`, mas pode ser configurado via variável de ambiente:
-
-- `WA_COMMAND_PREFIX`: define o prefixo de comandos (default `!`)
-
-Isso permite rodar múltiplas instâncias com padrões diferentes sem alterar código.
-
-### Processamento de mensagens (anti-histórico)
-
-Para evitar execução de comandos em carga de histórico, o Core processa comandos apenas quando `messages.upsert.type === "notify"`.
-
----
-
-## 📜 Contrato dos Comandos
-
-O tipo `Command` espera uma função que recebe o `ctx`.
-
-```typescript
+```ts
 export type Command = {
   name: string
   description: string
@@ -102,154 +52,96 @@ export type Command = {
 }
 ```
 
-Essa assinatura reduz o acoplamento e padroniza o desenvolvimento de novos comandos.
+### Capacidades do `ctx`
 
----
+- `ctx.reply(text)`
+- `ctx.react(emoji)`
+- `ctx.isAdmin()`
+- `ctx.kick(jid | jids)`
+- `ctx.ban(jid | jids)`
+- `ctx.promote(jid | jids)`
+- `ctx.demote(jid | jids)`
+- `ctx.admin.*`
+- `ctx.isGroup`
+- `ctx.args`
+- `ctx.text`
+- `ctx.sender`
+- `ctx.chatId`
 
-## 🔌 Funções Disponíveis no `ctx`
+Observação: o comando não precisa acessar socket bruto para operações comuns.
 
-O `CommandContext` (`ctx`) oferece métodos e dados para acelerar o desenvolvimento:
+### Exemplo de Comando
 
-- `ctx.reply(text)`: envia uma resposta marcando a mensagem original
-- `ctx.react(emoji)`: reage à mensagem do usuário
-- `ctx.isAdmin()`: verifica de forma assíncrona se o usuário é admin do grupo
-- `ctx.kick(jid | jids)`: remove participantes do grupo
-- `ctx.ban(jid | jids)`: alias semântico para remoção centralizada pelo core
-- `ctx.promote(jid | jids)`: promove participantes para admin
-- `ctx.demote(jid | jids)`: remove privilégios de admin
-- `ctx.admin.*`: acesso direto à camada administrativa centralizada
-- `ctx.isGroup`: indica se a mensagem veio de grupo
-- `ctx.args`: argumentos passados após o comando
-- `ctx.text`: texto completo da mensagem
-- `ctx.sender`: JID de quem enviou a mensagem
-- `ctx.chatId`: JID do chat
-
-O `ctx` não expõe mais `socket` nem `message` brutos. Isso reduz acoplamento e incentiva o uso dos helpers oficiais do Core.
-
----
-
-## 🧱 Robustez e Resiliência
-
-### Error Boundaries
-Cada comando deve ser executado sob tratamento centralizado de erro no processor.
-
-Objetivos:
-
-- impedir que uma falha em um comando derrube o fluxo geral
-- registrar stacktrace e contexto operacional
-- decidir centralmente se o usuário deve receber feedback ou se o erro será apenas logado
-
-### Middlewares
-A arquitetura favorece camadas intermediárias antes da execução do comando.
-
-Exemplos de uso:
-
-- validação de prefixo e alias
-- controle de rate limit
-- verificação de permissões
-- auto-download de mídia
-- regras globais de segurança, como anti-link
-
-### Registry e Hot Reload
-O modelo também favorece um registro dinâmico de comandos.
-
-Isso abre espaço para:
-
-- recarregar comandos sem reiniciar toda a aplicação
-- plugar módulos externos
-- habilitar e desabilitar funcionalidades com mais flexibilidade
-
----
-
-## 🔄 Comparativo de Evolução
-
-### Modelo antigo
-```typescript
-async execute({ sock, message, chatId }) {
-  const isAdmin = (await sock.groupMetadata(chatId)).participants.find(
-    (p) => p.id === sender
-  ).admin !== null
-
-  if (!isAdmin) return
-  await sock.sendMessage(chatId, { text: 'Ola' }, { quoted: message })
-}
-```
-
-### Modelo modular
-```typescript
-async execute(ctx) {
-  if (!await ctx.isAdmin()) return
-  await ctx.reply('Ola')
-}
-```
-
-No modelo modular, a complexidade operacional fica no Core e o comando permanece focado na regra de negócio.
-
----
-
-## 🚀 Como Criar um Novo Comando
-
-### Passo 1: criar o arquivo
-Crie um arquivo em `src/commands/meu-comando.ts`:
-
-```typescript
+```ts
 import type { Command } from './types.js'
 
-export const meuComando: Command = {
+export const ola: Command = {
   name: 'ola',
   description: 'Exemplo de comando modular',
   async execute(ctx) {
     await ctx.react('👋')
-    await ctx.reply(`Ola @${ctx.sender.split('@')[0]}, como posso ajudar?`)
+    await ctx.reply(`Ola @${ctx.sender.split('@')[0]}`)
   },
 }
 ```
 
-### Passo 2: registrar o comando
-Adicione o comando em `src/commands/index.ts`:
+## Modelo de Dados (MySQL)
 
-```typescript
-import { meuComando } from './meu-comando.js'
+### Princípios
 
-export const commands: Record<string, Command> = {
-  [meuComando.name]: meuComando,
-}
-```
+- **Multi-instância**: todas as entidades relevantes carregam `connection_id`.
+- **Identidade unificada**: usuário lógico desacoplado de PN/LID/JID/username.
+- **Payload bruto + colunas derivadas**: flexibilidade de evolução com leitura eficiente.
+- **Observabilidade nativa**: auditoria e rastreabilidade desde o banco.
 
-### Passo 3: usar normalmente
-Depois de registrado, o comando passa a responder com o prefixo configurado.
+### Blocos de Domínio
 
----
+- **Conexão e autenticação**: `connections`, `auth_creds`, `signal_keys`
+- **Identidade**: `users`, `user_identifiers`, `user_aliases`, `lid_mappings`, `user_devices`
+- **WhatsApp state**: `chats`, `wa_contacts_cache`, `groups`, `group_participants`
+- **Mensageria**: `messages`, `message_media`, `message_text_index`, `message_users`, `chat_users`
+- **Eventos e auditoria**: `events_log`, `events_log_archive`, `message_events`, `group_events`, `commands_log`, `message_failures`, `bot_sessions`
+- **Recursos auxiliares**: `labels`, `label_associations`, `blocklist`
+- **Newsletters**: `newsletters`, `newsletter_participants`, `newsletter_events`
+- **Recursos de sticker**: `user_sticker_templates`, `user_generated_stickers`
+- **Ingressos de grupo**: `group_join_requests`
 
-## 🧩 Evolução Futura
+### Pontos Fortes
 
-Esta base permite adicionar com mais segurança:
+- isolamento por tenant com índices por `connection_id`
+- identidade resiliente a mudanças de identificadores
+- trilha de auditoria pronta para suporte e diagnóstico
+- busca textual nativa via FULLTEXT em `message_text_index`
 
-- **middlewares** para validação e políticas globais
-- **plugins** com carregamento dinâmico
-- **rate limit** por comando ou usuário
-- **dashboard web** para gerenciar comandos em tempo real
-- **multi-plataforma** com contextos equivalentes para outros canais
-- **agentes de IA** integrados ao processor quando nenhum comando for detectado
+### Pontos de Atenção
 
----
+- `db:init` cria tabelas ausentes, mas não faz migração destrutiva
+- tabelas de eventos e mensagens crescem rápido e exigem política de retenção
+- campos `data_json` preservam payload completo, porém podem demandar índices derivados
 
-## 🗺️ Roadmap
+## Operação e Manutenção
 
-### Fase 1: Fundação
+Comandos úteis:
+- `npm run db:init`: cria tabelas ausentes a partir do schema documentado
+- `npm run db:verify`: valida tabelas e contagens
+- `npm run pm2:start`: sobe runtime de produção
 
-- consolidar e expandir `context.ts`
-- fortalecer o `processor.ts` como ponto central de execução
-- manter ações administrativas encapsuladas no Core
+Configurações relevantes:
+- `WA_COMMAND_PREFIX`
+- `WA_CONNECTION_ID`
+- `MYSQL_URL`
+- `WA_REDIS_URL`
 
-### Fase 2: Inteligência
+## Evolução Recomendada
 
-- ampliar helpers reutilizáveis
-- adicionar middlewares de segurança e permissão
-- preparar integrações com cache, banco e observabilidade
+1. adicionar middlewares transversais (rate-limit, permissões, segurança)
+2. ampliar registry dinâmico de comandos
+3. criar pipeline formal de migrações de schema
+4. estabelecer retenção e arquivamento para tabelas de alto volume
 
-### Fase 3: Expansão
+## Referências
 
-- evoluir o carregamento de comandos
-- facilitar plugins e extensões externas
-- suportar recarga dinâmica e novas superfícies de automação
+- Schema completo e fonte da verdade do MySQL:
+  - `docs/exemplodbmodel.md`
+- Wiki do projeto:
+  - `docs/wiki/Home.md`

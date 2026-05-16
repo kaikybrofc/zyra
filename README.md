@@ -1,6 +1,33 @@
-# 🌌 Zyra System
+# Zyra System
 
-**Zyra System** é um motor de bot para WhatsApp de alta performance, construído em Node.js utilizando a biblioteca [Baileys](https://github.com/WhiskeySockets/Baileys). Ele foi projetado para ser **escalável, resiliente e multi-instância**, com suporte nativo a persistência em MySQL e cache em Redis.
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![PM2 Ready](https://img.shields.io/badge/pm2-ready-2B037A?logo=pm2&logoColor=white)](https://pm2.keymetrics.io/)
+
+Motor de bot para WhatsApp construído com [Baileys](https://github.com/WhiskeySockets/Baileys), focado em performance, resiliência e operação multi-instância. O projeto oferece persistência híbrida (MySQL, Redis e disco), arquitetura modular de comandos e recursos de observabilidade para ambientes de produção.
+
+## Links Rápidos
+
+- [Pré-requisitos](#-pré-requisitos)
+- [Configuração do Projeto](#️-configuração-do-projeto)
+- [Como Executar](#-como-executar)
+- [Arquitetura do Sistema](#-arquitetura-do-sistema)
+- [Ferramentas de Manutenção](#️-ferramentas-de-manutenção)
+- [Wiki do Projeto](#-wiki-do-projeto)
+- [Licença](#-licença)
+
+## 📚 Wiki do Projeto
+
+- [Home da Wiki](docs/wiki/Home.md)
+- [Instalação](docs/wiki/Instalação.md)
+- [Configuração](docs/wiki/Configuração.md)
+- [Comandos](docs/wiki/Comandos.md)
+- [Eventos](docs/wiki/Eventos.md)
+- [Produção](docs/wiki/Produção.md)
+- [Troubleshooting](docs/wiki/Troubleshooting.md)
+- [Banco de Dados](docs/wiki/Banco-de-Dados.md)
+- [Persistência](docs/wiki/Persistência.md)
+- [Backfill](docs/wiki/Backfill.md)
 
 ---
 

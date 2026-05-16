@@ -1,7 +1,5 @@
 # Modelo atual do banco (MySQL 8)
 
-![Diagrama do banco](diagrama-db.svg)
-
 Este arquivo descreve o schema do MySQL usado pelo Zyra para persistência e auditoria.
 Ele também serve como **fonte da verdade** para a inicialização automática do schema via `npm run db:init` (o script lê este Markdown e cria as tabelas ausentes).
 
