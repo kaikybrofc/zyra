@@ -69,9 +69,20 @@ type SocketWithNewsletterMetadata = WASocket & {
   newsletterMetadata?: (type: 'invite' | 'jid', key: string) => Promise<NewsletterMetadata | null>
 }
 
+/**
+ * Cobertura explícita dos eventos do `BaileysEventMap` escutados pela aplicação.
+ *
+ * @remarks
+ * A lista é usada para registro dinâmico de handlers e para garantir,
+ * em tempo de compilação, que não existam chaves do mapa de eventos sem cobertura.
+ */
 const ALL_EVENTS = ['connection.update', 'creds.update', 'messaging-history.set', 'chats.upsert', 'chats.update', 'lid-mapping.update', 'chats.delete', 'presence.update', 'contacts.upsert', 'contacts.update', 'messages.delete', 'messages.update', 'messages.media-update', 'messages.upsert', 'messages.reaction', 'message-receipt.update', 'groups.upsert', 'groups.update', 'group-participants.update', 'group.join-request', 'group.member-tag.update', 'blocklist.set', 'blocklist.update', 'call', 'labels.edit', 'labels.association', 'newsletter.reaction', 'newsletter.view', 'newsletter-participants.update', 'newsletter-settings.update', 'chats.lock', 'settings.update'] as const satisfies readonly (keyof BaileysEventMap)[]
+/** Status code observado quando há reachout timelock/restrição de envio (anti-spam). */
 const REACHOUT_TIMELOCK_STATUS_CODE = 463
 
+/**
+ * Tipo utilitário para acusar, em build time, eventos não cobertos em `ALL_EVENTS`.
+ */
 type MissingEvents = Exclude<keyof BaileysEventMap, (typeof ALL_EVENTS)[number]>
 type _AllEventsCoverageHint = MissingEvents extends never ? true : MissingEvents
 
@@ -87,18 +98,35 @@ type EventHandler<K extends keyof BaileysEventMap> = (data: BaileysEventMap[K]) 
  * @param options Opções de configuração contendo o socket, logger e callbacks de ciclo de vida.
  */
 export function registerEvents({ sock, logger, reconnect, connectionId }: RegisterOptions): void {
+  /** Socket com capability opcional de flush imediato de credenciais. */
   const socketWithCredsFlush = sock as SocketWithCredsFlush
+  /** Socket com capability opcional de consulta de metadados de newsletter. */
   const socketWithNewsletterMetadata = sock as SocketWithNewsletterMetadata
+  /** Store SQL usada para auditoria, eventos e persistências complementares. */
   const sqlStore = createSqlStore(connectionId)
+  /** Evita loop de restart após primeiro login (estabilização do estado inicial). */
   let restartedAfterNewLogin = false
+  /** Cache de sincronização de metadados de newsletters com TTL e dedupe de chamadas concorrentes. */
   const newsletterMetadataSync = new Map<string, { nextAttemptAt: number; inFlight?: Promise<void> }>()
+  /** TTL de sucesso para sync de metadados de newsletter. */
   const NEWSLETTER_METADATA_SYNC_TTL_MS = config.newsletterMetadataSyncTtlMs
+  /** TTL de retry quando sync de metadados falha. */
   const NEWSLETTER_METADATA_RETRY_TTL_MS = config.newsletterMetadataRetryTtlMs
+  /** Limite de entries do cache de metadados para conter uso de memória. */
   const MAX_NEWSLETTER_METADATA_ENTRIES = 1_000
+  /** Estado de retentativa para refresh de mídia de newsletters com mediaKey ausente/inválida. */
   const newsletterMediaRetryState = new Map<string, { attempts: number; nextAttemptAt: number; lastError?: string | null }>()
+  /** Backoff base (ms) para retentativas de refresh de mídia de newsletter. */
   const NEWSLETTER_MEDIA_RETRY_BASE_MS = config.newsletterMediaRetryBaseMs
+  /** Máximo de tentativas para refresh de mídia de newsletter por mensagem. */
   const NEWSLETTER_MEDIA_RETRY_MAX_ATTEMPTS = config.newsletterMediaRetryMaxAttempts
+  /** Limite de entries do estado de retry para conter memória em alto throughput. */
   const MAX_NEWSLETTER_MEDIA_RETRY_ENTRIES = 5_000
+
+  /**
+   * Remove o item mais antigo de um `Map` quando o limite de capacidade é excedido.
+   * Útil para caches/estados em memória com política FIFO simples.
+   */
   const evictOldestIfNeeded = <K, V>(map: Map<K, V>, max: number): void => {
     if (map.size > max) {
       const oldest = map.keys().next().value
@@ -112,20 +140,44 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
     groupJid?: string | null
     messageKey?: { chatJid: string; messageId: string; fromMe: boolean } | null
   }
+
+  /**
+   * Persiste um evento padronizado no banco de auditoria (`events_log`).
+   */
   const recordEvent = (event: keyof BaileysEventMap, meta: Record<string, unknown>, context?: EventContext) => {
     if (!sqlStore.enabled) return
     void sqlStore.recordEvent({ type: String(event), data: meta, ...context })
   }
+
+  /**
+   * Loga o evento em nível debug e replica para auditoria SQL.
+   */
   const logEvent = (event: keyof BaileysEventMap, meta: Record<string, unknown>, context?: EventContext) => {
     logger.debug('evento do Baileys recebido', { event, ...meta })
     recordEvent(event, meta, context)
   }
+
+  /**
+   * Resolve o JID da própria sessão autenticada, quando disponível.
+   */
   const resolveSelfJid = () => sock.user?.id ?? null
+
+  /**
+   * Converte chave de mensagem do Baileys para formato canônico de auditoria.
+   */
   const toEventMessageKey = (key?: { remoteJid?: string | null; id?: string | null; fromMe?: boolean | null }) => {
     if (!key?.remoteJid || !key.id) return null
     return { chatJid: key.remoteJid, messageId: key.id, fromMe: Boolean(key.fromMe) }
   }
+
+  /**
+   * Normaliza JID de grupo, retornando `null` para chats que não são `@g.us`.
+   */
   const toGroupJid = (jid?: string | null) => (jid && jid.endsWith('@g.us') ? jid : null)
+
+  /**
+   * Persiste mapeamento de device vinculado ao usuário quando o JID contém sufixo de device.
+   */
   const persistUserDeviceFromJid = (rawJid: string | null | undefined, source: string) => {
     if (!sqlStore.enabled || !rawJid) return
     const decoded = jidDecode(rawJid)
@@ -141,6 +193,10 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
       },
     })
   }
+
+  /**
+   * Extrai e persiste devices de `participant` e `remoteJid` a partir de uma message key.
+   */
   const persistDevicesFromMessageKey = (
     key?: { remoteJid?: string | null; participant?: string | null; fromMe?: boolean | null },
     source = 'messages.upsert'
@@ -151,13 +207,25 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
       persistUserDeviceFromJid(key.remoteJid ?? null, `${source}:remoteJid`)
     }
   }
+
+  /**
+   * Verifica se o JID pertence a um canal/newsletter.
+   */
   const isNewsletterJid = (jid?: string | null): jid is string => Boolean(jid && jid.endsWith('@newsletter'))
+
+  /**
+   * Gera chave estável para controle de retry de mídia de newsletter.
+   */
   const getNewsletterRetryKey = (message: WAMessage): string | null => {
     const chatJid = message.key?.remoteJid
     const messageId = message.key?.id
     if (!chatJid || !messageId || !isNewsletterJid(chatJid)) return null
     return `${chatJid}:${messageId}`
   }
+
+  /**
+   * Detecta presença de `mediaKey` válida na mensagem (ou timestamp compatível).
+   */
   const hasMediaKey = (message: WAMessage): boolean => {
     const normalized = getNormalizedMessage(message)
     if (!normalized.content || !normalized.type) return false
@@ -169,6 +237,10 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
     if (inner.mediaKey && ((inner.mediaKey as Uint8Array).byteLength ?? 0) > 0) return true
     return typeof inner.mediaKeyTimestamp === 'number' && Number.isFinite(inner.mediaKeyTimestamp)
   }
+
+  /**
+   * Detecta indícios de transporte (`directPath`/`url`) para tentar refresh de mídia.
+   */
   const hasMediaTransportHints = (message: WAMessage): boolean => {
     const normalized = getNormalizedMessage(message)
     if (!normalized.content || !normalized.type) return false
@@ -179,12 +251,23 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
     if (!inner || typeof inner !== 'object') return false
     return Boolean(inner.directPath || inner.url)
   }
+
+  /**
+   * Classifica erros conhecidos do stack de mídia para reduzir ruído de logs.
+   */
   const isKnownNewsletterMediaRefreshError = (error: unknown): boolean => {
     const message = error instanceof Error ? error.message : String(error)
     if (message.includes("Cannot read properties of null (reading 'length')")) return true
     if (!(error instanceof Error) || !error.stack) return false
     return error.stack.includes('passArray8ToWasm0') && error.stack.includes('messages-media.js')
   }
+
+  /**
+   * Tenta recuperar mídia de newsletter chamando `updateMediaMessage` com retentativa e backoff.
+   *
+   * @remarks
+   * Quando o refresh funciona, emite `messages.update` sintético para reaproveitar pipeline já existente.
+   */
   const maybeRefreshNewsletterMedia = async (message: WAMessage): Promise<void> => {
     const key = message.key
     const chatJid = key?.remoteJid ?? null
@@ -253,10 +336,16 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
       }
     }
   }
+  /**
+   * Persiste snapshot consolidado da newsletter para consultas rápidas.
+   */
   const recordNewsletterSnapshot = (newsletterId: string | null | undefined, data: Record<string, unknown>) => {
     if (!sqlStore.enabled || !newsletterId) return
     void sqlStore.recordNewsletter({ newsletterId, data })
   }
+  /**
+   * Persiste metadados normalizados da newsletter e registra owner como participante quando disponível.
+   */
   const recordNewsletterMetadata = async (newsletterId: string, metadata: NewsletterMetadata | null | undefined) => {
     if (!sqlStore.enabled || !metadata) return
     recordNewsletterSnapshot(newsletterId, {
@@ -280,6 +369,9 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
       })
     }
   }
+  /**
+   * Sincroniza metadados de newsletter com deduplicação e TTL para evitar sobrecarga.
+   */
   const syncNewsletterMetadata = async (newsletterId: string, source: string, options?: { force?: boolean }) => {
     if (!sqlStore.enabled) return
     if (typeof socketWithNewsletterMetadata.newsletterMetadata !== 'function') return
@@ -306,6 +398,9 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
     evictOldestIfNeeded(newsletterMetadataSync, MAX_NEWSLETTER_METADATA_ENTRIES)
     await inFlight
   }
+  /**
+   * Registra evento e snapshot de newsletter a partir de `messages.upsert`.
+   */
   const recordNewsletterFromMessage = async (message: BaileysEventMap['messages.upsert']['messages'][number], upsertType: string) => {
     const key = message.key
     const newsletterId = isNewsletterJid(key?.remoteJid) ? key.remoteJid : null
@@ -335,6 +430,9 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
     await syncNewsletterMetadata(newsletterId, 'messages.upsert')
   }
 
+  /**
+   * Sincroniza grupos no momento em que a conexão abre, com tentativa extra em caso de vazio inicial.
+   */
   const syncGroupsOnConnect = async (): Promise<GroupMetadata[]> => {
     try {
       logger.info('sincronizando grupos da conta')
@@ -362,6 +460,9 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
     }
   }
 
+  /**
+   * Sincroniza comunidades e aplica fallback de detecção via snapshot de grupos.
+   */
   const syncCommunitiesOnConnect = async (groupsSnapshot: GroupMetadata[]) => {
     try {
       logger.info('sincronizando comunidades da conta')
@@ -386,6 +487,13 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
     }
   }
 
+  /**
+   * Tabela de handlers por evento do Baileys.
+   *
+   * @remarks
+   * Mantém todo o comportamento reativo em um único mapa para facilitar cobertura,
+   * auditoria e manutenção evolutiva.
+   */
   const handlers: Partial<{ [K in keyof BaileysEventMap]: EventHandler<K> }> = {
     'connection.update': (update) => {
       const { connection, lastDisconnect, qr, receivedPendingNotifications, isNewLogin } = update
@@ -867,6 +975,9 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
     'settings.update': (update) => logEvent('settings.update', { setting: update.setting }, { actorJid: resolveSelfJid() }),
   }
 
+  /**
+   * Registra listeners dinâmicos para cada evento coberto em `ALL_EVENTS`.
+   */
   for (const event of ALL_EVENTS) {
     sock.ev.on(event, async (data) => {
       const handler = handlers[event] as EventHandler<typeof event> | undefined
