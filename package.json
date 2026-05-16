@@ -1,9 +1,33 @@
 {
   "name": "zyra",
-  "version": "0.1.8",
+  "version": "0.1.9",
+  "description": "Motor de bot para WhatsApp com Baileys, focado em performance, resiliencia e multi-instancia.",
   "private": false,
   "license": "MIT",
   "type": "module",
+  "author": "Kaiky Brofc",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kaikybrofc/zyra.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kaikybrofc/zyra/issues"
+  },
+  "homepage": "https://github.com/kaikybrofc/zyra#readme",
+  "keywords": [
+    "whatsapp",
+    "bot",
+    "baileys",
+    "nodejs",
+    "typescript",
+    "redis",
+    "mysql",
+    "pm2",
+    "automation"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
