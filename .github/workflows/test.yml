@@ -15,7 +15,10 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
+      fail-fast: false
       matrix:
+        # Node 20 representa o baseline mais próximo do runtime/container atual.
+        # Node 22 valida compatibilidade adiantada.
         node-version: [20.x, 22.x]
 
     steps:
@@ -28,6 +31,25 @@ jobs:
           cache: 'npm'
           registry-url: 'https://npm.pkg.github.com'
           scope: '@kaikybrofc'
+
+      - name: Show CI environment info
+        run: |
+          echo "Node: $(node -v)"
+          echo "npm: $(npm -v)"
+          echo "Registry: https://npm.pkg.github.com"
+          echo "Scope: @kaikybrofc"
+          echo "Event: $GITHUB_EVENT_NAME"
+          echo "Ref: $GITHUB_REF"
+
+      - name: Validate GitHub Packages auth context
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN || github.token }}
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "GH_PACKAGES_TOKEN/github.token ausente. O install não conseguirá baixar @kaikybrofc/logger-module do GitHub Packages." >&2
+            exit 1
+          fi
+          echo "GitHub Packages token presente para npm ci."
 
       - name: Install dependencies
         run: npm ci
@@ -55,6 +77,16 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Validate Docker build secret context
+        env:
+          NPM_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN || github.token }}
+        run: |
+          if [ -z "${NPM_TOKEN:-}" ]; then
+            echo "Token ausente para Docker BuildKit. O build da imagem não conseguirá acessar o pacote privado no GitHub Packages." >&2
+            exit 1
+          fi
+          echo "Token disponível para docker build com GitHub Packages."
 
       - name: Build Docker image
         uses: docker/build-push-action@v6
