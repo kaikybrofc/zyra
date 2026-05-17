@@ -4,19 +4,313 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![PM2 Ready](https://img.shields.io/badge/pm2-ready-2B037A?logo=pm2&logoColor=white)](https://pm2.keymetrics.io/)
 
-Motor de bot para WhatsApp construído com [Baileys](https://github.com/WhiskeySockets/Baileys), focado em performance, resiliência e operação multi-instância. O projeto oferece persistência híbrida (MySQL, Redis e disco), arquitetura modular de comandos e recursos de observabilidade para ambientes de produção.
+Motor de bot para WhatsApp construído com [Baileys](https://github.com/WhiskeySockets/Baileys), com foco em operação multi-instância, persistência híbrida, observabilidade e execução segura em produção.
 
-## Links Rápidos
+O projeto foi desenhado para manter sessões resilientes, auditar eventos do WhatsApp, processar comandos modulares e operar com múltiplas conexões isoladas por `connection_id`.
 
-- [Pré-requisitos](#-pré-requisitos)
-- [Configuração do Projeto](#️-configuração-do-projeto)
-- [Como Executar](#-como-executar)
-- [Arquitetura do Sistema](#-arquitetura-do-sistema)
-- [Ferramentas de Manutenção](#️-ferramentas-de-manutenção)
-- [Wiki do Projeto](#-wiki-do-projeto)
-- [Licença](#-licença)
+## Sumário
 
-## 📚 Wiki do Projeto
+- [Visão Geral](#visão-geral)
+- [Principais Capacidades](#principais-capacidades)
+- [Arquitetura](#arquitetura)
+- [Pré-requisitos](#pré-requisitos)
+- [Instalação](#instalação)
+- [Configuração](#configuração)
+- [Como Executar](#como-executar)
+- [Comandos de Desenvolvimento](#comandos-de-desenvolvimento)
+- [Docker](#docker)
+- [Produção com PM2](#produção-com-pm2)
+- [Manutenção e Banco](#manutenção-e-banco)
+- [Documentação](#documentação)
+- [Contribuidores](#contribuidores)
+- [Licença](#licença)
+
+## Visão Geral
+
+O Zyra combina quatro responsabilidades principais em uma única plataforma:
+
+- conexão e autenticação de sessões WhatsApp via Baileys
+- persistência de estado e auditoria em MySQL, Redis e disco
+- execução de comandos desacoplados do transporte
+- suporte operacional para produção, incluindo backfill, logs estruturados e métricas do antiban
+
+A aplicação suporta tanto uso local simples quanto cenários distribuídos com múltiplas instâncias compartilhando infraestrutura.
+
+## Principais Capacidades
+
+- **Multi-instância nativa** com isolamento por `WA_CONNECTION_ID`
+- **Persistência híbrida** com prioridade para MySQL, Redis e fallback local em disco
+- **Arquitetura modular de comandos** com `CommandContext` e camada de runtime dedicada
+- **Store de alta performance** para chats, contatos, grupos e mensagens
+- **Identidade unificada** com reconciliação entre JID, PN, LID e aliases
+- **Auditoria completa** de eventos, mensagens, comandos, grupos, newsletters e falhas
+- **Backfill contínuo** para completar colunas derivadas e reparar consistência histórica
+- **Proteção antiban** com warm-up persistente, detecção de sessão surda e endpoint de métricas
+- **Suporte a newsletters/canais** com snapshot, eventos, participantes e refresh de mídia
+
+## Arquitetura
+
+### Fluxo principal
+
+1. `src/index.ts` carrega o ambiente, valida a configuração e inicia o bootstrap.
+2. `src/bootstrap/start.ts` garante schema MySQL, gerencia ciclo de socket e reconexão.
+3. `src/core/connection/socket.ts` cria o socket Baileys com auth, store, antiban e shutdown gracioso.
+4. `src/events/register.ts` registra os handlers centrais dos eventos do WhatsApp.
+5. `src/router/index.ts` enfileira o processamento por chat.
+6. `src/core/command-runtime/processor.ts` aplica regras transversais, executa comandos e registra auditoria.
+
+### Camadas principais
+
+- **Connection/Auth**: criação do socket, estratégia de autenticação, persistência de credenciais e reconexão
+- **Events**: ingestão centralizada de eventos do Baileys, incluindo grupos, mensagens, blocklist e newsletters
+- **Store/Persistência**: cache em memória com expansão opcional para Redis e MySQL
+- **Commands**: runtime desacoplado do socket bruto, com contexto estável para os comandos
+
+### Estratégia de persistência
+
+O projeto separa claramente dois tipos de persistência:
+
+- **Sessão/Auth**: credenciais e chaves do Signal para manter a conta conectada
+- **Domínio/Auditoria**: mensagens, chats, grupos, eventos, labels, blocklist, stickers, newsletters e métricas operacionais
+
+Prioridade de auth:
+
+1. MySQL
+2. Redis
+3. Disco local
+
+Para estado operacional, a leitura normalmente segue:
+
+1. memória
+2. Redis
+3. MySQL
+
+### Multi-instância
+
+O sistema é orientado por `connection_id`.
+
+Isso afeta:
+
+- sessão autenticada
+- chaves Redis
+- dados e auditoria no MySQL
+- checkpoints do backfill
+- configuração por grupo
+- mapeamento de identidade
+
+Recursos novos devem preservar esse isolamento.
+
+## Pré-requisitos
+
+- **Node.js**: 20 ou superior
+- **npm**: gerenciador padrão do projeto
+- **MySQL 8.0+**: recomendado para persistência durável e recursos de auditoria
+- **Redis 6.0+**: recomendado para cache quente e performance
+
+## Instalação
+
+### 1. Clonar o repositório
+
+```bash
+git clone https://github.com/kaikybrofc/zyra.git
+cd zyra
+```
+
+### 2. Instalar dependências
+
+```bash
+npm install
+```
+
+Para reproduzir o ambiente da CI com mais fidelidade:
+
+```bash
+npm ci
+```
+
+### 3. Observação sobre dependência privada
+
+O projeto utiliza o pacote `@kaikybrofc/logger-module` via GitHub Packages.
+
+Se a instalação falhar nessa dependência, verifique autenticação no registry do GitHub antes de prosseguir.
+
+## Configuração
+
+Crie o arquivo `.env` a partir do exemplo:
+
+```bash
+cp .env.example .env
+```
+
+Variáveis centrais:
+
+- `WA_CONNECTION_ID`: identificador lógico da instância
+- `MYSQL_URL`: persistência SQL e auditoria
+- `WA_REDIS_URL`: cache quente e apoio à store/auth
+- `WA_AUTH_DIR`: diretório local de fallback para sessão
+- `WA_COMMAND_PREFIX`: prefixo de comandos
+- `WA_ANTIBAN_ENABLED`: ativa proteção antiban
+- `WA_MEDIA_AUTO_DOWNLOAD`: baixa mídias recebidas para disco
+
+Depois da configuração inicial do banco:
+
+```bash
+npm run db:init
+```
+
+## Como Executar
+
+### Desenvolvimento
+
+```bash
+npm run dev
+```
+
+### Execução simples sem watch
+
+```bash
+npm run start
+```
+
+### Produção
+
+```bash
+npm run build
+npm run start:prod
+```
+
+## Comandos de Desenvolvimento
+
+### Qualidade
+
+```bash
+npm run lint
+npm run lint:fix
+npm run typecheck
+npm test
+npm run test:watch
+```
+
+### Rodar testes específicos
+
+```bash
+npx vitest run tests/router.test.ts
+npx vitest run tests/router.test.ts -t "nome do teste"
+npx vitest watch tests/router.test.ts
+```
+
+### O que a CI executa
+
+O workflow de testes roda esta sequência:
+
+```bash
+npm ci
+npm run typecheck
+npm run lint
+npm run build
+npm test
+```
+
+Se a alteração for ampla, esse é o melhor smoke test local.
+
+## Docker
+
+O repositório inclui `Dockerfile` multi-stage e `docker-compose.yml` com:
+
+- `zyra` — aplicação principal
+- `backfill` — worker de backfill
+- `mysql` — MySQL 8
+- `redis` — Redis 7
+
+### Build da imagem
+
+O build usa secret para autenticar no GitHub Packages:
+
+```bash
+export NPM_TOKEN=seu_token_aqui
+DOCKER_BUILDKIT=1 docker build --secret id=npm_token,env=NPM_TOKEN -t zyra:local .
+```
+
+### Subir a stack
+
+```bash
+docker compose up -d --build
+```
+
+### Logs e status
+
+```bash
+docker compose ps
+docker compose logs -f zyra
+docker compose logs -f backfill
+```
+
+### Parar a stack
+
+```bash
+docker compose down
+```
+
+Observações:
+
+- sessões e mídias são persistidas no volume `zyra-data`
+- as métricas do antiban ficam expostas na porta `9108`
+
+## Produção com PM2
+
+O ecossistema PM2 sobe dois processos:
+
+- `zyra`
+- `zyra-backfill`
+
+Comandos principais:
+
+```bash
+npm run pm2:start
+npm run pm2:restart
+npm run pm2:logs
+npm run pm2:stop
+npm run pm2:delete
+npm run pm2:save
+npm run pm2:startup
+```
+
+Fluxo recomendado para manter o serviço persistente no servidor:
+
+```bash
+npm run pm2:start
+npm run pm2:save
+npm run pm2:startup
+```
+
+## Manutenção e Banco
+
+Scripts utilitários disponíveis:
+
+```bash
+npm run db:init
+npm run db:verify
+npm run db:delete-session
+npm run db:backfill
+npm run db:repair-group-participants
+npm run db:nulls
+```
+
+### Backfill
+
+O backfill é parte importante da arquitetura operacional.
+
+Ele preenche colunas derivadas, reconcilia identidades, repara relacionamentos e completa dados históricos após evolução de schema ou gravações parciais.
+
+Para rodar apenas uma passada:
+
+```bash
+WA_BACKFILL_ONCE=true npm run db:backfill
+```
+
+## Documentação
+
+### Wiki local do projeto
 
 - [Home da Wiki](docs/wiki/Home.md)
 - [Instalação](docs/wiki/Instalação.md)
@@ -29,205 +323,17 @@ Motor de bot para WhatsApp construído com [Baileys](https://github.com/WhiskeyS
 - [Persistência](docs/wiki/Persistência.md)
 - [Backfill](docs/wiki/Backfill.md)
 
----
+### Guias complementares
 
-## 🚀 Principais Diferenciais
+- [Arquitetura de comandos e visão técnica](docs/README-COMMANDS.md)
 
-- **Multi-instância Nativa:** Utilize o mesmo banco de dados para centenas de conexões isoladas via `connection_id`.
-- **Persistência Híbrida:** Sistema de autenticação inteligente que alterna entre **MySQL**, **Redis** e **Disco** (FileSystem) para máxima resiliência.
-- **Identidade Unificada:** Mapeamento inteligente de usuários (PN, LID, JID, Username) para um único ID interno.
-- **Store de Alta Performance:** Cache de contatos, chats e mensagens otimizado para baixa latência.
-- **Arquitetura Modular de Comandos:** Comandos desacoplados do núcleo com contexto próprio e funções de core prontas (consulte [README-COMMANDS.md](docs/README-COMMANDS.md)).
-- **Observabilidade Total:** Logs estruturados e rastreamento de eventos para auditoria e troubleshooting.
+## Contribuidores
 
----
+- **@kaikybrofc** — mantenedor do projeto
+- **@kobie3717** — integração do `baileys-antiban`
 
-## 📋 Pré-requisitos
+## Licença
 
-- **Node.js:** v20.x (LTS) ou superior.
-- **Gerenciador de Pacotes:** `npm` ou `yarn`.
-- **Banco de Dados:** MySQL 8.0+ (Obrigatório para persistência de longo prazo).
-- **Cache:** Redis 6.0+ (Altamente recomendado para performance).
+Este projeto está licenciado sob a **MIT License**.
 
----
-
-## 🛠️ Instalação de Dependências
-
-### 1. Servidor MySQL
-O Zyra utiliza recursos modernos do MySQL 8 (como tipos JSON e índices Full-text).
-
-**No Ubuntu/Debian:**
-```bash
-sudo apt update
-sudo apt install mysql-server -y
-# Acesse o MySQL e crie o banco
-sudo mysql -u root
-# CREATE DATABASE zyra CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-```
-
-### 2. Servidor Redis
-O Redis é utilizado para "cache quente" das sessões de autenticação e estados temporários do socket.
-
-**No Ubuntu/Debian:**
-```bash
-sudo apt update
-sudo apt install redis-server -y
-sudo systemctl enable redis-server
-```
-
----
-
-## ⚙️ Configuração do Projeto
-
-1. **Clonar e Instalar:**
-   ```bash
-   git clone <repo-url>
-   cd zyra
-   npm install
-   ```
-
-2. **Variáveis de Ambiente:**
-   Crie um arquivo `.env` baseado no `.env.example`:
-   ```bash
-   cp .env.example .env
-   ```
-
-3. **Inicializar o Banco de Dados:**
-   O Zyra possui um script automático que cria todas as tabelas necessárias:
-   ```bash
-   npm run db:init
-   ```
-
----
-
-## 🚦 Como Executar
-
-### Desenvolvimento
-```bash
-npm run dev
-```
-
-### Docker
-
-O repositório já inclui `Dockerfile` (multi-stage) e `docker-compose.yml` com:
-- `zyra` (bot principal)
-- `backfill` (worker de backfill)
-- `mysql` (MySQL 8)
-- `redis` (Redis 7)
-
-#### 1. Criar `.env`
-```bash
-cp .env.example .env
-```
-
-#### 2. Build das imagens
-O `Dockerfile` usa pacote privado no `npm ci`, então passe o token como secret:
-
-```bash
-export NPM_TOKEN=seu_token_aqui
-DOCKER_BUILDKIT=1 docker build --secret id=npm_token,env=NPM_TOKEN -t zyra:local .
-```
-
-#### 3. Subir stack com Compose
-```bash
-docker compose up -d --build
-```
-
-#### 4. Inicializar banco (primeira execução)
-```bash
-docker compose exec zyra node dist/core/db/init.js
-```
-
-#### 5. Ver logs e status
-```bash
-docker compose ps
-docker compose logs -f zyra
-docker compose logs -f backfill
-```
-
-#### 6. Parar stack
-```bash
-docker compose down
-```
-
-Observações:
-- Persistência de sessão/mídia: volume `zyra-data` em `/app/data`.
-- Métricas do antiban expostas em `9108` (`http://localhost:9108/metrics`).
-
-### Produção
-```bash
-npm run build
-npm run start:prod
-```
-
-### Produção com PM2
-```bash
-npm run pm2:start
-```
-
-Ao iniciar via PM2, o sistema sobe dois processos:
-- `zyra`: bot principal.
-- `zyra-backfill`: worker contínuo de backfill de banco.
-
-Comandos úteis:
-
-- `npm run pm2:restart`: recompila e reinicia os processos do ecossistema (`zyra` e `zyra-backfill`).
-- `npm run pm2:logs`: acompanha os logs de `zyra` e `zyra-backfill`.
-- `npm run pm2:stop`: para `zyra` e `zyra-backfill` sem remover.
-- `npm run pm2:delete`: remove `zyra` e `zyra-backfill` do PM2.
-- `npm run pm2:save`: salva a lista atual de processos para restauração automática.
-- `npm run pm2:startup`: gera o comando de inicialização automática do PM2 no boot do servidor.
-
-Fluxo recomendado para manter o bot subindo com o servidor:
-
-```bash
-npm run pm2:start
-npm run pm2:save
-npm run pm2:startup
-```
-
----
-
-## 🧠 Arquitetura do Sistema
-
-### Fluxo de Autenticação (Multi-Layer)
-O sistema busca as credenciais na seguinte ordem de prioridade:
-1. **Redis:** Acesso ultra-rápido para sessões ativas.
-2. **MySQL:** Persistência durável e compartilhada.
-3. **Disco:** Fallback local em caso de falha de rede.
-
-### Gerenciamento de Memória e Histórico
-A política de sincronização de histórico (`history-sync.ts`) é otimizada para liberar o sync completo apenas em novos logins, evitando o consumo excessivo de memória e processamento em reconexões rápidas.
-
----
-
-## 🛠️ Ferramentas de Manutenção
-
-O projeto inclui scripts utilitários para operações avançadas:
-
-- **`npm run db:verify`**: Verifica a integridade das tabelas e conta registros por conexão.
-- **`npm run db:delete-session`**: Limpa todos os dados de uma sessão específica (MySQL e Redis).
-- **`npm run db:backfill`**: Processa mensagens antigas ou pendentes no banco.
-- **`npm run db:nulls`**: Gera relatórios de campos inconsistentes para limpeza.
-
----
-
-## 🤝 Contribuidores
-
-- **@kaikybrofc** — mantenedor do projeto.
-- **@kobie3717** — integração do [`baileys-antiban`](https://github.com/kobie3717/baileys-antiban)
-
----
-
-## 📘 Código de Conduta
-
-Este projeto segue um código de conduta para colaboração e uso responsável da plataforma:
-- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
-
----
-
-## 📄 Licença
-
-Este projeto está licenciado sob a **Licença MIT**. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
-
-Copyright (c) 2026 kaikybrofc
+Consulte [LICENSE](LICENSE) para detalhes.
