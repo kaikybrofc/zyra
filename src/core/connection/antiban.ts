@@ -35,6 +35,24 @@ const buildWarmUpConfig = () => ({
   ...(config.antibanInactivityThresholdHours !== undefined ? { inactivityThresholdHours: config.antibanInactivityThresholdHours } : {}),
 })
 
+const buildDeafSessionConfig = (logger: AppLogger, connectionId: string) => {
+  if (!config.antibanDeafSessionEnabled) return undefined
+  return {
+    timeoutMs: config.antibanDeafSessionTimeoutMs,
+    minUptimeMs: config.antibanDeafSessionMinUptimeMs,
+    autoReconnect: config.antibanDeafSessionAutoReconnect,
+    onDeafSession: (info: { lastMessageAt: Date | null; silenceDurationMs: number; connectedSinceMs: number }) => {
+      logger.warn('antiban detectou sessao possivelmente surda', {
+        connectionId,
+        lastMessageAt: info.lastMessageAt?.toISOString() ?? null,
+        silenceDurationMs: info.silenceDurationMs,
+        connectedSinceMs: info.connectedSinceMs,
+        autoReconnect: config.antibanDeafSessionAutoReconnect,
+      })
+    },
+  }
+}
+
 const resolveStateAdapter = (connectionId: string): FileStateAdapter =>
   new FileStateAdapter(path.resolve(process.cwd(), config.antibanStateDir, connectionId))
 
@@ -50,10 +68,10 @@ export function createAntiBanConfig(logger: AppLogger, connectionId: string): An
     ...(config.antibanLidMaxEntries !== undefined ? { maxEntries: config.antibanLidMaxEntries } : {}),
   } as const
 
-  const antiBanConfig: AntiBanConfig = {
+  return {
     logging: config.antibanLogging,
-    ...buildRateLimiterConfig(),
-    ...buildWarmUpConfig(),
+    rateLimiter: buildRateLimiterConfig(),
+    warmUp: buildWarmUpConfig(),
     lidResolver,
     jidCanonicalizer: {
       enabled: config.antibanJidCanonicalizerEnabled,
@@ -91,27 +109,6 @@ export function createAntiBanConfig(logger: AppLogger, connectionId: string): An
       },
     },
   }
-
-  // Compatibilidade: algumas versões do pacote ainda não expõem `deafSession` na tipagem,
-  // embora o runtime aceite a opção.
-  if (config.antibanDeafSessionEnabled) {
-    ;(antiBanConfig as Record<string, unknown>).deafSession = {
-      timeoutMs: config.antibanDeafSessionTimeoutMs,
-      minUptimeMs: config.antibanDeafSessionMinUptimeMs,
-      autoReconnect: config.antibanDeafSessionAutoReconnect,
-      onDeafSession: (state: { silenceMs?: number; timeoutMs?: number; uptimeMs?: number; autoReconnect?: boolean }) => {
-        logger.warn('antiban detectou sessao possivelmente surda', {
-          connectionId,
-          silenceMs: state.silenceMs ?? null,
-          timeoutMs: state.timeoutMs ?? null,
-          uptimeMs: state.uptimeMs ?? null,
-          autoReconnect: state.autoReconnect ?? null,
-        })
-      },
-    }
-  }
-
-  return antiBanConfig
 }
 
 /**
@@ -170,7 +167,12 @@ export function wrapSocketWithAntiBan<T extends Record<string, unknown>>(
   warmUpState?: WarmUpState
 ): T & Partial<WrappedSocket> {
   if (!config.antibanEnabled) return sock as T & Partial<WrappedSocket>
-  const wrapped = wrapSocket(sock as unknown as Parameters<typeof wrapSocket>[0], createAntiBanConfig(logger, connectionId), warmUpState)
+  const wrapped = wrapSocket(
+    sock as unknown as Parameters<typeof wrapSocket>[0],
+    createAntiBanConfig(logger, connectionId),
+    warmUpState,
+    { deafSession: buildDeafSessionConfig(logger, connectionId) }
+  )
   logger.info('antiban ativado no socket', { connectionId })
   return wrapped as unknown as T & Partial<WrappedSocket>
 }

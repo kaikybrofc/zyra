@@ -131,6 +131,38 @@ const isAntiBanBlockedError = (error: unknown): boolean => {
   return error.message.includes(ANTIBAN_BLOCKED_MESSAGE)
 }
 
+const getAntiBanBlockReason = (error: unknown): string | null => {
+  if (!(error instanceof Error) || !error.message.includes(ANTIBAN_BLOCKED_MESSAGE)) return null
+  const [, reason] = error.message.split(`${ANTIBAN_BLOCKED_MESSAGE}: `)
+  return reason?.trim() || null
+}
+
+const getAntiBanRetryDelayMs = (reason: string | null, attempt: number): number | null => {
+  if (!reason) return 2_000 * attempt
+
+  if (reason.startsWith('Reachout timelocked')) {
+    const match = reason.match(/Expires in (\d+)s\.?/)
+    if (!match) return 60_000
+    return Math.max(5_000, Number(match[1]) * 1000)
+  }
+
+  if (reason.startsWith('Warm-up limit:')) {
+    return null
+  }
+
+  if (reason.startsWith('Health risk ')) {
+    return null
+  }
+
+  if (reason === 'Rate limit exceeded or identical message spam detected') {
+    const identicalWindowMs = config.antibanIdenticalMessageWindowMs
+    const cappedWindowMs = identicalWindowMs === undefined ? 12_000 : Math.min(identicalWindowMs, 30_000)
+    return Math.max(2_000 * attempt, cappedWindowMs)
+  }
+
+  return 2_000 * attempt
+}
+
 const wait = async (ms: number): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -340,11 +372,38 @@ const createRuntimeContext = (
             err: error,
           })
         }
-        if (!isAntiBanBlockedError(error) || attempt === ANTIBAN_SEND_MAX_ATTEMPTS) {
+
+        const antiBanReason = getAntiBanBlockReason(error)
+        if (!isAntiBanBlockedError(error)) {
           throw error
         }
-        const retryWindowMs = config.antibanIdenticalMessageWindowMs ?? 12_000
-        const retryDelayMs = Math.max(retryWindowMs, ANTIBAN_SEND_BASE_DELAY_MS * attempt)
+
+        if (attempt === ANTIBAN_SEND_MAX_ATTEMPTS) {
+          logger.error('envio bloqueado pelo antiban apos esgotar retentativas', {
+            chatId: context.chatId,
+            sender: context.sender,
+            commandName: context.commandName,
+            attempt,
+            maxAttempts: ANTIBAN_SEND_MAX_ATTEMPTS,
+            antiBanReason,
+            err: error,
+          })
+          throw error
+        }
+
+        const retryDelayMs = getAntiBanRetryDelayMs(antiBanReason, attempt)
+        if (retryDelayMs === null) {
+          logger.warn('envio bloqueado pelo antiban sem retentativa automatica', {
+            chatId: context.chatId,
+            sender: context.sender,
+            commandName: context.commandName,
+            attempt,
+            maxAttempts: ANTIBAN_SEND_MAX_ATTEMPTS,
+            antiBanReason,
+          })
+          throw error
+        }
+
         logger.warn('envio bloqueado pelo antiban, aplicando retentativa', {
           chatId: context.chatId,
           sender: context.sender,
@@ -352,6 +411,7 @@ const createRuntimeContext = (
           attempt,
           maxAttempts: ANTIBAN_SEND_MAX_ATTEMPTS,
           retryDelayMs,
+          antiBanReason,
         })
         await wait(retryDelayMs)
       }

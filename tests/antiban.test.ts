@@ -93,19 +93,23 @@ describe('antiban helper', () => {
       sock,
       expect.objectContaining({
         logging: false,
-        maxPerMinute: 8,
-        maxPerHour: 200,
-        maxPerDay: 1500,
-        minDelayMs: 1500,
-        maxDelayMs: 5000,
-        newChatDelayMs: 3000,
-        maxIdenticalMessages: 200,
-        identicalMessageWindowMs: 60000,
-        burstAllowance: 20,
-        warmUpDays: 7,
-        day1Limit: 20,
-        growthFactor: 1.8,
-        inactivityThresholdHours: 72,
+        rateLimiter: expect.objectContaining({
+          maxPerMinute: 8,
+          maxPerHour: 200,
+          maxPerDay: 1500,
+          minDelayMs: 1500,
+          maxDelayMs: 5000,
+          newChatDelayMs: 3000,
+          maxIdenticalMessages: 200,
+          identicalMessageWindowMs: 60000,
+          burstAllowance: 20,
+        }),
+        warmUp: expect.objectContaining({
+          warmUpDays: 7,
+          day1Limit: 20,
+          growthFactor: 1.8,
+          inactivityThresholdHours: 72,
+        }),
         lidResolver: expect.objectContaining({ canonical: 'pn', maxEntries: 10000 }),
         jidCanonicalizer: expect.objectContaining({
           enabled: true,
@@ -119,7 +123,15 @@ describe('antiban helper', () => {
           onTimelockLifted: expect.any(Function),
         }),
       }),
-      { day: 1 }
+      { day: 1 },
+      expect.objectContaining({
+        deafSession: expect.objectContaining({
+          timeoutMs: 300000,
+          minUptimeMs: 120000,
+          autoReconnect: true,
+          onDeafSession: expect.any(Function),
+        }),
+      })
     )
   })
 
@@ -191,7 +203,7 @@ describe('antiban helper', () => {
 
   it('cria callbacks de observabilidade e deafSession no config', async () => {
     const logger = createLogger()
-    const { createAntiBanConfig } = await import('../src/core/connection/antiban.ts')
+    const { createAntiBanConfig, wrapSocketWithAntiBan } = await import('../src/core/connection/antiban.ts')
 
     const antibanConfig = createAntiBanConfig(logger as never, 'conn-z') as Record<string, unknown>
     const health = antibanConfig.health as { onRiskChange: (status: unknown) => void; autoPauseAt: string }
@@ -199,22 +211,33 @@ describe('antiban helper', () => {
       onTimelockDetected: (state: unknown) => void
       onTimelockLifted: (state: unknown) => void
     }
-    const deafSession = antibanConfig.deafSession as {
-      onDeafSession: (state: unknown) => void
-      timeoutMs: number
-      minUptimeMs: number
-      autoReconnect: boolean
-    }
 
     health.onRiskChange({ risk: 'high', score: 90, reasons: ['burst'], recommendation: 'pause' })
     timelock.onTimelockDetected({ enforcementType: 'temporary', expiresAt: new Date('2026-05-10T00:00:00.000Z'), errorCount: 2 })
     timelock.onTimelockLifted({ enforcementType: 'temporary', errorCount: 0 })
-    deafSession.onDeafSession({ silenceMs: 1000, timeoutMs: 300000, uptimeMs: 9999, autoReconnect: true })
+
+    const wrapped = wrapSocketWithAntiBan({ ev: { on: vi.fn() }, sendMessage: vi.fn() } as never, logger as never, 'conn-z', { day: 1 } as never)
+    expect(wrapped).toHaveProperty('antiban')
+    const wrapOptions = wrapSocketMock.mock.calls.at(-1)?.[3] as {
+      deafSession?: {
+        onDeafSession: (state: unknown) => void
+        timeoutMs: number
+        minUptimeMs: number
+        autoReconnect: boolean
+      }
+    }
+    const deafSession = wrapOptions?.deafSession
+
+    deafSession?.onDeafSession({
+      lastMessageAt: new Date('2026-05-17T17:00:00.000Z'),
+      silenceDurationMs: 1000,
+      connectedSinceMs: 9999,
+    })
 
     expect(health.autoPauseAt).toBe('high')
-    expect(deafSession.timeoutMs).toBe(300000)
-    expect(deafSession.minUptimeMs).toBe(120000)
-    expect(deafSession.autoReconnect).toBe(true)
+    expect(deafSession?.timeoutMs).toBe(300000)
+    expect(deafSession?.minUptimeMs).toBe(120000)
+    expect(deafSession?.autoReconnect).toBe(true)
     expect(logger.warn).toHaveBeenCalledWith(
       'antiban alterou o nivel de risco',
       expect.objectContaining({ connectionId: 'conn-z', risk: 'high', score: 90 })
@@ -229,17 +252,26 @@ describe('antiban helper', () => {
     )
     expect(logger.warn).toHaveBeenCalledWith(
       'antiban detectou sessao possivelmente surda',
-      expect.objectContaining({ connectionId: 'conn-z', silenceMs: 1000, timeoutMs: 300000, uptimeMs: 9999, autoReconnect: true })
+      expect.objectContaining({
+        connectionId: 'conn-z',
+        lastMessageAt: '2026-05-17T17:00:00.000Z',
+        silenceDurationMs: 1000,
+        connectedSinceMs: 9999,
+        autoReconnect: true,
+      })
     )
   })
 
   it('nao inclui deafSession quando desabilitado', async () => {
     mockConfig.antibanDeafSessionEnabled = false
     const logger = createLogger()
-    const { createAntiBanConfig } = await import('../src/core/connection/antiban.ts')
+    const { createAntiBanConfig, wrapSocketWithAntiBan } = await import('../src/core/connection/antiban.ts')
 
     const antibanConfig = createAntiBanConfig(logger as never, 'conn-z') as Record<string, unknown>
-
     expect(antibanConfig).not.toHaveProperty('deafSession')
+
+    wrapSocketWithAntiBan({ ev: { on: vi.fn() }, sendMessage: vi.fn() } as never, logger as never, 'conn-z')
+    const wrapOptions = wrapSocketMock.mock.calls.at(-1)?.[3] as { deafSession?: unknown } | undefined
+    expect(wrapOptions?.deafSession).toBeUndefined()
   })
 })
