@@ -8,6 +8,7 @@ import { config } from '../../config/index.js'
 import { createLogger } from '../../observability/logger.js'
 import { ensureMysqlConnection } from './connection.js'
 import { getMysqlPool } from './mysql.js'
+import { isSuspiciousDisplayName, normalizeDisplayNameCandidate, pickBetterDisplayName } from '../../utils/display-name.js'
 import { getMessageText, getNormalizedMessage } from '../../utils/message.js'
 
 loadEnv()
@@ -82,7 +83,10 @@ const normalizeString = (value: unknown, options: { maxLength?: number; allowEmp
 
 const normalizePnLid = (value: unknown): string | null => normalizeString(value, { maxLength: MAX_LENGTHS.lidPn })
 
-const normalizeDisplayName = (value: unknown): string | null => normalizeString(value, { maxLength: MAX_LENGTHS.displayName, truncate: true })
+const normalizeDisplayName = (value: unknown): string | null => {
+  const normalized = normalizeString(value, { maxLength: MAX_LENGTHS.displayName, truncate: true })
+  return normalizeDisplayNameCandidate(normalized)
+}
 
 const toNumber = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -700,23 +704,54 @@ async function main() {
   }
 
   const backfillUsersDisplayNames = async () => {
+    type UserDisplayCandidateRow = RowDataPacket & {
+      user_id: string
+      current_display_name: string | null
+      candidate_display_name: string | null
+    }
+
+    const applyUserDisplayNameCandidates = async (label: string, query: string, params: Array<string | number>) => {
+      const [rows] = await pool.execute<UserDisplayCandidateRow[]>(query, params)
+      let updated = 0
+      for (const row of rows) {
+        const current = normalizeDisplayName(row.current_display_name)
+        const candidate = normalizeDisplayName(row.candidate_display_name)
+        const better = pickBetterDisplayName(current, candidate)
+        if (!better || better === current) continue
+        await pool.execute(
+          `UPDATE users
+           SET display_name = ?
+           WHERE connection_id = ?
+             AND id = UNHEX(REPLACE(?, '-', ''))`,
+          [better, connectionId, row.user_id]
+        )
+        updated += 1
+      }
+      if (updated) logger.info('backfill atualizado', { item: label, affected: updated })
+    }
+
     for (const aliasType of ['display_name', 'notify', 'pushName', 'username'] as const) {
-      const [result] = await pool.execute<ResultSetHeader>(
-        `UPDATE users u
+      await applyUserDisplayNameCandidates(
+        `users.display_name(${aliasType})`,
+        `SELECT LOWER(CONCAT(HEX(SUBSTR(u.id, 1, 4)),'-',HEX(SUBSTR(u.id, 5, 2)),'-',HEX(SUBSTR(u.id, 7, 2)),'-',HEX(SUBSTR(u.id, 9, 2)),'-',HEX(SUBSTR(u.id, 11, 6)))) AS user_id,
+                u.display_name AS current_display_name,
+                ua.alias_value AS candidate_display_name
+         FROM users u
          INNER JOIN user_aliases ua
            ON ua.connection_id = u.connection_id
           AND ua.user_id = u.id
           AND ua.alias_type = ?
-         SET u.display_name = ua.alias_value
-         WHERE u.connection_id = ?
-           AND (u.display_name IS NULL OR u.display_name = '')`,
+         WHERE u.connection_id = ?`,
         [aliasType, connectionId]
       )
-      logAffected(`users.display_name(${aliasType})`, result)
     }
 
-    const [fromContacts] = await pool.execute<ResultSetHeader>(
-      `UPDATE users u
+    await applyUserDisplayNameCandidates(
+      'users.display_name(contacts)',
+      `SELECT LOWER(CONCAT(HEX(SUBSTR(u.id, 1, 4)),'-',HEX(SUBSTR(u.id, 5, 2)),'-',HEX(SUBSTR(u.id, 7, 2)),'-',HEX(SUBSTR(u.id, 9, 2)),'-',HEX(SUBSTR(u.id, 11, 6)))) AS user_id,
+              u.display_name AS current_display_name,
+              wc.display_name AS candidate_display_name
+       FROM users u
        INNER JOIN user_identifiers ui
          ON ui.connection_id = u.connection_id
         AND ui.user_id = u.id
@@ -724,17 +759,16 @@ async function main() {
        INNER JOIN wa_contacts_cache wc
          ON wc.connection_id = ui.connection_id
         AND wc.jid = ui.id_value
-       SET u.display_name = wc.display_name
-       WHERE u.connection_id = ?
-         AND (u.display_name IS NULL OR u.display_name = '')
-         AND wc.display_name IS NOT NULL
-         AND wc.display_name <> ''`,
+       WHERE u.connection_id = ?`,
       [connectionId]
     )
-    logAffected('users.display_name(contacts)', fromContacts)
 
-    const [fromChats] = await pool.execute<ResultSetHeader>(
-      `UPDATE users u
+    await applyUserDisplayNameCandidates(
+      'users.display_name(chats)',
+      `SELECT LOWER(CONCAT(HEX(SUBSTR(u.id, 1, 4)),'-',HEX(SUBSTR(u.id, 5, 2)),'-',HEX(SUBSTR(u.id, 7, 2)),'-',HEX(SUBSTR(u.id, 9, 2)),'-',HEX(SUBSTR(u.id, 11, 6)))) AS user_id,
+              u.display_name AS current_display_name,
+              c.display_name AS candidate_display_name
+       FROM users u
        INNER JOIN user_identifiers ui
          ON ui.connection_id = u.connection_id
         AND ui.user_id = u.id
@@ -742,16 +776,11 @@ async function main() {
        INNER JOIN chats c
          ON c.connection_id = ui.connection_id
         AND c.jid = ui.id_value
-       SET u.display_name = c.display_name
        WHERE u.connection_id = ?
-         AND (u.display_name IS NULL OR u.display_name = '')
          AND c.jid NOT LIKE '%@g.us'
-         AND c.jid NOT LIKE '%@newsletter'
-         AND c.display_name IS NOT NULL
-         AND c.display_name <> ''`,
+         AND c.jid NOT LIKE '%@newsletter'`,
       [connectionId]
     )
-    logAffected('users.display_name(chats)', fromChats)
   }
 
   const backfillContactsDisplayNames = async () => {
@@ -797,55 +826,74 @@ async function main() {
   }
 
   const backfillChats = async () => {
-    const [groupNames] = await pool.execute<ResultSetHeader>(
-      `UPDATE chats c
+    type ChatDisplayCandidateRow = RowDataPacket & {
+      jid: string
+      current_display_name: string | null
+      candidate_display_name: string | null
+    }
+
+    const applyChatDisplayNameCandidates = async (label: string, query: string, params: Array<string | number>) => {
+      const [rows] = await pool.execute<ChatDisplayCandidateRow[]>(query, params)
+      let updated = 0
+      for (const row of rows) {
+        const current = normalizeDisplayName(row.current_display_name)
+        const candidate = normalizeDisplayName(row.candidate_display_name)
+        const better = pickBetterDisplayName(current, candidate)
+        if (!better || better === current) continue
+        await pool.execute(
+          `UPDATE chats
+           SET display_name = ?
+           WHERE connection_id = ?
+             AND jid = ?`,
+          [better, connectionId, row.jid]
+        )
+        updated += 1
+      }
+      if (updated) logger.info('backfill atualizado', { item: label, affected: updated })
+    }
+
+    await applyChatDisplayNameCandidates(
+      'chats.display_name(groups)',
+      `SELECT c.jid, c.display_name AS current_display_name, g.subject AS candidate_display_name
+       FROM chats c
        INNER JOIN \`groups\` g
          ON g.connection_id = c.connection_id
         AND g.jid = c.jid
-       SET c.display_name = g.subject
-       WHERE c.connection_id = ?
-         AND (c.display_name IS NULL OR c.display_name = '')
-         AND g.subject IS NOT NULL
-         AND g.subject <> ''`,
+       WHERE c.connection_id = ?`,
       [connectionId]
     )
-    logAffected('chats.display_name(groups)', groupNames)
 
-    const [newsletterNames] = await pool.execute<ResultSetHeader>(
-      `UPDATE chats c
+    await applyChatDisplayNameCandidates(
+      'chats.display_name(newsletters)',
+      `SELECT c.jid,
+              c.display_name AS current_display_name,
+              COALESCE(
+                JSON_UNQUOTE(JSON_EXTRACT(n.data_json, '$.name.text')),
+                JSON_UNQUOTE(JSON_EXTRACT(n.data_json, '$.name'))
+              ) AS candidate_display_name
+       FROM chats c
        INNER JOIN newsletters n
          ON n.connection_id = c.connection_id
         AND n.newsletter_id = c.jid
-       SET c.display_name = COALESCE(
-         JSON_UNQUOTE(JSON_EXTRACT(n.data_json, '$.name.text')),
-         JSON_UNQUOTE(JSON_EXTRACT(n.data_json, '$.name'))
-       )
-       WHERE c.connection_id = ?
-         AND (c.display_name IS NULL OR c.display_name = '')
-         AND COALESCE(
-           JSON_UNQUOTE(JSON_EXTRACT(n.data_json, '$.name.text')),
-           JSON_UNQUOTE(JSON_EXTRACT(n.data_json, '$.name'))
-         ) IS NOT NULL`,
+       WHERE c.connection_id = ?`,
       [connectionId]
     )
-    logAffected('chats.display_name(newsletters)', newsletterNames)
 
-    const [contactNames] = await pool.execute<ResultSetHeader>(
-      `UPDATE chats c
+    await applyChatDisplayNameCandidates(
+      'chats.display_name(contacts)',
+      `SELECT c.jid, c.display_name AS current_display_name, wc.display_name AS candidate_display_name
+       FROM chats c
        INNER JOIN wa_contacts_cache wc
          ON wc.connection_id = c.connection_id
         AND wc.jid = c.jid
-       SET c.display_name = wc.display_name
-       WHERE c.connection_id = ?
-         AND (c.display_name IS NULL OR c.display_name = '')
-         AND wc.display_name IS NOT NULL
-         AND wc.display_name <> ''`,
+       WHERE c.connection_id = ?`,
       [connectionId]
     )
-    logAffected('chats.display_name(contacts)', contactNames)
 
-    const [userNames] = await pool.execute<ResultSetHeader>(
-      `UPDATE chats c
+    await applyChatDisplayNameCandidates(
+      'chats.display_name(users)',
+      `SELECT c.jid, c.display_name AS current_display_name, u.display_name AS candidate_display_name
+       FROM chats c
        INNER JOIN user_identifiers ui
          ON ui.connection_id = c.connection_id
         AND ui.id_type = 'jid'
@@ -853,16 +901,11 @@ async function main() {
        INNER JOIN users u
          ON u.connection_id = ui.connection_id
         AND u.id = ui.user_id
-       SET c.display_name = u.display_name
        WHERE c.connection_id = ?
          AND c.jid NOT LIKE '%@g.us'
-         AND c.jid NOT LIKE '%@newsletter'
-         AND (c.display_name IS NULL OR c.display_name = '')
-         AND u.display_name IS NOT NULL
-         AND u.display_name <> ''`,
+         AND c.jid NOT LIKE '%@newsletter'`,
       [connectionId]
     )
-    logAffected('chats.display_name(users)', userNames)
 
     const [messageTs] = await pool.execute<ResultSetHeader>(
       `UPDATE chats c

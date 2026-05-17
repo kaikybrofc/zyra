@@ -181,18 +181,67 @@ describe('sql-store', () => {
     const store = createSqlStore('tenant')
 
     const p1 = store.setLidMapping({ lid: '99@lid', pn: '99' } as never)
-    // yield so p1 can acquire the lock and reach the first blocked execute
     await new Promise<void>((res) => setTimeout(res, 0))
 
     const p2 = store.setLidMapping({ lid: '99@lid', pn: '99' } as never)
-    // p2 should be queued behind p1's lock; unblock p1 now
     unblockFirst()
     await Promise.all([p1, p2])
 
-    // p1's first execute must complete before p2 can begin any execute
     const firstP2Start = executionLog.indexOf('start-' + String(executionLog.filter(e => e.startsWith('start-')).length))
     const lastP1End = executionLog.lastIndexOf('end-1')
     expect(lastP1End).toBeLessThan(firstP2Start === -1 ? Infinity : firstP2Start)
     expect(pool.execute).toHaveBeenCalled()
+  })
+
+  it('nao degrada users.display_name quando o candidato e pior', async () => {
+    mockConfig.mysqlUrl = 'mysql://test'
+    const pool = {
+      execute: vi.fn()
+        .mockResolvedValueOnce([[{ user_id: '11111111-1111-1111-1111-111111111111' }]])
+        .mockResolvedValueOnce([[{ display_name: 'João Silva' }]])
+        .mockResolvedValue([[]]),
+      query: vi.fn().mockResolvedValue([[]]),
+    }
+    getMysqlPoolMock.mockReturnValue(pool)
+
+    const { createSqlStore } = await import('../src/store/sql-store.ts')
+    const store = createSqlStore('tenant')
+
+    await store.setContact('5511999999999@s.whatsapp.net', {
+      id: '5511999999999@s.whatsapp.net',
+      name: '5511999999999',
+    } as never)
+
+    const updateUserCall = pool.execute.mock.calls.find(([sql]) =>
+      typeof sql === 'string' && sql.includes('UPDATE users') && sql.includes('SET display_name = ?')
+    )
+    expect(updateUserCall).toBeUndefined()
+  })
+
+  it('persiste nome melhor no cache de contato quando o existente e pior', async () => {
+    mockConfig.mysqlUrl = 'mysql://test'
+    const pool = {
+      execute: vi.fn()
+        .mockResolvedValueOnce([[{ user_id: '11111111-1111-1111-1111-111111111111' }]])
+        .mockResolvedValueOnce([[{ display_name: '5511999999999' }]])
+        .mockResolvedValue([[]]),
+      query: vi.fn().mockResolvedValue([[]]),
+    }
+    getMysqlPoolMock.mockReturnValue(pool)
+
+    const { createSqlStore } = await import('../src/store/sql-store.ts')
+    const store = createSqlStore('tenant')
+
+    await store.setContact('5511999999999@s.whatsapp.net', {
+      id: '5511999999999@s.whatsapp.net',
+      name: 'João Silva',
+      notify: 'João Silva',
+    } as never)
+
+    const upsertContactCall = pool.execute.mock.calls.find(([sql]) =>
+      typeof sql === 'string' && sql.includes('INSERT INTO wa_contacts_cache')
+    )
+    expect(upsertContactCall).toBeTruthy()
+    expect(upsertContactCall?.[1]).toContain('João Silva')
   })
 })

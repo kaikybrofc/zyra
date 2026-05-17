@@ -4,6 +4,7 @@ import { config } from '../../config/index.js'
 import { createLogger } from '../../observability/logger.js'
 import { ensureMysqlConnection } from './connection.js'
 import { getMysqlPool } from './mysql.js'
+import { isSuspiciousDisplayName } from '../../utils/display-name.js'
 
 loadEnv()
 const logger = createLogger()
@@ -13,6 +14,10 @@ type TableRow = RowDataPacket & { table_name: string }
 type ColumnRow = RowDataPacket & {
   column_name: string
   is_nullable: 'YES' | 'NO'
+}
+
+type SuspiciousNameRow = RowDataPacket & {
+  display_name: string | null
 }
 
 const escapeId = (value: string) => value.replace(/`/g, '``')
@@ -133,6 +138,13 @@ async function main() {
     category: ClassifiedCategory
   }> = []
 
+  const suspiciousNameFindings: Array<{
+    table: string
+    count: number
+    total: number
+    percent: number
+  }> = []
+
   for (const row of tableRows) {
     const table = row.table_name
     if (!table) continue
@@ -173,6 +185,22 @@ async function main() {
         percent,
         category: classifyColumn(table, column.column_name),
       })
+    }
+
+    if (table === 'users' || table === 'chats' || table === 'wa_contacts_cache') {
+      const suspiciousQuery = hasConnectionId
+        ? `SELECT display_name FROM \`${tableEscaped}\` WHERE connection_id = ? AND display_name IS NOT NULL AND display_name <> ''`
+        : `SELECT display_name FROM \`${tableEscaped}\` WHERE display_name IS NOT NULL AND display_name <> ''`
+      const [nameRows] = await pool.execute<SuspiciousNameRow[]>(suspiciousQuery, hasConnectionId ? [connectionId] : [])
+      const suspiciousCount = nameRows.reduce((sum, current) => sum + (current.display_name && isSuspiciousDisplayName(current.display_name) ? 1 : 0), 0)
+      if (suspiciousCount > 0) {
+        suspiciousNameFindings.push({
+          table,
+          count: suspiciousCount,
+          total,
+          percent: total ? Number(((suspiciousCount / total) * 100).toFixed(2)) : 0,
+        })
+      }
     }
   }
 
@@ -230,6 +258,15 @@ async function main() {
     console.log(`\n${colorize('[OUTROS]', 'bold')}`)
     for (const item of other) {
       console.log(formatRow(item))
+    }
+  }
+
+  if (suspiciousNameFindings.length) {
+    console.log(`\n${colorize('[QUALIDADE DE DISPLAY_NAME]', 'bold')}`)
+    for (const item of suspiciousNameFindings.sort((a, b) => b.percent - a.percent)) {
+      const percentText = `${item.percent.toFixed(2)}%`
+      const coloredPercent = item.percent >= 5 ? colorize(percentText, 'red') : item.percent >= 1 ? colorize(percentText, 'yellow') : colorize(percentText, 'green')
+      console.log(`${item.table}.display_name_suspeito -> ${item.count}/${item.total} (${coloredPercent})`)
     }
   }
 }

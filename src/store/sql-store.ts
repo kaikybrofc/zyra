@@ -5,6 +5,7 @@ import { config } from '../config/index.js'
 import { ensureMysqlConnection } from '../core/db/connection.js'
 import { getMysqlPool } from '../core/db/mysql.js'
 import { createLogger } from '../observability/logger.js'
+import { normalizeDisplayNameCandidate, pickBetterDisplayName, scoreDisplayName } from '../utils/display-name.js'
 import { downloadIncomingMediaToDisk } from '../utils/media-download.js'
 import { getMessageText, getNormalizedMessage } from '../utils/message.js'
 
@@ -136,7 +137,10 @@ const normalizeLabelId = (value: unknown): string | null => normalizeString(valu
 
 const normalizeEventType = (value: unknown, maxLength: number): string | null => normalizeString(value, { maxLength })
 
-const normalizeDisplayName = (value: unknown): string | null => normalizeString(value, { maxLength: MAX_LENGTHS.displayName, truncate: true })
+const normalizeDisplayName = (value: unknown): string | null => {
+  const normalized = normalizeString(value, { maxLength: MAX_LENGTHS.displayName, truncate: true })
+  return normalizeDisplayNameCandidate(normalized)
+}
 
 const normalizeRole = (value: unknown, maxLength: number): string | null => normalizeString(value, { maxLength, truncate: true })
 
@@ -498,6 +502,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
         .filter((alias): alias is { type: 'pushName' | 'notify' | 'username' | 'display_name'; value: string } => Boolean(alias)) ?? null
 
     type UserRow = RowDataPacket & { user_id: string }
+    type ExistingUserRow = RowDataPacket & { display_name: string | null }
     for (const entry of lookupIdentifiers) {
       const [rows] = await pool.execute<UserRow[]>(
         `SELECT LOWER(CONCAT(HEX(SUBSTR(user_id, 1, 4)),'-',HEX(SUBSTR(user_id, 5, 2)),'-',HEX(SUBSTR(user_id, 7, 2)),'-',HEX(SUBSTR(user_id, 9, 2)),'-',HEX(SUBSTR(user_id, 11, 6)))) AS user_id
@@ -511,13 +516,25 @@ export function createSqlStore(connectionId?: string): SqlStore {
       if (rows[0]?.user_id) {
         const userId = rows[0].user_id
         if (normalizedDisplayName) {
-          await pool.execute(
-            `UPDATE users
-             SET display_name = ?
+          const [existingRows] = await pool.execute<ExistingUserRow[]>(
+            `SELECT display_name
+             FROM users
              WHERE connection_id = ?
-               AND id = UNHEX(REPLACE(?, '-', ''))`,
-            [normalizedDisplayName, resolvedConnectionId, userId]
+               AND id = UNHEX(REPLACE(?, '-', ''))
+             LIMIT 1`,
+            [resolvedConnectionId, userId]
           )
+          const existingDisplayName = normalizeDisplayName(existingRows[0]?.display_name ?? null)
+          const betterDisplayName = pickBetterDisplayName(existingDisplayName, normalizedDisplayName)
+          if (betterDisplayName && betterDisplayName !== existingDisplayName) {
+            await pool.execute(
+              `UPDATE users
+               SET display_name = ?
+               WHERE connection_id = ?
+                 AND id = UNHEX(REPLACE(?, '-', ''))`,
+              [betterDisplayName, resolvedConnectionId, userId]
+            )
+          }
         }
         for (const ident of cleanIdentifiers) {
           await pool.execute(
@@ -1345,7 +1362,13 @@ export function createSqlStore(connectionId?: string): SqlStore {
       safe(
         async (pool) => {
           const payload = serialize(contact)
-          const displayName = normalizeDisplayName(contact.name ?? contact.notify ?? null)
+          const directDisplayName = normalizeDisplayName(contact.name ?? null)
+          const notifyDisplayName = normalizeDisplayName(contact.notify ?? null)
+          const pushNameDisplayName = normalizeDisplayName((contact as { pushName?: string }).pushName ?? null)
+          const displayName = pickBetterDisplayName(
+            directDisplayName,
+            pickBetterDisplayName(notifyDisplayName, pushNameDisplayName)
+          )
           const normalizedJid = normalizeJid(id)
           if (!normalizedJid) return
           const aliases: Array<{
@@ -1374,6 +1397,17 @@ export function createSqlStore(connectionId?: string): SqlStore {
             })
           }
           const userId = await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedJid }], displayName, aliases.length ? aliases : undefined)
+          type ExistingContactRow = RowDataPacket & { display_name: string | null }
+          const [existingContactRows] = await pool.execute<ExistingContactRow[]>(
+            `SELECT display_name
+             FROM wa_contacts_cache
+             WHERE connection_id = ?
+               AND jid = ?
+             LIMIT 1`,
+            [resolvedConnectionId, normalizedJid]
+          )
+          const existingContactDisplayName = normalizeDisplayName(existingContactRows[0]?.display_name ?? null)
+          const persistedContactDisplayName = pickBetterDisplayName(existingContactDisplayName, displayName)
           await pool.execute(
             `INSERT INTO wa_contacts_cache (
              connection_id,
@@ -1385,9 +1419,9 @@ export function createSqlStore(connectionId?: string): SqlStore {
            VALUES (?, ?, IF(?, UNHEX(REPLACE(?, '-', '')), NULL), ?, ?)
            ON DUPLICATE KEY UPDATE
              user_id = VALUES(user_id),
-             display_name = VALUES(display_name),
+             display_name = ?,
              data_json = VALUES(data_json)`,
-            [resolvedConnectionId, normalizedJid, userId ? 1 : 0, userId, displayName, payload]
+            [resolvedConnectionId, normalizedJid, userId ? 1 : 0, userId, persistedContactDisplayName, payload, persistedContactDisplayName]
           )
           if (displayName && !normalizedJid.endsWith('@g.us')) {
             await pool.execute(
