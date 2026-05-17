@@ -1,5 +1,6 @@
 import { loadEnv } from '../../bootstrap/env.js'
 import type { RowDataPacket } from 'mysql2/promise'
+import { pathToFileURL } from 'node:url'
 import { config } from '../../config/index.js'
 import { createLogger } from '../../observability/logger.js'
 import { ensureMysqlConnection } from './connection.js'
@@ -37,6 +38,7 @@ const contextualColumns = new Set<string>([
   'blocklist.reason',
   'bot_sessions.platform',
   'bot_sessions.app_version',
+  'group_feature_flags.antilink_allow_own_group_invite',
   'label_associations.message_db_id',
   'label_associations.target_jid',
   'label_associations.actor_user_id',
@@ -49,7 +51,14 @@ const contextualColumns = new Set<string>([
 type Category = 'target' | 'optional' | 'contextual' | 'other'
 type ClassifiedCategory = Category | 'ignored'
 
-const classifyColumn = (table: string, column: string): ClassifiedCategory => {
+type NullQueryOptions = {
+  connectionId?: string
+  hasConnectionId: boolean
+  table: string
+  column: string
+}
+
+export const classifyColumn = (table: string, column: string): ClassifiedCategory => {
   if (column === 'deleted_at') return 'ignored'
   const key = `${table}.${column}`
   if (ignoredColumns.has(key)) return 'ignored'
@@ -57,6 +66,27 @@ const classifyColumn = (table: string, column: string): ClassifiedCategory => {
   if (contextualColumns.has(key)) return 'contextual'
   if (targetColumns.has(key)) return 'target'
   return 'other'
+}
+
+export const buildNullCountQuery = ({ connectionId, hasConnectionId, table, column }: NullQueryOptions) => {
+  const tableEscaped = escapeId(table)
+  const columnEscaped = escapeId(column)
+
+  if (table === 'label_associations' && column === 'message_db_id') {
+    return {
+      query: hasConnectionId
+        ? `SELECT COUNT(*) AS count FROM \`${tableEscaped}\` WHERE connection_id = ? AND association_type = 'message' AND \`${columnEscaped}\` IS NULL`
+        : `SELECT COUNT(*) AS count FROM \`${tableEscaped}\` WHERE association_type = 'message' AND \`${columnEscaped}\` IS NULL`,
+      params: hasConnectionId ? [connectionId ?? 'default'] : [],
+    }
+  }
+
+  return {
+    query: hasConnectionId
+      ? `SELECT COUNT(*) AS count FROM \`${tableEscaped}\` WHERE connection_id = ? AND \`${columnEscaped}\` IS NULL`
+      : `SELECT COUNT(*) AS count FROM \`${tableEscaped}\` WHERE \`${columnEscaped}\` IS NULL`,
+    params: hasConnectionId ? [connectionId ?? 'default'] : [],
+  }
 }
 
 const COLORS = {
@@ -103,7 +133,7 @@ const formatRow = (item: { table: string; column: string; count: number; total: 
   return `${formatSeverity(severity)} ${item.table}.${item.column} -> ${item.count}/${item.total} (${coloredPercent})`
 }
 
-async function main() {
+export async function main() {
   if (!config.mysqlUrl) {
     logger.error('MYSQL_URL nao configurada')
     process.exitCode = 1
@@ -170,10 +200,14 @@ async function main() {
     if (!total) continue
 
     for (const column of nullables) {
-      const columnEscaped = escapeId(column.column_name)
-      const nullQuery = hasConnectionId ? `SELECT COUNT(*) AS count FROM \`${tableEscaped}\` WHERE connection_id = ? AND \`${columnEscaped}\` IS NULL` : `SELECT COUNT(*) AS count FROM \`${tableEscaped}\` WHERE \`${columnEscaped}\` IS NULL`
+      const { query: nullQuery, params: nullParams } = buildNullCountQuery({
+        connectionId,
+        hasConnectionId,
+        table,
+        column: column.column_name,
+      })
       type CountRow = RowDataPacket & { count: number }
-      const [nullRows] = await pool.execute<CountRow[]>(nullQuery, hasConnectionId ? [connectionId] : [])
+      const [nullRows] = await pool.execute<CountRow[]>(nullQuery, nullParams)
       const count = nullRows[0]?.count ?? 0
       if (!count) continue
       const percent = total ? Number(((count / total) * 100).toFixed(2)) : 0
@@ -271,7 +305,11 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  logger.error('falha ao verificar NULLs', { err: error })
-  process.exitCode = 1
-})
+const isMainModule = process.argv[1] ? import.meta.url === pathToFileURL(process.argv[1]).href : false
+
+if (isMainModule) {
+  main().catch((error) => {
+    logger.error('falha ao verificar NULLs', { err: error })
+    process.exitCode = 1
+  })
+}

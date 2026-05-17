@@ -23,7 +23,6 @@ const ANSI_RED = '\x1b[31m'
 const REACHOUT_TIMELOCK_STATUS_CODE = 463
 const ANTIBAN_BLOCKED_MESSAGE = '[baileys-antiban] Message blocked'
 const ANTIBAN_SEND_MAX_ATTEMPTS = 3
-const ANTIBAN_SEND_BASE_DELAY_MS = 2_000
 const NON_LINK_FILE_EXTENSIONS = new Set([
   'json',
   'txt',

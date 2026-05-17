@@ -27,9 +27,12 @@ vi.mock('../src/observability/logger.js', () => ({
 vi.mock('../src/utils/media-download.js', () => ({
   downloadIncomingMediaToDisk: vi.fn().mockResolvedValue(null),
 }))
+const getMessageTextMock = vi.fn().mockReturnValue(null)
+const getNormalizedMessageMock = vi.fn().mockReturnValue({ content: undefined, type: null })
+
 vi.mock('../src/utils/message.js', () => ({
-  getMessageText: vi.fn().mockReturnValue(null),
-  getNormalizedMessage: vi.fn().mockReturnValue(null),
+  getMessageText: (...args: unknown[]) => getMessageTextMock(...args),
+  getNormalizedMessage: (...args: unknown[]) => getNormalizedMessageMock(...args),
 }))
 
 const createPool = (rows: Record<string, unknown>[] = []) => ({
@@ -44,6 +47,8 @@ beforeEach(() => {
   mockConfig.connectionId = 'default'
   getMysqlPoolMock = vi.fn(() => null)
   ensureMysqlConnectionMock = vi.fn().mockResolvedValue(undefined)
+  getMessageTextMock.mockReset().mockReturnValue(null)
+  getNormalizedMessageMock.mockReset().mockReturnValue({ content: undefined, type: null })
 })
 
 describe('sql-store', () => {
@@ -224,6 +229,8 @@ describe('sql-store', () => {
       execute: vi.fn()
         .mockResolvedValueOnce([[{ user_id: '11111111-1111-1111-1111-111111111111' }]])
         .mockResolvedValueOnce([[{ display_name: '5511999999999' }]])
+        .mockResolvedValueOnce([[]])
+        .mockResolvedValueOnce([[{ display_name: null }]])
         .mockResolvedValue([[]]),
       query: vi.fn().mockResolvedValue([[]]),
     }
@@ -243,5 +250,131 @@ describe('sql-store', () => {
     )
     expect(upsertContactCall).toBeTruthy()
     expect(upsertContactCall?.[1]).toContain('João Silva')
+  })
+
+  it('setChat preserva display_name melhor quando chega candidato pior', async () => {
+    mockConfig.mysqlUrl = 'mysql://test'
+    const pool = {
+      execute: vi.fn()
+        .mockResolvedValueOnce([[{ display_name: 'João Silva' }]])
+        .mockResolvedValueOnce([[{ user_id: '11111111-1111-1111-1111-111111111111' }]])
+        .mockResolvedValueOnce([[{ display_name: 'João Silva' }]])
+        .mockResolvedValue([[]]),
+      query: vi.fn().mockResolvedValue([[]]),
+    }
+    getMysqlPoolMock.mockReturnValue(pool)
+
+    const { createSqlStore } = await import('../src/store/sql-store.ts')
+    const store = createSqlStore('tenant')
+
+    await store.setChat('5511999999999@s.whatsapp.net', {
+      id: '5511999999999@s.whatsapp.net',
+      name: '5511999999999',
+    } as never)
+
+    const upsertChatCall = pool.execute.mock.calls.find(([sql]) =>
+      typeof sql === 'string' && sql.includes('INSERT INTO chats')
+    )
+    expect(upsertChatCall?.[1]).toContain('João Silva')
+    expect(upsertChatCall?.[1]).not.toContain('5511999999999')
+  })
+
+  it('setChat promove display_name melhor quando chega candidato melhor', async () => {
+    mockConfig.mysqlUrl = 'mysql://test'
+    const pool = {
+      execute: vi.fn()
+        .mockResolvedValueOnce([[{ display_name: '5511999999999' }]])
+        .mockResolvedValueOnce([[{ user_id: '11111111-1111-1111-1111-111111111111' }]])
+        .mockResolvedValueOnce([[{ display_name: '5511999999999' }]])
+        .mockResolvedValue([[]]),
+      query: vi.fn().mockResolvedValue([[]]),
+    }
+    getMysqlPoolMock.mockReturnValue(pool)
+
+    const { createSqlStore } = await import('../src/store/sql-store.ts')
+    const store = createSqlStore('tenant')
+
+    await store.setChat('5511999999999@s.whatsapp.net', {
+      id: '5511999999999@s.whatsapp.net',
+      name: 'João Silva',
+    } as never)
+
+    const upsertChatCall = pool.execute.mock.calls.find(([sql]) =>
+      typeof sql === 'string' && sql.includes('INSERT INTO chats')
+    )
+    expect(upsertChatCall?.[1]).toContain('João Silva')
+  })
+
+  it('setContact melhora chats.display_name quando o valor atual e pior', async () => {
+    mockConfig.mysqlUrl = 'mysql://test'
+    const pool = {
+      execute: vi.fn()
+        .mockResolvedValueOnce([[{ user_id: '11111111-1111-1111-1111-111111111111' }]])
+        .mockResolvedValueOnce([[{ display_name: '5511999999999' }]])
+        .mockResolvedValueOnce([[]])
+        .mockResolvedValueOnce([[{ display_name: '5511999999999' }]])
+        .mockResolvedValue([[]]),
+      query: vi.fn().mockResolvedValue([[]]),
+    }
+    getMysqlPoolMock.mockReturnValue(pool)
+
+    const { createSqlStore } = await import('../src/store/sql-store.ts')
+    const store = createSqlStore('tenant')
+
+    await store.setContact('5511999999999@s.whatsapp.net', {
+      id: '5511999999999@s.whatsapp.net',
+      name: 'João Silva',
+      notify: 'João Silva',
+    } as never)
+
+    const updateChatCall = pool.execute.mock.calls.find(([sql]) =>
+      typeof sql === 'string' && sql.includes('UPDATE chats') && sql.includes('SET display_name = ?')
+    )
+    expect(updateChatCall?.[1]).toContain('João Silva')
+  })
+
+  it('setMessage nao apaga timestamp existente com payload parcial', async () => {
+    mockConfig.mysqlUrl = 'mysql://test'
+    const pool = {
+      execute: vi.fn().mockResolvedValue([[]]),
+      query: vi.fn().mockResolvedValue([[]]),
+    }
+    getMysqlPoolMock.mockReturnValue(pool)
+
+    const { createSqlStore } = await import('../src/store/sql-store.ts')
+    const store = createSqlStore('tenant')
+
+    await store.setMessage({
+      key: { remoteJid: 'chat@s.whatsapp.net', id: 'msg-1', fromMe: false },
+      messageTimestamp: null,
+      message: undefined,
+    } as never)
+
+    const insertMessageCall = pool.execute.mock.calls.find(([sql]) =>
+      typeof sql === 'string' && sql.includes('INSERT INTO messages')
+    )
+    expect(insertMessageCall?.[0]).toContain('timestamp = COALESCE(VALUES(timestamp), timestamp)')
+  })
+
+  it('setMessage nao apaga is_ephemeral existente com payload parcial', async () => {
+    mockConfig.mysqlUrl = 'mysql://test'
+    const pool = {
+      execute: vi.fn().mockResolvedValue([[]]),
+      query: vi.fn().mockResolvedValue([[]]),
+    }
+    getMysqlPoolMock.mockReturnValue(pool)
+
+    const { createSqlStore } = await import('../src/store/sql-store.ts')
+    const store = createSqlStore('tenant')
+
+    await store.setMessage({
+      key: { remoteJid: 'chat@s.whatsapp.net', id: 'msg-2', fromMe: false },
+      message: undefined,
+    } as never)
+
+    const insertMessageCall = pool.execute.mock.calls.find(([sql]) =>
+      typeof sql === 'string' && sql.includes('INSERT INTO messages')
+    )
+    expect(insertMessageCall?.[0]).toContain('is_ephemeral = COALESCE(VALUES(is_ephemeral), is_ephemeral)')
   })
 })

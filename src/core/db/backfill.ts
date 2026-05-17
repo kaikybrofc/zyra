@@ -115,7 +115,13 @@ const BACKFILL_METRICS = [
   { key: 'groups.owner_user_id', query: `SELECT COUNT(*) AS count FROM \`groups\` WHERE connection_id = ? AND owner_user_id IS NULL` },
   { key: 'lid_mappings.user_id', query: `SELECT COUNT(*) AS count FROM lid_mappings WHERE connection_id = ? AND user_id IS NULL` },
   { key: 'wa_contacts_cache.user_id', query: `SELECT COUNT(*) AS count FROM wa_contacts_cache WHERE connection_id = ? AND user_id IS NULL` },
+  { key: 'wa_contacts_cache.display_name', query: `SELECT COUNT(*) AS count FROM wa_contacts_cache WHERE connection_id = ? AND (display_name IS NULL OR display_name = '')` },
+  { key: 'chats.display_name', query: `SELECT COUNT(*) AS count FROM chats WHERE connection_id = ? AND (display_name IS NULL OR display_name = '')` },
+  { key: 'chats.unread_count', query: `SELECT COUNT(*) AS count FROM chats WHERE connection_id = ? AND unread_count IS NULL` },
+  { key: 'users.display_name', query: `SELECT COUNT(*) AS count FROM users WHERE connection_id = ? AND (display_name IS NULL OR display_name = '')` },
   { key: 'messages.sender_user_id', query: `SELECT COUNT(*) AS count FROM messages WHERE connection_id = ? AND sender_user_id IS NULL` },
+  { key: 'messages.timestamp', query: `SELECT COUNT(*) AS count FROM messages WHERE connection_id = ? AND timestamp IS NULL` },
+  { key: 'messages.is_ephemeral', query: `SELECT COUNT(*) AS count FROM messages WHERE connection_id = ? AND is_ephemeral IS NULL` },
   { key: 'message_events.actor_user_id', query: `SELECT COUNT(*) AS count FROM message_events WHERE connection_id = ? AND actor_user_id IS NULL` },
   { key: 'message_events.target_user_id', query: `SELECT COUNT(*) AS count FROM message_events WHERE connection_id = ? AND target_user_id IS NULL` },
   { key: 'message_events.message_db_id', query: `SELECT COUNT(*) AS count FROM message_events WHERE connection_id = ? AND message_db_id IS NULL` },
@@ -784,45 +790,71 @@ async function main() {
   }
 
   const backfillContactsDisplayNames = async () => {
-    const [fromUsers] = await pool.execute<ResultSetHeader>(
-      `UPDATE wa_contacts_cache wc
+    type ContactDisplayCandidateRow = RowDataPacket & {
+      jid: string
+      current_display_name: string | null
+      candidate_display_name: string | null
+    }
+
+    const applyContactDisplayNameCandidates = async (label: string, query: string, params: Array<string | number>) => {
+      const [rows] = await pool.execute<ContactDisplayCandidateRow[]>(query, params)
+      let updated = 0
+      for (const row of rows) {
+        const current = normalizeDisplayName(row.current_display_name)
+        const candidate = normalizeDisplayName(row.candidate_display_name)
+        const better = pickBetterDisplayName(current, candidate)
+        if (!better || better === current) continue
+        await pool.execute(
+          `UPDATE wa_contacts_cache
+           SET display_name = ?
+           WHERE connection_id = ?
+             AND jid = ?`,
+          [better, connectionId, row.jid]
+        )
+        updated += 1
+      }
+      if (updated) logger.info('backfill atualizado', { item: label, affected: updated })
+    }
+
+    await applyContactDisplayNameCandidates(
+      'wa_contacts_cache.display_name(users)',
+      `SELECT wc.jid, wc.display_name AS current_display_name, u.display_name AS candidate_display_name
+       FROM wa_contacts_cache wc
        INNER JOIN users u
          ON u.connection_id = wc.connection_id
         AND u.id = wc.user_id
-       SET wc.display_name = u.display_name
-       WHERE wc.connection_id = ?
-         AND (wc.display_name IS NULL OR wc.display_name = '')
-         AND u.display_name IS NOT NULL
-         AND u.display_name <> ''`,
+       WHERE wc.connection_id = ?`,
       [connectionId]
     )
-    logAffected('wa_contacts_cache.display_name(users)', fromUsers)
 
-    type ContactRow = RowDataPacket & { jid: string; data_json: unknown }
+    type ContactRow = RowDataPacket & { jid: string; display_name: string | null; data_json: unknown }
     const [rows] = await pool.execute<ContactRow[]>(
-      `SELECT jid, data_json
+      `SELECT jid, display_name, data_json
        FROM wa_contacts_cache
        WHERE connection_id = ?
-         AND (display_name IS NULL OR display_name = '')
        LIMIT ${BATCH_SIZE}`,
       [connectionId]
     )
 
+    let updatedFromJson = 0
     for (const row of rows) {
       const contactData = deserialize<Record<string, unknown>>(row.data_json)
-      const displayName = normalizeDisplayName(
+      const candidateDisplayName = normalizeDisplayName(
         pickNestedString(contactData, [['name'], ['notify'], ['pushName'], ['verifiedName'], ['fullName']])
       )
-      if (!displayName) continue
+      const currentDisplayName = normalizeDisplayName(row.display_name)
+      const betterDisplayName = pickBetterDisplayName(currentDisplayName, candidateDisplayName)
+      if (!betterDisplayName || betterDisplayName === currentDisplayName) continue
       await pool.execute(
         `UPDATE wa_contacts_cache
          SET display_name = ?
          WHERE connection_id = ?
-           AND jid = ?
-           AND (display_name IS NULL OR display_name = '')`,
-        [displayName, connectionId, row.jid]
+           AND jid = ?`,
+        [betterDisplayName, connectionId, row.jid]
       )
+      updatedFromJson += 1
     }
+    if (updatedFromJson) logger.info('backfill atualizado', { item: 'wa_contacts_cache.display_name(data_json)', affected: updatedFromJson })
   }
 
   const backfillChats = async () => {
@@ -957,13 +989,14 @@ async function main() {
 
     for (const row of rows) {
       const chatData = deserialize<Record<string, unknown>>(row.data_json)
-      const displayName = row.display_name ?? extractChatFallbackDisplayName(chatData)
+      const fallbackDisplayName = extractChatFallbackDisplayName(chatData)
+      const displayName = pickBetterDisplayName(normalizeDisplayName(row.display_name), fallbackDisplayName)
       const lastMessageTs = row.last_message_ts ?? extractChatFallbackLastMessageTs(chatData)
       const unread = row.unread_count ?? extractChatFallbackUnreadCount(chatData)
       if (!displayName && lastMessageTs === null && unread === null) continue
       await pool.execute(
         `UPDATE chats
-         SET display_name = COALESCE(display_name, ?),
+         SET display_name = ?,
              last_message_ts = COALESCE(last_message_ts, ?),
              unread_count = COALESCE(unread_count, ?)
          WHERE connection_id = ?
@@ -991,7 +1024,11 @@ async function main() {
          FROM messages
          WHERE connection_id = ?
            AND id > ?
-           AND sender_user_id IS NULL
+           AND (
+             sender_user_id IS NULL
+             OR timestamp IS NULL
+             OR is_ephemeral IS NULL
+           )
          ORDER BY id ASC
          LIMIT ${BATCH_SIZE}`,
         [connectionId, lastCheckpoint]
@@ -1009,7 +1046,11 @@ async function main() {
          FROM messages
          WHERE connection_id = ?
            AND id > ?
-           AND sender_user_id IS NULL
+           AND (
+             sender_user_id IS NULL
+             OR timestamp IS NULL
+             OR is_ephemeral IS NULL
+           )
          LIMIT ${fallbackBatchSize}`,
         [connectionId, lastCheckpoint]
       )
@@ -1062,14 +1103,16 @@ async function main() {
         if (typeof contextInfo.forwardingScore === 'number') return contextInfo.forwardingScore > 0
         return null
       })())
-      const isEphemeral = toTinyInt(
-        Boolean(
-          message.message?.ephemeralMessage ||
-            message.message?.viewOnceMessage ||
-            message.message?.viewOnceMessageV2 ||
-            message.message?.viewOnceMessageV2Extension
-        )
-      )
+      const isEphemeral = message.message
+        ? toTinyInt(
+            Boolean(
+              message.message.ephemeralMessage ||
+                message.message.viewOnceMessage ||
+                message.message.viewOnceMessageV2 ||
+                message.message.viewOnceMessageV2Extension
+            )
+          )
+        : null
       const textPreview = normalizeString(messageText, { maxLength: 512, truncate: true, trim: false })
 
       await pool.execute(
@@ -1486,9 +1529,9 @@ async function main() {
       // Prioridade crítica: reduzir nulos de identidade/nomes visíveis primeiro.
       await runStep('contacts_user_id', backfillContactsUserId)
       await runStep('lid_mappings', backfillLidMappings)
-      await runStep('users_display_names', backfillUsersDisplayNames)
       await runStep('contacts_display_names', backfillContactsDisplayNames)
       await runStep('chats', backfillChats)
+      await runStep('users_display_names', backfillUsersDisplayNames)
       await runStep('messages', backfillMessages)
       await runStep('message_events', backfillMessageEvents)
       await runStep('groups_and_participants', backfillGroupsAndParticipants)

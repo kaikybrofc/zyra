@@ -963,12 +963,12 @@ export function createSqlStore(connectionId?: string): SqlStore {
            VALUES (?, ?, ?, ?, IF(?, UNHEX(REPLACE(?, '-', '')), NULL), ?, ?, ?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE
              sender_user_id = COALESCE(VALUES(sender_user_id), sender_user_id),
-             timestamp = VALUES(timestamp),
+             timestamp = COALESCE(VALUES(timestamp), timestamp),
              content_type = VALUES(content_type),
              message_type = VALUES(message_type),
              status = VALUES(status),
              is_forwarded = VALUES(is_forwarded),
-             is_ephemeral = VALUES(is_ephemeral),
+             is_ephemeral = COALESCE(VALUES(is_ephemeral), is_ephemeral),
              text_preview = VALUES(text_preview),
              data_json = VALUES(data_json),
              deleted_at = NULL`,
@@ -1313,13 +1313,24 @@ export function createSqlStore(connectionId?: string): SqlStore {
           const displayName = normalizeDisplayName(chat.name ?? (chat as { subject?: string | null }).subject ?? null)
           const normalizedJid = normalizeJid(id)
           if (!normalizedJid) return
+          type ExistingChatRow = RowDataPacket & { display_name: string | null }
+          const [existingChatRows] = await pool.execute<ExistingChatRow[]>(
+            `SELECT display_name
+             FROM chats
+             WHERE connection_id = ?
+               AND jid = ?
+             LIMIT 1`,
+            [resolvedConnectionId, normalizedJid]
+          )
+          const existingChatDisplayName = normalizeDisplayName(existingChatRows[0]?.display_name ?? null)
+          const persistedChatDisplayName = pickBetterDisplayName(existingChatDisplayName, displayName)
           if (normalizedJid) {
-            await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedJid }], displayName, displayName ? [{ type: 'display_name', value: displayName }] : undefined)
+            await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedJid }], persistedChatDisplayName, persistedChatDisplayName ? [{ type: 'display_name', value: persistedChatDisplayName }] : undefined)
           }
           const lastMessageTs: number | null = toNumber((chat as { conversationTimestamp?: unknown }).conversationTimestamp)
           const rawUnreadCount = (chat as { unreadCount?: number }).unreadCount
           const unreadCount: number | null = typeof rawUnreadCount === 'number' && Number.isFinite(rawUnreadCount) && rawUnreadCount >= 0 ? rawUnreadCount : null
-          const values: Array<string | number | null> = [resolvedConnectionId, normalizedJid, displayName, lastMessageTs, unreadCount, payload]
+          const values: Array<string | number | null> = [resolvedConnectionId, normalizedJid, persistedChatDisplayName, lastMessageTs, unreadCount, payload]
           await pool.execute(
             `INSERT INTO chats (
              connection_id,
@@ -1424,14 +1435,25 @@ export function createSqlStore(connectionId?: string): SqlStore {
             [resolvedConnectionId, normalizedJid, userId ? 1 : 0, userId, persistedContactDisplayName, payload, persistedContactDisplayName]
           )
           if (displayName && !normalizedJid.endsWith('@g.us')) {
-            await pool.execute(
-              `UPDATE chats
-             SET display_name = COALESCE(display_name, ?)
-             WHERE connection_id = ?
-               AND jid = ?
-               AND (display_name IS NULL OR display_name = '')`,
-              [displayName, resolvedConnectionId, normalizedJid]
+            const [existingChatRows] = await pool.execute<ExistingContactRow[]>(
+              `SELECT display_name
+               FROM chats
+               WHERE connection_id = ?
+                 AND jid = ?
+               LIMIT 1`,
+              [resolvedConnectionId, normalizedJid]
             )
+            const existingChatDisplayName = normalizeDisplayName(existingChatRows[0]?.display_name ?? null)
+            const persistedChatDisplayName = pickBetterDisplayName(existingChatDisplayName, displayName)
+            if (persistedChatDisplayName && persistedChatDisplayName !== existingChatDisplayName) {
+              await pool.execute(
+                `UPDATE chats
+               SET display_name = ?
+               WHERE connection_id = ?
+                 AND jid = ?`,
+                [persistedChatDisplayName, resolvedConnectionId, normalizedJid]
+              )
+            }
           }
         },
         undefined,
