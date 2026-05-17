@@ -8,7 +8,7 @@ import { config } from '../../config/index.js'
 import { createLogger } from '../../observability/logger.js'
 import { ensureMysqlConnection } from './connection.js'
 import { getMysqlPool } from './mysql.js'
-import { isSuspiciousDisplayName, normalizeDisplayNameCandidate, pickBetterDisplayName } from '../../utils/display-name.js'
+import { normalizeDisplayNameCandidate, pickBetterDisplayName } from '../../utils/display-name.js'
 import { getMessageText, getNormalizedMessage } from '../../utils/message.js'
 
 loadEnv()

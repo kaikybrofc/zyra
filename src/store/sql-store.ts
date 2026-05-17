@@ -5,7 +5,7 @@ import { config } from '../config/index.js'
 import { ensureMysqlConnection } from '../core/db/connection.js'
 import { getMysqlPool } from '../core/db/mysql.js'
 import { createLogger } from '../observability/logger.js'
-import { normalizeDisplayNameCandidate, pickBetterDisplayName, scoreDisplayName } from '../utils/display-name.js'
+import { normalizeDisplayNameCandidate, pickBetterDisplayName } from '../utils/display-name.js'
 import { downloadIncomingMediaToDisk } from '../utils/media-download.js'
 import { getMessageText, getNormalizedMessage } from '../utils/message.js'
 
