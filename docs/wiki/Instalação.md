@@ -1,38 +1,41 @@
 # Instalação
 
-[Home](Home) | [Configuração](Configuração) | [Produção](Produção)
+Este guia cobre a instalação do Zyra em ambiente local ou servidor Linux, com foco em previsibilidade e validação rápida do setup.
 
-## Objetivo
+Para um onboarding mais curto, veja também o [README do repositório](../../README.md).
 
-Este guia cobre a instalação do Zyra em ambiente Linux com foco em previsibilidade, repetibilidade e validação técnica do setup.
+## Pré-requisitos
 
-## Requisitos de runtime
-
-- Node.js 20+ (LTS recomendado)
-- npm 10+
-- MySQL 8.0+
-- Redis 6.0+ (opcional, porém recomendado)
-- Git
+- **Node.js** 20 ou superior
+- **npm** como gerenciador principal do projeto
+- **MySQL 8.0+** para persistência durável e auditoria
+- **Redis 6.0+** opcional, mas recomendado para cache quente e melhor performance
+- **Git**
 
 ## Dependências do projeto
 
-- Base de execução: TypeScript + TSX
-- Engine WhatsApp: `@whiskeysockets/baileys`
-- Persistência SQL: `mysql2`
-- Cache distribuído: `redis`
-- Gerência de processo: `pm2`
+O runtime principal usa:
 
-## Provisionamento do host (Ubuntu/Debian)
+- TypeScript + TSX
+- Baileys para conexão WhatsApp
+- `mysql2` para persistência SQL
+- `redis` para cache distribuído
+- `pm2` para operação em produção
+
+## Provisionamento básico do host
+
+### Ubuntu / Debian
 
 ```bash
 sudo apt update
 sudo apt install -y git curl build-essential
 ```
 
-### Node.js
+### Instalação do Node.js
+
+Exemplo com `nvm`:
 
 ```bash
-# Exemplo com nvm
 curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 source ~/.bashrc
 nvm install --lts
@@ -40,7 +43,7 @@ node -v
 npm -v
 ```
 
-### MySQL
+### Instalação do MySQL
 
 ```bash
 sudo apt install -y mysql-server
@@ -48,7 +51,7 @@ sudo systemctl enable --now mysql
 sudo mysql -e "CREATE DATABASE IF NOT EXISTS zyra CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 ```
 
-### Redis
+### Instalação do Redis
 
 ```bash
 sudo apt install -y redis-server
@@ -56,7 +59,7 @@ sudo systemctl enable --now redis-server
 redis-cli ping
 ```
 
-## Instalação do projeto
+## Clonar e instalar o projeto
 
 ```bash
 git clone https://github.com/kaikybrofc/zyra.git
@@ -64,52 +67,85 @@ cd zyra
 npm install
 ```
 
+Para reproduzir o fluxo da CI com mais fidelidade:
+
+```bash
+npm ci
+```
+
+## Observação sobre dependência privada
+
+O projeto depende de `@kaikybrofc/logger-module` via GitHub Packages.
+
+Se `npm install` ou `npm ci` falhar nessa dependência, revise a autenticação do registry antes de seguir.
+
 ## Configuração inicial
+
+Crie o `.env` a partir do exemplo:
 
 ```bash
 cp .env.example .env
-# editar .env
 ```
 
-Variáveis mínimas para primeira subida:
+Variáveis mínimas para a primeira subida:
 
-- `MYSQL_URL`
 - `WA_CONNECTION_ID`
+- `MYSQL_URL`
 - `WA_COMMAND_PREFIX` (opcional)
-- `WA_REDIS_URL` (opcional)
+- `WA_REDIS_URL` (opcional, recomendado)
 
-## Inicialização de schema
+Os detalhes completos estão em [Configuração](Configuração).
+
+## Inicialização do schema
 
 ```bash
 npm run db:init
 ```
 
-O init cria tabelas ausentes com base no modelo (`docs/exemplodbmodel.md`) e garante índices críticos usados pelas rotas de leitura/escrita.
+Esse passo cria tabelas ausentes, garante índices críticos e registra a conexão quando necessário. A fonte de verdade do schema está em `docs/exemplodbmodel.md`.
 
-## Validação técnica pós-instalação
+## Validação pós-instalação
 
 ```bash
 npm run lint
 npm run build
 npm test
+npm run db:verify
 ```
 
 ## Primeira execução
+
+### Desenvolvimento
 
 ```bash
 npm run dev
 ```
 
-Com o processo ativo, acompanhe logs e faça o pareamento da sessão WhatsApp via QR code.
+### Execução simples
+
+```bash
+npm run start
+```
+
+Com o processo ativo, acompanhe o bootstrap e faça o pareamento via QR Code quando necessário.
 
 ## Checklist de aceite
 
-- App inicia sem erro de import/compilação
-- Conexão com MySQL validada
-- Tabelas criadas com sucesso
-- Processo consegue receber evento `messages.upsert`
-- Logs são gravados em `logs/`
+- build TypeScript executa sem erro
+- conexão com MySQL está funcional
+- `npm run db:init` conclui com sucesso
+- `npm run db:verify` retorna estado coerente da conexão atual
+- a aplicação inicia e consegue receber eventos do WhatsApp
+- logs passam a ser gravados normalmente
+
+## Próximos passos
+
+Depois da instalação:
+
+- [Configuração](Configuração)
+- [Comandos](Comandos)
+- [Produção](Produção)
 
 ---
 
-**Zyra Wiki** • Última atualização: 11/05/2026
+**Zyra Wiki** • Última atualização: 17/05/2026

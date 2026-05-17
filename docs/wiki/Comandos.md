@@ -1,76 +1,102 @@
 # Comandos
 
-[Home](Home) | [Eventos](Eventos) | [Persistência](Persistência)
+Esta página resume como o runtime de comandos do Zyra funciona em produção e como os comandos se comportam do ponto de vista operacional. Para a referência completa dos comandos registrados atualmente, veja [Comandos - Referência](Comandos-Referencia). Para detalhes profundos da arquitetura interna, veja [`docs/README-COMMANDS.md`](../README-COMMANDS.md).
 
-## Arquitetura de comandos
+## Visão geral
 
-## Referência prática
+O Zyra usa um runtime modular de comandos baseado em:
 
-- [Referência de Comandos](Comandos-Referencia)
+- `src/commands/*.ts` para implementação dos comandos
+- `src/commands/index.ts` para registro central
+- `src/core/command-runtime/context.ts` para o `CommandContext`
+- `src/core/command-runtime/processor.ts` para parsing, regras transversais e execução
+- `src/router/index.ts` para enfileiramento por chat
 
+## Fluxo de processamento
 
-O Zyra usa runtime modular de comandos em `src/core/command-runtime` com contrato tipado em `src/commands/types.ts`.
+1. Um evento `messages.upsert` chega ao sistema.
+2. O handler central encaminha mensagens `notify` para o router.
+3. O router enfileira o processamento por `connectionId:chatId`.
+4. O processor normaliza a mensagem, detecta prefixo e identifica o comando.
+5. Antes da execução, regras automáticas de runtime podem ser aplicadas.
+6. O comando recebe um `CommandContext` estável e desacoplado do socket bruto.
+7. O resultado é registrado nos logs e, quando aplicável, também na persistência SQL.
 
-Fluxo:
+## Fila, backpressure e timeout
 
-1. Evento `messages.upsert` chega.
-2. Router/processor identifica prefixo e comando.
-3. Runtime cria `CommandContext` com helpers.
-4. Comando executa sem acoplamento direto no socket.
+O runtime protege o processo com duas regras importantes:
 
-## Estrutura de arquivos
+- **fila por chat/conexão**: mantém a ordem por conversa sem travar toda a instância
+- **limite de pendências por fila**: protege memória quando há saturação
+- **timeout de comando**: impede que handlers travados bloqueiem o chat indefinidamente
 
-- `src/commands/*.ts`: implementações dos comandos.
-- `src/commands/index.ts`: registro/índice de comandos.
-- `src/core/command-runtime/context.ts`: construção do contexto.
-- `src/core/command-runtime/processor.ts`: ciclo de execução e proteção de erro.
-- `src/core/command-runtime/admin.ts`: helpers administrativos de grupo.
+Variáveis relacionadas:
 
-## Contrato do comando
+- `WA_ROUTER_MAX_PENDING_PER_QUEUE`
+- `WA_COMMAND_TIMEOUT_MS`
 
-Campos usuais:
+## O que o `CommandContext` expõe
 
-- `name`
-- `description`
-- `execute(ctx)`
+Os comandos recebem um contexto com dados e helpers estáveis, incluindo:
 
-O `ctx` expõe helpers como `send/reply/react`, dados de mensagem/chat e utilitários admin.
+- dados de mensagem e chat: `chatId`, `sender`, `isGroup`, `text`, `args`
+- resposta e envio: `reply`, `send`, `react`, helpers de mídia
+- ações administrativas de grupo
+- utilidades para stickers, quoted message e persistência associada
 
-## Capacidades do contexto
+Isso reduz acoplamento com o socket bruto e centraliza comportamento transversal no runtime.
 
-- dados: `chatId`, `sender`, `isGroup`, `text`, `args`
-- envio: resposta, reação, mensagens sem quoted
-- admin: promote/demote/remove
-- mídia: resolução de fonte de sticker e utilidades relacionadas
+## Antilink: comando e regra automática
 
-## Boas práticas de implementação
+O antilink merece destaque porque ele existe em dois níveis.
 
-- validar premissas cedo (`isGroup`, `isAdmin`)
-- retornar feedback curto e claro ao usuário
-- evitar side-effects fora do comando
-- delegar operações transversais ao runtime/store
+### Como comando
 
-## Tratamento de erro
+O comando `!antilink` permite:
 
-- Erros são capturados no processor.
-- Logs estruturados preservam contexto do comando.
-- Falhas devem ser observáveis sem quebrar o loop principal.
+- ativar ou desativar o recurso no grupo
+- gerenciar whitelist de domínios
+- controlar a exceção para o link do próprio grupo
 
-## Exemplo de novo comando (fluxo)
+### Como comportamento automático
 
-1. Criar arquivo em `src/commands`.
-2. Exportar no índice.
-3. Adicionar testes de comportamento.
-4. Validar via `npm test`.
+Quando ativo para um grupo, o runtime pode:
 
-## Comandos administrativos e segurança
+- detectar links em mensagens
+- ignorar domínios permitidos
+- permitir o link do próprio grupo quando configurado
+- tratar admins de forma diferente de membros comuns
+- remover participantes infratores
+- apagar mensagens recentes do remetente
+- tentar cascata de remoção em grupos vinculados à mesma comunidade
 
-Comandos de moderação devem:
+Ou seja: `antilink` não é apenas um comando de configuração; ele é uma regra operacional aplicada pelo processor em mensagens de grupo.
 
-- verificar papel do executor
-- auditar ação em evento/log
-- lidar com limitações do Baileys em grupos grandes
+## Registry atual
+
+A fonte de verdade dos comandos ativos é `src/commands/index.ts`.
+
+Isso significa que:
+
+- a lista exibida por `!menu` é dinâmica
+- aliases como `!s` e `!st` dependem do registry atual
+- a documentação de referência deve ser mantida alinhada ao índice central
+
+## Boas práticas ao evoluir comandos
+
+- validar contexto cedo (`isGroup`, permissões, mídia disponível)
+- manter feedback curto e claro para o usuário
+- delegar regras transversais ao runtime e ao store
+- não depender de efeitos colaterais fora do contrato do comando
+- validar o comportamento com testes próximos ao subsistema afetado
+
+## Leituras relacionadas
+
+- [Comandos - Referência](Comandos-Referencia)
+- [Eventos](Eventos)
+- [Persistência](Persistência)
+- [Guia técnico de comandos](../README-COMMANDS.md)
 
 ---
 
-**Zyra Wiki** • Última atualização: 11/05/2026
+**Zyra Wiki** • Última atualização: 17/05/2026

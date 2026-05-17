@@ -1,109 +1,132 @@
 # Zyra Wiki
 
-[Home](Home) | [Instalação](Instalação) | [Configuração](Configuração) | [Comandos](Comandos) | [Código de Conduta](Código-de-Conduta) | [Banco-de-Dados](Banco-de-Dados) | [Produção](Produção) | [Troubleshooting](Troubleshooting)
+Bem-vindo à wiki do **Zyra**.
 
-Bem-vindo à Wiki do **Zyra**.
+Esta wiki é a referência principal para arquitetura de alto nível, operação, persistência, produção e troubleshooting do projeto. Para onboarding rápido, use o [README do repositório](../../README.md). Para detalhes profundos da arquitetura de comandos, use o [guia técnico de comandos](../README-COMMANDS.md).
 
-O Zyra é um bot para WhatsApp focado em **automação, moderação, observabilidade e persistência de dados**.
-Ele usa Baileys como base de conexão e oferece uma arquitetura pronta para crescer com comandos, eventos e integrações.
+## Mapa da documentação
 
-## Índice Técnico (TOC)
+### Quando usar cada documento
 
-- [O que é o projeto](#o-que-e-o-projeto)
-- [Para que pode ser usado](#para-que-pode-ser-usado)
-- [Mapa por perfil](#mapa-por-perfil)
-- [Arquitetura (visão rápida)](#arquitetura-visao-rapida)
-- [Requisitos](#requisitos)
-- [Quickstart](#quickstart)
-- [Mapa de documentação](#mapa-de-documentacao)
-- [Uso responsável](#uso-responsavel)
+- **`README.md`**: visão geral do projeto, instalação rápida e execução inicial
+- **Wiki (`docs/wiki/`)**: operação, arquitetura resumida, persistência, banco, produção e suporte
+- **`docs/README-COMMANDS.md`**: internals da plataforma de comandos e visão técnica mais profunda
+- **`docs/exemplodbmodel.md`**: fonte de verdade do schema MySQL
 
-## O que é o projeto
+## Visão rápida do sistema
 
-O Zyra é uma aplicação Node.js/TypeScript que:
+O Zyra é um motor de bot para WhatsApp baseado em Baileys, com foco em:
 
-- conecta sessões WhatsApp com suporte a multi-dispositivo
-- processa eventos em tempo real (mensagens, grupos, reações, mídia e sistema)
-- persiste dados em MySQL e Redis (com fallback local)
-- disponibiliza estrutura de comandos para funcionalidades de bot
-- inclui mecanismos de estabilidade operacional (logs, reconexão, backfill, PM2)
+- operação multi-instância
+- persistência híbrida
+- auditoria de eventos e mensagens
+- execução modular de comandos
+- estabilidade operacional em produção
 
-## Para que pode ser usado
+### Fatos operacionais importantes
 
-Você pode usar o Zyra para:
+- Cada instância é isolada por `WA_CONNECTION_ID` em runtime e por `connection_id` no armazenamento.
+- A estratégia de autenticação prioriza **MySQL**, depois **Redis** e por fim **disco local** como fallback.
+- Em produção com PM2, o ecossistema sobe **dois processos**: `zyra` e `zyra-backfill`.
+- Em Docker Compose, a stack padrão sobe `zyra`, `backfill`, `mysql` e `redis`.
+- O runtime usa fila por `connectionId:chatId`, com proteção contra saturação de memória e timeout de comando.
 
-- **Atendimento e automação**: respostas automáticas, comandos utilitários e fluxos internos
-- **Moderação de grupos**: anti-link, controle de participantes e ações administrativas
-- **Observabilidade e auditoria**: trilha de eventos, histórico de mensagens e diagnóstico
-- **Inteligência operacional**: base de dados para métricas, relatórios e análise de uso
-- **Plataforma de extensão**: criação de novos comandos e integrações customizadas
+## Arquitetura em uma tela
 
-## Mapa por perfil
+### Camadas principais
 
-### Trilha Dev
+1. **Connection/Auth**
+   - criação do socket
+   - recuperação de credenciais
+   - reconexão e shutdown gracioso
 
-- Comece por: [Instalação](Instalação)
-- Em seguida: [Configuração](Configuração)
-- Depois: [Comandos](Comandos) e [Eventos](Eventos)
+2. **Events**
+   - consumo centralizado de eventos do Baileys
+   - auditoria de mensagens, grupos, labels, newsletters e blocklist
 
-Objetivo da trilha: onboarding de desenvolvimento, criação de comandos e entendimento do pipeline de eventos.
+3. **Store/Persistência**
+   - cache em memória
+   - Redis opcional para hot path
+   - MySQL como camada durável de histórico e auditoria
+   - disco como fallback para auth e mídia
 
-### Trilha SRE / Infra
+4. **Commands/Runtime**
+   - parsing de mensagens
+   - aplicação de regras transversais
+   - execução de comandos desacoplados do socket bruto
 
-- Comece por: [Produção](Produção)
-- Em seguida: [Banco-de-Dados](Banco-de-Dados)
-- Depois: [Backfill](Backfill) e [Troubleshooting](Troubleshooting)
+## Trilhas por perfil
 
-Objetivo da trilha: operação estável, deploy seguro, monitoramento, recuperação e manutenção contínua.
+### Desenvolvimento
 
-### Trilha Operação / Suporte
+Comece por:
 
-- Comece por: [Troubleshooting](Troubleshooting)
-- Em seguida: [Backfill](Backfill)
-- Depois: [Persistência](Persistência)
+- [Instalação](Instalação)
+- [Configuração](Configuração)
+- [Comandos](Comandos)
+- [Eventos](Eventos)
 
-Objetivo da trilha: diagnóstico rápido de incidentes, reconciliação de dados e correções operacionais.
+Objetivo: subir o projeto localmente, entender o runtime e evoluir comandos com segurança.
 
-## Arquitetura (visão rápida)
+### Operação / Infra
 
-- `src/events` -> assinatura e tratamento dos eventos do WhatsApp
-- `src/router` e `src/commands` -> roteamento e execução de comandos
-- `src/store` -> persistência (SQL/Redis/cache)
-- `src/core` -> runtime, conexão, banco e infraestrutura
-- `docs` -> modelo de banco e documentação auxiliar
+Comece por:
 
-## Requisitos
+- [Produção](Produção)
+- [Banco de Dados](Banco-de-Dados)
+- [Persistência](Persistência)
+- [Backfill](Backfill)
 
-- Node.js (LTS)
-- MySQL 8+
-- Redis (opcional, recomendado)
-- PM2 (opcional, recomendado para produção)
+Objetivo: manter o ambiente estável, observável e recuperável.
 
-## Quickstart
+### Suporte / Diagnóstico
 
-1. Configurar variáveis de ambiente no `.env`
-2. Inicializar schema: `npm run db:init`
-3. Rodar em dev: `npm run dev`
-4. Produção com PM2: `npm run pm2:start`
+Comece por:
 
-## Mapa de documentação
+- [Troubleshooting](Troubleshooting)
+- [Backfill](Backfill)
+- [Persistência](Persistência)
+- [Produção](Produção)
 
-- Setup: [Instalação](Instalação), [Configuração](Configuração)
-- Runtime: [Comandos](Comandos), [Eventos](Eventos)
-- Dados: [Banco-de-Dados](Banco-de-Dados), [Persistência](Persistência)
-- Operação: [Produção](Produção), [Backfill](Backfill), [Troubleshooting](Troubleshooting)
-- Governança: [Código de Conduta](Código-de-Conduta)
+Objetivo: diagnosticar incidentes, entender falhas recorrentes e restaurar consistência operacional.
+
+## Navegação por assunto
+
+### Setup
+
+- [Instalação](Instalação)
+- [Configuração](Configuração)
+
+### Runtime
+
+- [Comandos](Comandos)
+- [Comandos - Referência](Comandos-Referencia)
+- [Eventos](Eventos)
+
+### Dados
+
+- [Banco de Dados](Banco-de-Dados)
+- [Persistência](Persistência)
+- [Backfill](Backfill)
+
+### Operação
+
+- [Produção](Produção)
+- [Troubleshooting](Troubleshooting)
+
+### Governança
+
+- [Código de Conduta](Código-de-Conduta)
 
 ## Uso responsável
 
-O projeto deve ser usado de forma legítima e em conformidade com regras da plataforma e legislação aplicável.
-Consulte:
+O Zyra deve ser operado para automação legítima, moderação, atendimento ou uso interno, sempre respeitando políticas da plataforma, legislação aplicável e proteção de dados.
+
+Consulte também:
 
 - [Código de Conduta](Código-de-Conduta)
 - [CODE_OF_CONDUCT.md](../../CODE_OF_CONDUCT.md)
 
 ---
 
-**Zyra Wiki** • Última atualização: 15/05/2026
-
-[Home](Home) | [Instalação](Instalação) | [Configuração](Configuração) | [Comandos](Comandos) | [Código de Conduta](Código-de-Conduta) | [Banco-de-Dados](Banco-de-Dados) | [Produção](Produção) | [Troubleshooting](Troubleshooting)
+**Zyra Wiki** • Última atualização: 17/05/2026

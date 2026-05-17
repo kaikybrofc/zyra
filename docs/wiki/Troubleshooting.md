@@ -1,93 +1,177 @@
 # Troubleshooting
 
-[Home](Home) | [Produção](Produção) | [Backfill](Backfill)
+Esta página é um runbook orientado a sintomas para diagnosticar incidentes no Zyra.
 
-## Diagnóstico rápido (ordem recomendada)
+## Ordem recomendada de diagnóstico
 
-1. `npm run build`
-2. `npm run db:verify`
-3. `npm run pm2:logs`
-4. checar `logs/erro-*.log` e `logs/aviso-*.log`
+Comece por esta sequência:
+
+```bash
+npm run build
+npm run db:verify
+npm run pm2:logs
+```
+
+Depois verifique:
+
+- logs estruturados de aplicação, aviso e erro
+- conectividade com MySQL
+- conectividade com Redis, quando configurado
+- estado do backfill
+- configuração ativa da instância (`WA_CONNECTION_ID`, prefixo, métricas, health)
 
 ## Cenários comuns
 
-### 1. Wiki ou features não aparecem no GitHub
+### 1. Sessão não estabiliza ou reconecta sem parar
 
-- validar flag via API
-- inicializar recurso manualmente no UI quando necessário
+Verifique:
 
-### 2. PM2 com aviso de versão em memória
+- se `WA_CONNECTION_ID` está correto e não conflita com outra instância
+- disponibilidade do backend de auth configurado
+- conectividade com MySQL e Redis
+- logs de `connection.update`
+- políticas antiban agressivas ou sessão marcada como restrita
 
-Sintoma:
+Cruzar com:
 
-- “In-memory PM2 is out-of-date”
+- [Configuração](Configuração)
+- [Persistência](Persistência)
 
-Ação:
+### 2. Comando não responde
 
-```bash
-pm2 update
-```
+Verifique:
 
-### 3. Falha de schema ou tabela ausente
+- `WA_COMMAND_PREFIX`
+- se a mensagem chegou como `messages.upsert` do tipo `notify`
+- saturação de fila por chat
+- timeout de execução (`WA_COMMAND_TIMEOUT_MS`)
+- erros no processor/runtime
 
-Ação:
+Se o problema for específico de permissão, valide também contexto de grupo e papel do executor.
 
-```bash
-npm run db:init
-npm run db:verify
-```
+Cruzar com:
 
-### 4. Lacunas em metadados de mídia
+- [Comandos](Comandos)
+- [Eventos](Eventos)
 
-- habilitar `WA_MEDIA_AUTO_DOWNLOAD`
-- rodar `npm run db:backfill`
-- validar `message_media` após ciclo
+### 3. Fila saturada ou processamento lento
 
-### 5. Nulos altos em `users.display_name` / `chats.display_name`
+Verifique:
 
-Sintoma:
+- `WA_ROUTER_MAX_PENDING_PER_QUEUE`
+- `WA_COMMAND_TIMEOUT_MS`
+- burst de mensagens em um único chat
+- handlers lentos ou travados
+- pressão geral no processo
 
-- `users.display_name` e `chats.display_name` acima do esperado no relatório de nulos.
+Esse sintoma costuma aparecer como descarte defensivo de mensagens ou atraso acumulado em um chat específico.
 
-Ações:
+### 4. Antilink não age como esperado
+
+Verifique:
+
+- se o recurso está ativo no grupo
+- whitelist de domínios
+- exceção para link do próprio grupo
+- se o remetente é admin
+- se o bot tem permissão de remoção
+- se a mensagem contém link detectável no formato esperado
+
+Lembrete importante:
+
+- `antilink` é comando de configuração **e** regra automática do processor
+
+Cruzar com:
+
+- [Comandos](Comandos)
+- [Comandos - Referência](Comandos-Referencia)
+
+### 5. Mídia com metadados incompletos
+
+Verifique:
+
+- `WA_MEDIA_AUTO_DOWNLOAD`
+- execução do backfill
+- presença de `local_path` em `message_media`
+- se `file_length` e `file_name` ainda estão pendentes
+
+Ações típicas:
 
 ```bash
 npm run db:backfill
 npm run db:nulls
 ```
 
-Verifique se os passos críticos reduziram:
+### 6. Nulos altos em dados derivados
 
-- `users.display_name(contacts|chats|aliases)`
-- `chats.display_name(groups|contacts|users|newsletters)`
+Sintomas comuns:
 
-Se os nulos voltarem a subir após ingestão online, valide se a versão em produção já contém a correção de `setChat` que preserva `display_name` quando update chega nulo.
+- `users.display_name` acima do esperado
+- `chats.display_name` acima do esperado
+- lacunas em `sender_user_id`
+- vínculos incompletos em eventos
 
-### 6. Sessão desconectando / não estabiliza
+Ações:
 
-- revisar credenciais e autenticação
-- validar Redis/MySQL conectividade
-- verificar políticas anti-ban agressivas
+```bash
+npm run db:backfill
+npm run db:nulls
+npm run db:verify
+```
 
-### 7. Comando não responde
+Observe se o worker está efetivamente reduzindo pendências entre ciclos.
 
-- conferir prefixo (`WA_COMMAND_PREFIX`)
-- validar evento `messages.upsert` tipo `notify`
-- revisar erro no processor/runtime
+### 7. Métricas ou health não aparecem
 
-## Consultas úteis de suporte
+Verifique:
 
-- pendências de mídia: `file_length`/`file_name` nulos
-- contagem de mensagens por conexão
-- inconsistências de `sender_user_id`
+- `WA_ANTIBAN_METRICS_ENABLED`
+- host/porta/path configurados
+- `WA_HEALTH_ENABLED`
+- firewall e bind do host
+- processo realmente ativo
+
+Cruzar com:
+
+- [Configuração](Configuração)
+- [Produção](Produção)
+
+### 8. PM2 ou Docker sem os processos esperados
+
+Verifique:
+
+- se o build concluiu
+- se `zyra` e `zyra-backfill` estão online no PM2
+- se os serviços `zyra`, `backfill`, `mysql` e `redis` estão ativos no Compose
+- se houve crash por dependência de banco/cache
+
+## Comandos úteis de suporte
+
+```bash
+npm run db:verify
+npm run db:nulls
+npm run db:backfill
+npm run pm2:logs
+docker compose ps
+docker compose logs -f zyra
+docker compose logs -f backfill
+```
 
 ## Boas práticas preventivas
 
-- manter build/lint no deploy
-- observar logs após restart
-- registrar mudanças de config por ambiente
-- executar backfill de forma controlada
+- validar build antes de restart em produção
+- observar logs imediatamente após deploy
+- manter registro de mudanças de configuração por ambiente
+- monitorar backfill, disco e conectividade com banco
+- revisar periodicamente métricas e falhas recorrentes
+
+## Leituras relacionadas
+
+- [Configuração](Configuração)
+- [Persistência](Persistência)
+- [Backfill](Backfill)
+- [Produção](Produção)
 
 ---
 
-**Zyra Wiki** • Última atualização: 15/05/2026
+**Zyra Wiki** • Última atualização: 17/05/2026

@@ -1,44 +1,45 @@
 # Código de Conduta
 
-[Home](Home) | [Produção](Produção) | [Troubleshooting](Troubleshooting)
+Esta página resume o compromisso de colaboração e uso responsável esperado no projeto Zyra. O documento canônico continua sendo o arquivo raiz [`CODE_OF_CONDUCT.md`](../../CODE_OF_CONDUCT.md).
 
-## Objetivo
+## Princípios
 
-Definir regras de convivência e uso responsável do Zyra na plataforma.
+- respeito e colaboração técnica objetiva
+- zero tolerância a assédio, discriminação e exposição de segredos
+- feedback focado em melhoria de código, processo e operação
+- uso responsável da plataforma e dos dados tratados pelo sistema
 
-## Resumo de conduta
+## Uso responsável do Zyra
 
-- Respeito, colaboração e comunicação técnica objetiva.
-- Zero tolerância para assédio, discriminação e exposição de segredos.
-- Feedback focado em melhoria de código/processo, nunca em ataque pessoal.
+O Zyra deve ser utilizado para automação legítima, moderação, atendimento e operação interna, sempre respeitando:
 
-## Uso responsável na plataforma
+- políticas e limites da plataforma
+- legislação aplicável
+- privacidade e proteção de dados
+- gestão correta de credenciais e segredos
 
-O Zyra deve ser usado para automação legítima (atendimento, moderação, operação interna), respeitando:
+Não é aceitável usar o projeto para:
 
-- Termos e políticas do provedor da plataforma.
-- Leis de privacidade e proteção de dados aplicáveis.
-- Consentimento dos usuários impactados quando necessário.
-
-Não é permitido uso para:
-
-- spam, phishing, fraude e engenharia social;
-- coleta indevida de dados;
-- evasão de mecanismos de segurança;
-- abuso operacional em escala.
+- spam
+- phishing
+- fraude
+- engenharia social
+- coleta indevida de dados
+- evasão deliberada de controles de segurança
+- abuso operacional em escala
 
 ## Segurança de credenciais
 
-- Nunca publicar tokens/senhas em commits, logs, issues ou PRs.
-- Usar variáveis de ambiente e rotação periódica de segredo.
-- Redigir logs removendo dados sensíveis.
+- não publicar tokens, senhas ou secrets em commits, logs, issues ou PRs
+- usar variáveis de ambiente para configuração sensível
+- restringir acesso ao `.env` e a logs com informação operacional relevante
 
-## Referência oficial
+## Fonte oficial
 
-Veja também o documento raiz do projeto:
+Para a política completa, consulte:
 
 - [CODE_OF_CONDUCT.md](../../CODE_OF_CONDUCT.md)
 
 ---
 
-**Zyra Wiki** • Última atualização: 15/05/2026
+**Zyra Wiki** • Última atualização: 17/05/2026

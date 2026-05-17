@@ -1,22 +1,31 @@
 ## Zyra Wiki
 
+### Visão Geral
+
 - [Home](Home)
 
-## Guia Rápido
+### Setup
 
 - [Instalação](Instalação)
 - [Configuração](Configuração)
-- [Comandos](Comandos)
-- [Código de Conduta](Código-de-Conduta)
 
-## Arquitetura e Dados
+### Runtime
+
+- [Comandos](Comandos)
+- [Comandos - Referência](Comandos-Referencia)
+- [Eventos](Eventos)
+
+### Dados
 
 - [Banco de Dados](Banco-de-Dados)
 - [Persistência](Persistência)
-- [Eventos](Eventos)
+- [Backfill](Backfill)
 
-## Operação
+### Operação
 
 - [Produção](Produção)
-- [Backfill](Backfill)
 - [Troubleshooting](Troubleshooting)
+
+### Governança
+
+- [Código de Conduta](Código-de-Conduta)

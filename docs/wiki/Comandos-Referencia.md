@@ -1,24 +1,31 @@
-# Referência de Comandos
+# Comandos - Referência
 
-[Home](Home) | [Comandos](Comandos) | [Eventos](Eventos)
+Esta página lista os comandos atualmente registrados em `src/commands/index.ts`. O prefixo padrão é `!`, mas pode ser alterado via `WA_COMMAND_PREFIX`.
 
-## Convenções
+Para entender o comportamento do runtime, fila, timeout e regras automáticas como antilink, veja [Comandos](Comandos).
 
-- Prefixo padrão: `!` (configurável em `WA_COMMAND_PREFIX`).
-- Em grupos, comandos administrativos exigem:
-  - executante admin
-  - bot com permissões compatíveis no grupo
-- Identificadores de usuário aceitos em comandos admin:
-  - número (`5511999999999`)
-  - menção (`@usuario`)
-  - resposta a mensagem (quoted)
+## Convenções gerais
 
-## Comandos de utilidade
+### Requisitos comuns para comandos administrativos
+
+Em grupos, comandos de administração normalmente exigem:
+
+- executor com permissão adequada
+- bot com privilégios compatíveis no grupo
+
+### Identificadores aceitos em comandos administrativos
+
+Dependendo do comando, os alvos podem ser informados como:
+
+- número (`5511999999999`)
+- menção (`@usuario`)
+- resposta a uma mensagem
+
+## Utilidade
 
 ### `!ping`
 
-- Finalidade: verificar disponibilidade do bot.
-- Resposta esperada: `pong! sistema ativo e operando sem problemas.`
+Verifica disponibilidade básica do bot.
 
 Exemplo:
 
@@ -28,7 +35,7 @@ Exemplo:
 
 ### `!menu`
 
-- Finalidade: listar comandos disponíveis dinamicamente do registry.
+Lista os comandos disponíveis a partir do registry atual.
 
 Exemplo:
 
@@ -36,59 +43,70 @@ Exemplo:
 !menu
 ```
 
-## Comandos de sticker e mídia
+## Sticker e mídia
 
 ### `!sticker`, `!s`, `!st`
 
-- Finalidade: converter mídia em figurinha.
-- Fonte de mídia: legenda da mídia, resposta a mídia ou fallback recente do chat.
-- Ajuda embutida: `-h`, `-help`, `--help`.
+Converte mídia em figurinha.
+
+Fonte de mídia suportada:
+
+- legenda da própria mídia
+- resposta a mídia
+- fallback recente do chat quando aplicável
+
+Ajuda embutida:
+
+```text
+!s -h
+!s --help
+```
 
 Exemplos:
 
 ```text
 !s
-!s -h
 !s Zyra
 !s Pack do #grupo/#nome
 ```
 
-Observações técnicas:
+Observações:
 
-- limite de sticker gerado: `< 1.5MB`
-- placeholders suportados no template:
-  - `#data`, `#hora`, `#nome`, `#grupo`, `#numero`
-- template por usuário é persistido e reutilizado.
+- o runtime suporta placeholders no template
+- o template do usuário pode ser persistido e reutilizado
+- há limite operacional para o sticker gerado
 
 ### `!toimg`
 
-- Finalidade: converter figurinha (WebP) para PNG.
-- Requer: responder uma figurinha.
+Converte uma figurinha WebP para imagem.
 
-Exemplo:
+Uso esperado:
 
 ```text
 !toimg
 ```
 
+Geralmente exige responder uma figurinha.
+
 ### `!togif`
 
-- Finalidade: converter figurinha (WebP) para GIF.
-- Requer: responder uma figurinha.
+Converte uma figurinha WebP para GIF.
 
-Exemplo:
+Uso esperado:
 
 ```text
 !togif
 ```
 
-## Comandos de moderação de grupo
+Geralmente exige responder uma figurinha.
+
+## Moderação e administração de grupo
 
 ### `!antilink`
 
-- Finalidade: controle anti-link por grupo.
+Configura o antilink por grupo.
 
-Uso:
+Exemplos:
 
 ```text
 !antilink
@@ -101,15 +119,16 @@ Uso:
 !antilink allow remove exemplo.com
 ```
 
-Comportamento:
+Observações:
 
-- sem argumentos: retorna status + whitelist + instruções.
-- `invite on/off`: controla exceção para link do próprio grupo.
-- `allow`: gerencia whitelist de domínios permitidos.
+- sem argumentos, retorna status e instruções
+- `invite on/off` controla exceção para o link do próprio grupo
+- `allow` gerencia whitelist de domínios permitidos
+- o enforcement automático do antilink é descrito em [Comandos](Comandos)
 
 ### `!add`
 
-- Finalidade: adicionar participante(s).
+Adiciona participante(s) ao grupo.
 
 Exemplos:
 
@@ -120,7 +139,7 @@ Exemplos:
 
 ### `!kick`
 
-- Finalidade: remover participante(s).
+Remove participante(s) do grupo.
 
 Exemplos:
 
@@ -131,7 +150,7 @@ Exemplos:
 
 ### `!ban`
 
-- Finalidade: banir/remover participante(s) (alias semântico de remoção).
+Executa remoção/banimento semântico do participante.
 
 Exemplo:
 
@@ -141,7 +160,7 @@ Exemplo:
 
 ### `!promote`
 
-- Finalidade: promover participante(s) a admin.
+Promove participante(s) a admin.
 
 Exemplo:
 
@@ -151,7 +170,7 @@ Exemplo:
 
 ### `!demote`
 
-- Finalidade: remover admin de participante(s).
+Remove privilégios administrativos.
 
 Exemplo:
 
@@ -161,7 +180,7 @@ Exemplo:
 
 ### `!grupo on|off`
 
-- Finalidade: abrir/fechar envio de mensagens no grupo.
+Abre ou fecha o envio de mensagens no grupo.
 
 Exemplos:
 
@@ -172,7 +191,7 @@ Exemplos:
 
 ### `!lock on|off`
 
-- Finalidade: travar/destravar edição de infos do grupo.
+Controla edição de informações do grupo.
 
 Exemplos:
 
@@ -183,7 +202,7 @@ Exemplos:
 
 ### `!assunto <texto>`
 
-- Finalidade: atualizar nome/assunto do grupo.
+Atualiza o assunto do grupo.
 
 Exemplo:
 
@@ -193,7 +212,7 @@ Exemplo:
 
 ### `!descricao <texto|limpar>`
 
-- Finalidade: atualizar ou limpar descrição do grupo.
+Atualiza ou limpa a descrição do grupo.
 
 Exemplos:
 
@@ -204,7 +223,7 @@ Exemplos:
 
 ### `!linkgrupo`
 
-- Finalidade: mostrar link de convite atual.
+Exibe o link atual de convite do grupo.
 
 Exemplo:
 
@@ -214,7 +233,7 @@ Exemplo:
 
 ### `!revogarlink`
 
-- Finalidade: revogar link atual e gerar novo.
+Revoga o link atual e gera um novo.
 
 Exemplo:
 
@@ -224,7 +243,7 @@ Exemplo:
 
 ### `!ephemeral off|24h|7d|90d|<segundos>`
 
-- Finalidade: controlar mensagens temporárias.
+Controla mensagens temporárias do grupo.
 
 Exemplos:
 
@@ -234,17 +253,19 @@ Exemplos:
 !ephemeral 604800
 ```
 
-## Erros comuns e resposta esperada
+## Erros comuns
 
-- Contexto inválido (não é grupo): `❌ Este comando só funciona em grupos.`
-- Permissão insuficiente: `❌ Apenas administradores podem usar este comando.`
-- Mídia ausente para conversão: mensagem de instrução para responder a sticker/mídia.
+Exemplos de respostas esperadas em cenários inválidos:
+
+- comando administrativo fora de grupo
+- executor sem permissão suficiente
+- mídia ausente para conversão
+- alvo inválido ou não resolvido
 
 ## Observação de manutenção
 
-A lista acima reflete os comandos registrados em `src/commands/index.ts`.
-Ao adicionar/remover comandos no código, atualize esta página.
+Sempre que `src/commands/index.ts` mudar, esta página deve ser revisada.
 
 ---
 
-**Zyra Wiki** • Última atualização: 11/05/2026
+**Zyra Wiki** • Última atualização: 17/05/2026

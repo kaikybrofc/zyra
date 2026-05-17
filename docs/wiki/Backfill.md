@@ -1,39 +1,75 @@
 # Backfill
 
-[Home](Home) | [Banco-de-Dados](Banco-de-Dados) | [Produção](Produção)
+O backfill é parte do desenho operacional do Zyra. Ele não existe apenas como ferramenta pontual: em produção, ele pode rodar continuamente para reparar e enriquecer dados derivados ao longo do tempo.
+
+Arquivo principal:
+
+- `src/core/db/backfill.ts`
 
 ## Objetivo
 
-O backfill corrige dados incompletos/inconsistentes em background sem interromper o processamento online.
+O worker de backfill corrige dados incompletos ou inconsistentes sem interromper o fluxo online do bot.
 
-## Execução
+Ele atua especialmente em:
+
+- identidade derivada
+- vínculos entre usuários e mensagens
+- metadados de mídia
+- relações de chats, grupos e contatos
+- consistência histórica em tabelas de auditoria
+
+## Modos de execução
+
+### Execução contínua
+
+É o modo recomendado em produção. O worker roda em ciclos, com intervalo configurável, e usa checkpoints para retomar de onde parou.
+
+### Execução one-shot
+
+Útil para manutenção manual, validação ou recuperação pontual.
+
+Exemplo:
 
 ```bash
-npm run db:backfill
+WA_BACKFILL_ONCE=true npm run db:backfill
 ```
 
-## Motor
+## Checkpoints
 
-Arquivo principal: `src/core/db/backfill.ts`.
+O worker usa `backfill_checkpoints` para persistir progresso por etapa.
 
-Características:
+Isso permite:
+
+- retomada incremental
+- redução de retrabalho
+- execução segura em lotes
+- melhor previsibilidade operacional
+
+## Comportamento geral do worker
+
+Características principais:
 
 - execução em ciclos
-- checkpoints por etapa (`backfill_checkpoints`)
-- lote configurável por ambiente
-- logs de progresso por passo
+- batch size configurável
+- múltiplas passagens por ciclo
+- métricas de antes/depois para pendências críticas
+- logs por etapa
+- tolerância a enriquecimento progressivo
 
 ## Etapas típicas
 
-- normalização de usuários/identificadores
+Entre as tarefas executadas pelo worker, estão:
+
+- normalização de usuários e identificadores
 - preenchimento de `sender_user_id`
-- reconciliação de `message_events`/`events_log`
-- complemento de metadados de mídia
-- preenchimento de dados derivados de grupos/contatos
+- reconciliação de `message_events` e `events_log`
+- preenchimento de nomes visíveis e relações derivadas
+- complementação de metadados de mídia local
+- atualização de relações de grupos, chats e contatos
 
-## Prioridade crítica (alvo <1%)
+## Prioridade crítica de qualidade de dados
 
-O ciclo atual prioriza redução de nulos em campos críticos de identidade e nome:
+O ciclo atual prioriza redução rápida de lacunas em campos de identidade e visibilidade, especialmente:
 
 1. `wa_contacts_cache.user_id`
 2. `lid_mappings.user_id`
@@ -41,37 +77,49 @@ O ciclo atual prioriza redução de nulos em campos críticos de identidade e no
 4. `wa_contacts_cache.display_name`
 5. `chats.display_name`
 
-Isso melhora rapidamente integridade para trilhas de comando, eventos e auditoria.
-
-## Causa raiz corrigida (degradação de display_name)
-
-Foi corrigido no runtime SQL um comportamento que podia degradar dados:
-
-- `setChat` não sobrescreve mais `display_name` com `NULL` em updates parciais.
-- `last_message_ts` e `unread_count` também preservam valor existente quando update chega nulo.
-- `setContact` agora preenche chat com `display_name` quando estiver `NULL` **ou vazio**.
-
-Resultado esperado: queda contínua de nulos em `users.display_name` e `chats.display_name`, com menor regressão entre ciclos.
+Esse foco melhora rapidamente trilhas de comando, auditoria e troubleshooting.
 
 ## Backfill de mídia local
 
-Com `WA_MEDIA_AUTO_DOWNLOAD=true`, o worker pode completar:
+Quando `WA_MEDIA_AUTO_DOWNLOAD=true`, o worker também pode completar campos derivados de mídia local, como:
 
-- `message_media.file_length` via `stat` do arquivo local
-- `message_media.file_name` via basename de `local_path`
+- `message_media.file_length`
+- `message_media.file_name`
+
+Esses dados podem ser inferidos a partir do arquivo já salvo em disco.
 
 ## Operação segura
 
-- execute com banco íntegro e backup recente
-- monitore tempo por ciclo
-- ajuste batch para evitar pressão excessiva no banco
+Recomendações:
 
-## Métricas e diagnóstico
+- usar backup recente do banco em ambientes críticos
+- monitorar duração por ciclo
+- ajustar batch size se houver pressão excessiva no MySQL
+- validar redução de pendências com `db:nulls` e `db:verify`
 
-- logs de `affectedRows` por etapa
-- comparação de pendências antes/depois do ciclo
-- uso de `db:nulls` para validar redução de lacunas
+## Comandos úteis
+
+```bash
+npm run db:backfill
+npm run db:verify
+npm run db:nulls
+```
+
+## Quando usar one-shot
+
+Use modo one-shot quando precisar:
+
+- validar uma correção de schema/comportamento
+- recuperar consistência após incidente
+- observar impacto de uma mudança antes de recolocar o worker contínuo
+
+## Leituras relacionadas
+
+- [Banco de Dados](Banco-de-Dados)
+- [Persistência](Persistência)
+- [Produção](Produção)
+- [Troubleshooting](Troubleshooting)
 
 ---
 
-**Zyra Wiki** • Última atualização: 15/05/2026
+**Zyra Wiki** • Última atualização: 17/05/2026
