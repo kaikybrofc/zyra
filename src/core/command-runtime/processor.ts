@@ -46,6 +46,14 @@ const NON_LINK_FILE_EXTENSIONS = new Set([
   'gz',
 ])
 const INTERNAL_WHATSAPP_HOSTS = new Set(['whatsapp.net', 'cdn.whatsapp.net'])
+const PLAY_COMMAND_ANTILINK_BYPASS_COMMANDS = new Set(['play', 'playvid'])
+const PLAY_COMMAND_ANTILINK_BYPASS_HOSTS = new Set([
+  'youtube.com',
+  'www.youtube.com',
+  'm.youtube.com',
+  'music.youtube.com',
+  'youtu.be',
+])
 const MEDIA_TYPES = new Set([
   'imageMessage',
   'videoMessage',
@@ -119,6 +127,20 @@ const parseTimestamp = (raw: unknown): number | null => {
  * @param error Erro capturado durante envio/processamento.
  * @returns Código HTTP quando disponível.
  */
+const isPlayCommandYoutubeBypass = (context: IncomingCommandEnvelope, links: string[]): boolean => {
+  if (!PLAY_COMMAND_ANTILINK_BYPASS_COMMANDS.has(context.commandName ?? '')) return false
+  if (!links.length) return false
+
+  for (const link of links) {
+    const url = parseLinkToUrl(link)
+    if (!url) return false
+    const hostname = url.hostname.toLowerCase()
+    if (!PLAY_COMMAND_ANTILINK_BYPASS_HOSTS.has(hostname)) return false
+  }
+
+  return true
+}
+
 const getErrorStatusCode = (error: unknown): number | null => {
   const candidate = (error as { output?: { statusCode?: unknown }; statusCode?: unknown } | null | undefined)
   const raw = candidate?.output?.statusCode ?? candidate?.statusCode
@@ -768,6 +790,15 @@ export function createCommandProcessor({ logger, sqlStore }: CreateCommandProces
       return
     }
 
+    if (isPlayCommandYoutubeBypass(context, links)) {
+      logger.info('antilink ignorado: link do youtube usado no comando play', {
+        chatId: context.chatId,
+        sender: context.sender,
+        links,
+      })
+      return
+    }
+
     if (messageType === 'stickerMessage' && !foundExternalLink) {
       logger.info('antilink ignorado: sticker com link interno do WhatsApp', {
         chatId: context.chatId,
@@ -889,7 +920,7 @@ export function createCommandProcessor({ logger, sqlStore }: CreateCommandProces
     })
     try {
       await sendModerationMessage(context.sock, context.chatId, {
-        text: `🚫 ${context.message.pushName ?? 'Usuário'} removido por enviar link (antilink ativo).\n🧹 Mensagens apagadas: ${deleted}/${total}.`,
+        text: 'o user foi banido pelo sistema de anti link',
       })
     } catch (error) {
       logger.warn('falha ao enviar confirmacao de acao do antilink', {

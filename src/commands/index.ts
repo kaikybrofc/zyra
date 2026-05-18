@@ -16,6 +16,8 @@ import {
 } from './admin.js'
 import { createMenuCommand } from './menu.js'
 import { pingCommand } from './ping.js'
+import { playCommand } from './play.js'
+import { playVideoCommand } from './playvid.js'
 import { stickerAliasCommand, stickerCommand, stickerSecondAliasCommand } from './sticker.js'
 import { toGifCommand, toImageCommand } from './sticker-convert.js'
 
@@ -30,6 +32,8 @@ Object.assign(commandRegistry, {
   [antilinkCommand.name]: antilinkCommand,
   [menuCommand.name]: menuCommand,
   [pingCommand.name]: pingCommand,
+  [playCommand.name]: playCommand,
+  [playVideoCommand.name]: playVideoCommand,
   [stickerCommand.name]: stickerCommand,
   [stickerAliasCommand.name]: stickerAliasCommand,
   [stickerSecondAliasCommand.name]: stickerSecondAliasCommand,

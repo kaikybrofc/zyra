@@ -311,7 +311,7 @@ describe('CommandProcessor', () => {
     expect(groupParticipantsUpdate).toHaveBeenCalledWith('grupo@g.us', ['user@s.whatsapp.net'], 'remove')
     expect(sendMessage).toHaveBeenCalledWith(
       'grupo@g.us',
-      { text: '🚫 Tester removido por enviar link (antilink ativo).\n🧹 Mensagens apagadas: 1/1.' }
+      { text: 'o user foi banido pelo sistema de anti link' }
     )
     expect(sendMessage).toHaveBeenCalledWith(
       'grupo@g.us',
@@ -481,6 +481,78 @@ describe('CommandProcessor', () => {
         expect(groupParticipantsUpdate).not.toHaveBeenCalled()
       }
     }
+  })
+
+  it('ignora antilink para link do youtube usado no comando play', async () => {
+    mockGroupFeatureStore.isAntilinkEnabled.mockResolvedValue(true)
+    mockGroupFeatureStore.getAntilinkAllowedDomains.mockResolvedValue([])
+    mockGroupFeatureStore.isAntilinkAllowOwnGroupInviteEnabled.mockResolvedValue(false)
+
+    const logger = createLogger()
+    const sqlStore = { enabled: false, recordCommandLog: vi.fn() }
+    const sendMessage = vi.fn().mockResolvedValue(undefined)
+    const groupMetadata = vi.fn().mockResolvedValue({
+      participants: [{ id: 'user@s.whatsapp.net' }, { id: 'bot@s.whatsapp.net', admin: 'admin' }],
+    })
+    const groupParticipantsUpdate = vi.fn().mockResolvedValue([])
+    const execute = vi.fn().mockResolvedValue(undefined)
+
+    mockCommands.play = { name: 'play', description: 'play', execute }
+
+    const sock = {
+      user: { id: 'bot@s.whatsapp.net' },
+      sendMessage,
+      groupMetadata,
+      groupParticipantsUpdate,
+      groupInviteCode: vi.fn().mockResolvedValue('SELF123'),
+    }
+
+    const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
+    const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
+
+    await processor.process(
+      sock as never,
+      createMessage('!play https://www.youtube.com/watch?v=dQw4w9WgXcQ', { chatId: 'grupo@g.us' }) as never
+    )
+
+    expect(groupParticipantsUpdate).not.toHaveBeenCalled()
+    expect(execute).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignora antilink para link do youtube usado no comando playvid', async () => {
+    mockGroupFeatureStore.isAntilinkEnabled.mockResolvedValue(true)
+    mockGroupFeatureStore.getAntilinkAllowedDomains.mockResolvedValue([])
+    mockGroupFeatureStore.isAntilinkAllowOwnGroupInviteEnabled.mockResolvedValue(false)
+
+    const logger = createLogger()
+    const sqlStore = { enabled: false, recordCommandLog: vi.fn() }
+    const sendMessage = vi.fn().mockResolvedValue(undefined)
+    const groupMetadata = vi.fn().mockResolvedValue({
+      participants: [{ id: 'user@s.whatsapp.net' }, { id: 'bot@s.whatsapp.net', admin: 'admin' }],
+    })
+    const groupParticipantsUpdate = vi.fn().mockResolvedValue([])
+    const execute = vi.fn().mockResolvedValue(undefined)
+
+    mockCommands.playvid = { name: 'playvid', description: 'playvid', execute }
+
+    const sock = {
+      user: { id: 'bot@s.whatsapp.net' },
+      sendMessage,
+      groupMetadata,
+      groupParticipantsUpdate,
+      groupInviteCode: vi.fn().mockResolvedValue('SELF123'),
+    }
+
+    const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
+    const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
+
+    await processor.process(
+      sock as never,
+      createMessage('!playvid https://www.youtube.com/watch?v=dQw4w9WgXcQ', { chatId: 'grupo@g.us' }) as never
+    )
+
+    expect(groupParticipantsUpdate).not.toHaveBeenCalled()
+    expect(execute).toHaveBeenCalledTimes(1)
   })
 
   it('nao remove quando dominio esta na whitelist do grupo', async () => {
@@ -1098,7 +1170,7 @@ describe('CommandProcessor', () => {
     expect(deleteCalls).toHaveLength(2)
     expect(sendMessage).toHaveBeenLastCalledWith(
       'grupo@g.us',
-      { text: '🚫 Tester removido por enviar link (antilink ativo).\n🧹 Mensagens apagadas: 1/1.' }
+      { text: 'o user foi banido pelo sistema de anti link' }
     )
   })
 
