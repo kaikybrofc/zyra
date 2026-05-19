@@ -12,6 +12,8 @@ let createHistorySyncPolicyMock: ReturnType<typeof vi.fn>
 let loadAntiBanWarmUpStateMock: ReturnType<typeof vi.fn>
 let saveAntiBanWarmUpStateMock: ReturnType<typeof vi.fn>
 let wrapSocketWithAntiBanMock: ReturnType<typeof vi.fn>
+let processOnceSpy: ReturnType<typeof vi.spyOn>
+let processSignalHandlers: Record<string, () => void>
 
 const mockConfig = {
   authDir: '/tmp/auth-test',
@@ -99,6 +101,12 @@ beforeEach(() => {
   loadAntiBanWarmUpStateMock = vi.fn().mockResolvedValue(undefined)
   saveAntiBanWarmUpStateMock = vi.fn().mockResolvedValue(undefined)
   wrapSocketWithAntiBanMock = vi.fn((sock) => sock)
+  processSignalHandlers = {}
+  processOnceSpy = vi.spyOn(process, 'once')
+  processOnceSpy.mockImplementation(((event: string, handler: () => void) => {
+    processSignalHandlers[event] = handler
+    return process
+  }) as typeof process.once)
 })
 
 afterEach(() => {
@@ -112,6 +120,7 @@ afterEach(() => {
   } else {
     process.env.WA_SHUTDOWN_TIMEOUT_MS = originalShutdownTimeout
   }
+  processOnceSpy.mockRestore()
   vi.useRealTimers()
 })
 
@@ -165,12 +174,6 @@ describe('socket', () => {
 
   it('usa cache de versao, fallback de auth e shutdown gracioso', async () => {
     process.env.WA_CREDS_DEBOUNCE_MS = '0'
-    const handlers: Record<string, () => void> = {}
-    const onceSpy = vi.spyOn(process, 'once')
-    onceSpy.mockImplementation(((event: string, handler: () => void) => {
-      handlers[event] = handler
-      return process
-    }) as typeof process.once)
 
     const ev1 = new EventEmitter()
     const ev2 = new EventEmitter()
@@ -205,7 +208,7 @@ describe('socket', () => {
 
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code?: number) => undefined as never)
 
-    handlers.SIGTERM?.()
+    processSignalHandlers.SIGTERM?.()
     await vi.waitFor(() => expect(exitSpy).toHaveBeenCalled(), { timeout: 500 })
 
     expect(fallbackSaveCreds).toHaveBeenCalled()
@@ -214,8 +217,72 @@ describe('socket', () => {
     expect(sock2.end).toHaveBeenCalled()
     expect(exitSpy).toHaveBeenCalledWith(0)
 
-    onceSpy.mockRestore()
     exitSpy.mockRestore()
+  })
+
+  it('loga fallback de auth e inicializa o socket com o estado local', async () => {
+    process.env.WA_CREDS_DEBOUNCE_MS = '0'
+    const ev = new EventEmitter()
+    const sock = { ev, user: { id: 'fallback@s.whatsapp.net' }, end: vi.fn() }
+
+    makeWASocketMock.mockReturnValue(sock)
+    fetchLatestMock.mockResolvedValue({ version: [2, 1, 0], isLatest: true })
+
+    const authError = new Error('central auth unavailable')
+    const fallbackState = createState()
+    const fallbackSaveCreds = vi.fn().mockResolvedValue(undefined)
+    getAuthStateMock.mockRejectedValueOnce(authError)
+    useMultiFileAuthStateMock.mockResolvedValue({ state: fallbackState, saveCreds: fallbackSaveCreds })
+
+    createBaileysStoreMock.mockReturnValue(createStore())
+
+    const logger = createLogger()
+    const { createSocket } = await import('../src/core/connection/socket.ts')
+    await createSocket('conn', logger)
+
+    expect(logger.error).toHaveBeenCalledWith('falha ao resolver auth state, ativando fallback local', {
+      err: authError,
+    })
+    expect(useMultiFileAuthStateMock).toHaveBeenCalledWith('/tmp/auth-test/conn')
+    expect(makeWASocketMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auth: fallbackState,
+        version: [2, 1, 0],
+      })
+    )
+
+    ev.emit('creds.update')
+    await Promise.resolve()
+    expect(fallbackSaveCreds).toHaveBeenCalledTimes(1)
+  })
+
+  it('loga erro quando saveCreds do fallback local falha', async () => {
+    process.env.WA_CREDS_DEBOUNCE_MS = '0'
+    const ev = new EventEmitter()
+    const sock = { ev, user: { id: 'fallback-error@s.whatsapp.net' }, end: vi.fn() }
+
+    makeWASocketMock.mockReturnValue(sock)
+    fetchLatestMock.mockResolvedValue({ version: [2, 1, 0], isLatest: true })
+
+    const persistError = new Error('disk write failed')
+    getAuthStateMock.mockRejectedValueOnce(new Error('central auth unavailable'))
+    useMultiFileAuthStateMock.mockResolvedValue({
+      state: createState(),
+      saveCreds: vi.fn().mockRejectedValue(persistError),
+    })
+
+    createBaileysStoreMock.mockReturnValue(createStore())
+
+    const logger = createLogger()
+    const { createSocket } = await import('../src/core/connection/socket.ts')
+    await createSocket('conn', logger)
+
+    ev.emit('creds.update')
+    await Promise.resolve()
+
+    expect(logger.error).toHaveBeenCalledWith('erro ao salvar credenciais durante ciclo de vida', {
+      err: persistError,
+    })
   })
 
   it('registra warning de versao e loga erro ao falhar saveCreds', async () => {
@@ -516,12 +583,6 @@ describe('socket', () => {
     vi.useFakeTimers()
     process.env.WA_CREDS_DEBOUNCE_MS = '0'
     process.env.WA_SHUTDOWN_TIMEOUT_MS = '10'
-    const handlers: Record<string, () => void> = {}
-    const onceSpy = vi.spyOn(process, 'once')
-    onceSpy.mockImplementation(((event: string, handler: () => void) => {
-      handlers[event] = handler
-      return process
-    }) as typeof process.once)
 
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((_code?: number) => {
       return undefined as never
@@ -543,7 +604,7 @@ describe('socket', () => {
     const { createSocket } = await import('../src/core/connection/socket.ts')
     await createSocket('conn', logger)
 
-    handlers.SIGTERM?.()
+    processSignalHandlers.SIGTERM?.()
     await vi.advanceTimersByTimeAsync(10)
 
     expect(logger.error).toHaveBeenCalledWith('shutdown demorou demais, forçando encerramento', {
@@ -551,7 +612,6 @@ describe('socket', () => {
     })
     expect(exitSpy).toHaveBeenCalledWith(1)
 
-    onceSpy.mockRestore()
     exitSpy.mockRestore()
   })
 })
