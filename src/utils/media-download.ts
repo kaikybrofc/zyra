@@ -6,6 +6,25 @@ import { config } from '../config/index.js'
 type MediaMessageType = 'imageMessage' | 'videoMessage' | 'audioMessage' | 'documentMessage' | 'stickerMessage' | 'ptvMessage'
 type StreamType = 'image' | 'video' | 'audio' | 'document' | 'sticker'
 
+type MediaDownloadSkipReason = 'invalid-node' | 'unsupported-type' | 'missing-media-key' | 'empty-media-key' | 'missing-transport' | 'downloadable'
+
+type MediaNodeLike = {
+  url?: string | null
+  directPath?: string | null
+  mediaKey?: Uint8Array | Buffer | string | null
+}
+
+export type IncomingMediaDownloadInspection = {
+  downloadable: boolean
+  reason: MediaDownloadSkipReason
+  hasUrl: boolean
+  hasDirectPath: boolean
+  hasMediaKey: boolean
+  mediaKeyLength: number | null
+  urlHost: string | null
+  directPathPrefix: string | null
+}
+
 const MEDIA_STREAM_TYPE: Record<MediaMessageType, StreamType> = {
   imageMessage: 'image',
   videoMessage: 'video',
@@ -18,6 +37,97 @@ const MEDIA_STREAM_TYPE: Record<MediaMessageType, StreamType> = {
 const safeName = (value: string) => value.replace(/[^a-zA-Z0-9._-]/g, '_')
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 const pruneInFlightByDir = new Map<string, Promise<void>>()
+
+const getUrlHost = (url: string | null): string | null => {
+  if (!url) return null
+  try {
+    return new URL(url).host
+  } catch {
+    return null
+  }
+}
+
+const getMediaKeyLength = (mediaKey: MediaNodeLike['mediaKey']): number | null => {
+  if (typeof mediaKey === 'string') return mediaKey.length
+  if (mediaKey && typeof mediaKey === 'object') {
+    if (typeof mediaKey.byteLength === 'number') return mediaKey.byteLength
+    if (typeof mediaKey.length === 'number') return mediaKey.length
+  }
+  return null
+}
+
+export const inspectIncomingMediaDownload = (mediaType: MediaMessageType, mediaNode: unknown): IncomingMediaDownloadInspection => {
+  const streamType = MEDIA_STREAM_TYPE[mediaType]
+  if (!streamType) {
+    return {
+      downloadable: false,
+      reason: 'unsupported-type',
+      hasUrl: false,
+      hasDirectPath: false,
+      hasMediaKey: false,
+      mediaKeyLength: null,
+      urlHost: null,
+      directPathPrefix: null,
+    }
+  }
+
+  if (!mediaNode || typeof mediaNode !== 'object') {
+    return {
+      downloadable: false,
+      reason: 'invalid-node',
+      hasUrl: false,
+      hasDirectPath: false,
+      hasMediaKey: false,
+      mediaKeyLength: null,
+      urlHost: null,
+      directPathPrefix: null,
+    }
+  }
+
+  const node = mediaNode as MediaNodeLike
+  const url = typeof node.url === 'string' ? node.url : null
+  const directPath = typeof node.directPath === 'string' ? node.directPath : null
+  const mediaKeyLength = getMediaKeyLength(node.mediaKey)
+  const hasMediaKey = mediaKeyLength !== null && mediaKeyLength > 0
+  const base = {
+    hasUrl: Boolean(url),
+    hasDirectPath: Boolean(directPath),
+    hasMediaKey,
+    mediaKeyLength,
+    urlHost: getUrlHost(url),
+    directPathPrefix: directPath ? directPath.slice(0, 80) : null,
+  }
+
+  if (mediaKeyLength === null) {
+    return {
+      downloadable: false,
+      reason: 'missing-media-key',
+      ...base,
+    }
+  }
+
+  if (mediaKeyLength <= 0) {
+    return {
+      downloadable: false,
+      reason: 'empty-media-key',
+      ...base,
+    }
+  }
+
+  if (!url && !directPath) {
+    return {
+      downloadable: false,
+      reason: 'missing-transport',
+      ...base,
+    }
+  }
+
+  return {
+    downloadable: true,
+    reason: 'downloadable',
+    ...base,
+  }
+}
 
 type StoredMediaFile = {
   absolutePath: string
@@ -163,7 +273,8 @@ export async function downloadIncomingMediaToDisk(params: {
 }): Promise<string | null> {
   if (!config.mediaAutoDownload) return null
   const streamType = MEDIA_STREAM_TYPE[params.mediaType]
-  if (!streamType || !params.mediaNode || typeof params.mediaNode !== 'object') return null
+  const inspection = inspectIncomingMediaDownload(params.mediaType, params.mediaNode)
+  if (!streamType || !inspection.downloadable) return null
 
   const chunks: Buffer[] = []
   let totalSize = 0

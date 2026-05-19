@@ -1,12 +1,15 @@
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import winston from 'winston'
+import { format, type TransformableInfo } from 'logform'
 import { criarInstanciaLogger, type LoggerInstancia } from '@kaikybrofc/logger-module'
 import { config } from '../config/index.js'
 
 export type AppLogger = LoggerInstancia & {
   trace: (...args: unknown[]) => void
 }
+
+const exactLevel = (level: string) => format((info: TransformableInfo) => (info.level === level ? info : false))()
 
 function ensureTrace(logger: LoggerInstancia): AppLogger {
   const typedLogger = logger as LoggerInstancia & {
@@ -69,7 +72,7 @@ export function createLogger(): AppLogger {
       options: {
         filename: path.join(logDir, 'erro-%DATE%.log'),
         level: 'error',
-        format: fileFormat,
+        format: winston.format.combine(exactLevel('error'), fileFormat),
         datePattern: 'YYYY-MM-DD',
         zippedArchive: true,
         maxSize: '20m',
@@ -81,7 +84,7 @@ export function createLogger(): AppLogger {
       options: {
         filename: path.join(logDir, 'aviso-%DATE%.log'),
         level: 'warn',
-        format: fileFormat,
+        format: winston.format.combine(exactLevel('warn'), fileFormat),
         datePattern: 'YYYY-MM-DD',
         zippedArchive: true,
         maxSize: '20m',

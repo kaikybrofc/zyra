@@ -43,6 +43,19 @@ afterEach(async () => {
 })
 
 describe('media-download', () => {
+  it('retorna classificacao de payload invalido quando mediaKey esta ausente', async () => {
+    const { inspectIncomingMediaDownload } = await import('../src/utils/media-download.ts')
+    expect(inspectIncomingMediaDownload('imageMessage', { url: 'https://cdn.example/file' })).toEqual(
+      expect.objectContaining({ downloadable: false, reason: 'missing-media-key', hasUrl: true, hasMediaKey: false })
+    )
+  })
+
+  it('retorna classificacao de payload invalido quando mediaKey esta vazia', async () => {
+    const { inspectIncomingMediaDownload } = await import('../src/utils/media-download.ts')
+    expect(inspectIncomingMediaDownload('imageMessage', { directPath: '/m', mediaKey: Buffer.alloc(0) })).toEqual(
+      expect.objectContaining({ downloadable: false, reason: 'empty-media-key', hasDirectPath: true, hasMediaKey: false, mediaKeyLength: 0 })
+    )
+  })
   it('retorna null quando auto download esta desativado', async () => {
     const { downloadIncomingMediaToDisk } = await import('../src/utils/media-download.ts')
     const localPath = await downloadIncomingMediaToDisk({
@@ -50,6 +63,34 @@ describe('media-download', () => {
       messageDbId: 1,
       mediaType: 'imageMessage',
       mediaNode: {},
+      connectionId: 'default',
+    })
+    expect(localPath).toBeNull()
+    expect(downloadContentFromMessageMock).not.toHaveBeenCalled()
+  })
+
+  it('retorna null sem tentar baixar quando mediaKey esta ausente', async () => {
+    mockConfig.mediaAutoDownload = true
+    const { downloadIncomingMediaToDisk } = await import('../src/utils/media-download.ts')
+    const localPath = await downloadIncomingMediaToDisk({
+      messageId: 'm2',
+      messageDbId: 2,
+      mediaType: 'imageMessage',
+      mediaNode: { url: 'https://cdn.example/image' },
+      connectionId: 'default',
+    })
+    expect(localPath).toBeNull()
+    expect(downloadContentFromMessageMock).not.toHaveBeenCalled()
+  })
+
+  it('retorna null sem tentar baixar quando mediaKey esta vazia', async () => {
+    mockConfig.mediaAutoDownload = true
+    const { downloadIncomingMediaToDisk } = await import('../src/utils/media-download.ts')
+    const localPath = await downloadIncomingMediaToDisk({
+      messageId: 'm3',
+      messageDbId: 3,
+      mediaType: 'imageMessage',
+      mediaNode: { directPath: '/media/image', mediaKey: Buffer.alloc(0) },
       connectionId: 'default',
     })
     expect(localPath).toBeNull()
@@ -65,7 +106,7 @@ describe('media-download', () => {
       messageId: 'msg-1',
       messageDbId: 42,
       mediaType: 'audioMessage',
-      mediaNode: { any: 'payload' },
+      mediaNode: { any: 'payload', directPath: '/media/audio', mediaKey: Buffer.from('key') },
       fileName: null,
       mimeType: 'audio/ogg; codecs=opus',
       connectionId: 'tenant',
@@ -89,7 +130,7 @@ describe('media-download', () => {
       messageId: 'big-msg',
       messageDbId: 99,
       mediaType: 'videoMessage',
-      mediaNode: { any: 'payload' },
+      mediaNode: { any: 'payload', url: 'https://cdn.example/video', mediaKey: Buffer.from('key') },
       connectionId: 'default',
     })
 
@@ -110,7 +151,7 @@ describe('media-download', () => {
       messageId: 'small-msg',
       messageDbId: 7,
       mediaType: 'imageMessage',
-      mediaNode: { any: 'payload' },
+      mediaNode: { any: 'payload', directPath: '/media/image', mediaKey: Buffer.from('key') },
       connectionId: 'default',
     })
 

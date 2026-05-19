@@ -234,7 +234,7 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
     auth: state,
     version,
     browser: Browsers.ubuntu('Zyra System'),
-    logger: createBaileysLogger(logger),
+    logger: createBaileysLogger(logger, { connectionId, component: 'baileys' }),
     emitOwnEvents: true,
     fireInitQueries: false,
     syncFullHistory: false,

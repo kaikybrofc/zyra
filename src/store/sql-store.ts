@@ -6,7 +6,7 @@ import { ensureMysqlConnection } from '../core/db/connection.js'
 import { getMysqlPool } from '../core/db/mysql.js'
 import { createLogger } from '../observability/logger.js'
 import { normalizeDisplayNameCandidate, pickBetterDisplayName } from '../utils/display-name.js'
-import { downloadIncomingMediaToDisk } from '../utils/media-download.js'
+import { downloadIncomingMediaToDisk, inspectIncomingMediaDownload } from '../utils/media-download.js'
 import { getMessageText, getNormalizedMessage } from '../utils/message.js'
 
 const serialize = (value: unknown) => JSON.stringify(value, BufferJSON.replacer)
@@ -994,40 +994,61 @@ export function createSqlStore(connectionId?: string): SqlStore {
               if (mediaInfo) {
                 let localPath: string | null = null
                 if (config.mediaAutoDownload && normalized.type) {
-                  try {
-                    localPath = await downloadIncomingMediaToDisk({
-                      messageId,
-                      messageDbId,
-                      mediaType: normalized.type as 'imageMessage' | 'videoMessage' | 'audioMessage' | 'documentMessage' | 'stickerMessage' | 'ptvMessage',
-                      mediaNode: mediaInfo.data,
-                      fileName: mediaInfo.fileName,
-                      mimeType: mediaInfo.mimeType,
-                      connectionId: resolvedConnectionId,
-                    })
-                  } catch (error) {
-                    const mediaNodeSummary = summarizeMediaNode(mediaInfo.data)
-                    getStoreLogger().warn('falha ao baixar midia para disco local', {
-                      err: error,
-                      action: 'downloadIncomingMediaToDisk',
-                      connectionId: resolvedConnectionId,
-                      chatJid,
-                      messageId,
-                      messageDbId,
-                      fromMe: Boolean(key.fromMe),
-                      sender: message.key?.participant ?? chatJid,
-                      pushName: message.pushName ?? null,
-                      messageTimestamp: toNumber(message.messageTimestamp),
-                      contentType: normalized.type ? String(normalized.type) : null,
-                      mediaType: mediaInfo.mediaType,
-                      mimeType: mediaInfo.mimeType,
-                      mediaUrlPrefix: mediaInfo.url ? mediaInfo.url.slice(0, 160) : null,
-                      fileName: mediaInfo.fileName,
-                      fileLength: mediaInfo.fileLength,
-                      fileSha256: mediaInfo.fileSha256,
-                      quotedJid,
-                      mentionedCount: mentionedJids.length,
-                      mediaNode: mediaNodeSummary,
-                    })
+                  const mediaDownloadInspection = inspectIncomingMediaDownload(
+                    normalized.type as 'imageMessage' | 'videoMessage' | 'audioMessage' | 'documentMessage' | 'stickerMessage' | 'ptvMessage',
+                    mediaInfo.data
+                  )
+                  if (!mediaDownloadInspection.downloadable) {
+                    if (mediaDownloadInspection.reason === 'missing-transport') {
+                      getStoreLogger().debug('download de midia local ignorado por payload incompleto', {
+                        action: 'downloadIncomingMediaToDisk',
+                        connectionId: resolvedConnectionId,
+                        chatJid,
+                        messageId,
+                        messageDbId,
+                        contentType: normalized.type ? String(normalized.type) : null,
+                        mediaType: mediaInfo.mediaType,
+                        mimeType: mediaInfo.mimeType,
+                        skipReason: mediaDownloadInspection.reason,
+                        mediaNode: summarizeMediaNode(mediaInfo.data),
+                      })
+                    }
+                  } else {
+                    try {
+                      localPath = await downloadIncomingMediaToDisk({
+                        messageId,
+                        messageDbId,
+                        mediaType: normalized.type as 'imageMessage' | 'videoMessage' | 'audioMessage' | 'documentMessage' | 'stickerMessage' | 'ptvMessage',
+                        mediaNode: mediaInfo.data,
+                        fileName: mediaInfo.fileName,
+                        mimeType: mediaInfo.mimeType,
+                        connectionId: resolvedConnectionId,
+                      })
+                    } catch (error) {
+                      const mediaNodeSummary = summarizeMediaNode(mediaInfo.data)
+                      getStoreLogger().warn('falha ao baixar midia para disco local', {
+                        err: error,
+                        action: 'downloadIncomingMediaToDisk',
+                        connectionId: resolvedConnectionId,
+                        chatJid,
+                        messageId,
+                        messageDbId,
+                        fromMe: Boolean(key.fromMe),
+                        sender: message.key?.participant ?? chatJid,
+                        pushName: message.pushName ?? null,
+                        messageTimestamp: toNumber(message.messageTimestamp),
+                        contentType: normalized.type ? String(normalized.type) : null,
+                        mediaType: mediaInfo.mediaType,
+                        mimeType: mediaInfo.mimeType,
+                        mediaUrlPrefix: mediaInfo.url ? mediaInfo.url.slice(0, 160) : null,
+                        fileName: mediaInfo.fileName,
+                        fileLength: mediaInfo.fileLength,
+                        fileSha256: mediaInfo.fileSha256,
+                        quotedJid,
+                        mentionedCount: mentionedJids.length,
+                        mediaNode: mediaNodeSummary,
+                      })
+                    }
                   }
                 }
                 await pool.execute(

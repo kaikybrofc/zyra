@@ -3,11 +3,104 @@ import type { AppLogger } from './logger.js'
 
 type Meta = Record<string, unknown>
 
+type DecryptLogState = {
+  attempts: number
+  nextAttemptAt: number
+  lastError: string
+  suppressedDuplicates: number
+}
+
+const DECRYPT_LOG_COOLDOWN_MS = 60_000
+const decryptLogState = new Map<string, DecryptLogState>()
+
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 
 const mergeMeta = (base: Meta, extra?: Meta): Meta | undefined => {
   const merged = { ...base, ...(extra ?? {}) }
   return Object.keys(merged).length > 0 ? merged : undefined
+}
+
+const getErrorMeta = (meta: Meta | undefined): { errorName: string | null; errorMessage: string | null } => {
+  const err = meta?.err
+  if (err instanceof Error) {
+    return { errorName: err.name, errorMessage: err.message }
+  }
+  if (isRecord(err)) {
+    return {
+      errorName: typeof err.name === 'string' ? err.name : null,
+      errorMessage: typeof err.message === 'string' ? err.message : null,
+    }
+  }
+  return { errorName: null, errorMessage: null }
+}
+
+const classifyKnownDecryptNoise = (message: string, meta: Meta | undefined) => {
+  const { errorName, errorMessage } = getErrorMeta(meta)
+  const isMessageCounterError = errorName === 'MessageCounterError' && errorMessage === 'Key used already or never filled'
+  if (!isMessageCounterError) return null
+  if (message !== 'failed to decrypt message' && message !== 'transaction failed, rolling back') return null
+  const remoteJid = typeof meta?.sender === 'string' ? meta.sender : typeof meta?.remoteJid === 'string' ? meta.remoteJid : null
+  const author = typeof meta?.author === 'string' ? meta.author : typeof meta?.participant === 'string' ? meta.participant : null
+  return {
+    classification: 'signal-message-counter-error',
+    canonical: message === 'failed to decrypt message',
+    key: [
+      typeof meta?.connectionId === 'string' ? meta.connectionId : 'default',
+      author ?? '',
+      remoteJid ?? '',
+      errorName,
+      errorMessage,
+    ].join('::'),
+    remoteJid,
+    author,
+    errorName,
+    errorMessage,
+  }
+}
+
+const writeKnownDecryptNoise = (method: (...args: unknown[]) => void, message: string, meta: Meta | undefined) => {
+  const classification = classifyKnownDecryptNoise(message, meta)
+  if (!classification) return false
+  const now = Date.now()
+  const previous = decryptLogState.get(classification.key)
+
+  if (!classification.canonical) {
+    const nextState: DecryptLogState = {
+      attempts: previous?.attempts ?? 0,
+      nextAttemptAt: previous?.nextAttemptAt ?? now + DECRYPT_LOG_COOLDOWN_MS,
+      lastError: classification.errorMessage ?? previous?.lastError ?? '',
+      suppressedDuplicates: (previous?.suppressedDuplicates ?? 0) + 1,
+    }
+    decryptLogState.set(classification.key, nextState)
+    return true
+  }
+
+  if (previous && previous.nextAttemptAt > now && previous.lastError === classification.errorMessage) {
+    previous.suppressedDuplicates += 1
+    decryptLogState.set(classification.key, previous)
+    return true
+  }
+
+  const nextState: DecryptLogState = {
+    attempts: (previous?.attempts ?? 0) + 1,
+    nextAttemptAt: now + DECRYPT_LOG_COOLDOWN_MS,
+    lastError: classification.errorMessage ?? '',
+    suppressedDuplicates: previous?.suppressedDuplicates ?? 0,
+  }
+  decryptLogState.set(classification.key, nextState)
+  method('falha recorrente de decrypt detectada', {
+    ...meta,
+    classification: classification.classification,
+    attempt: nextState.attempts,
+    suppressedDuplicates: nextState.suppressedDuplicates,
+    author: classification.author,
+    remoteJid: classification.remoteJid,
+    errorName: classification.errorName,
+    errorMessage: classification.errorMessage,
+  })
+  nextState.suppressedDuplicates = 0
+  decryptLogState.set(classification.key, nextState)
+  return true
 }
 
 const buildEntry = (bindings: Meta, obj: unknown, msg?: string) => {
@@ -42,6 +135,7 @@ const write =
   (method: (...args: unknown[]) => void, bindings: Meta) =>
   (obj: unknown, msg?: string): void => {
     const entry = buildEntry(bindings, obj, msg)
+    if (writeKnownDecryptNoise(method, entry.message, entry.meta)) return
     if (entry.meta) {
       method(entry.message, entry.meta)
       return

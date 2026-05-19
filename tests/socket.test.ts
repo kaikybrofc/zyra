@@ -308,7 +308,7 @@ describe('socket', () => {
       strategy: 'redis',
       connectionId: 'conn',
     })
-    expect(createBaileysLoggerMock).toHaveBeenCalledWith(logger)
+    expect(createBaileysLoggerMock).toHaveBeenCalledWith(logger, { connectionId: 'conn', component: 'baileys' })
     expect(createHistorySyncPolicyMock).toHaveBeenCalledWith(state.creds)
     expect(makeWASocketMock).toHaveBeenCalledTimes(1)
     const socketOptions = makeWASocketMock.mock.calls[0]?.[0]
