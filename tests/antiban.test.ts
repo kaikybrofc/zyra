@@ -42,6 +42,18 @@ vi.mock('baileys-antiban', () => ({
       return adapterSaveMock(key, value)
     }
   },
+  LidResolver: class {
+    config: unknown
+    constructor(config: unknown) {
+      this.config = config
+    }
+  },
+  JidCanonicalizer: class {
+    config: unknown
+    constructor(config: unknown) {
+      this.config = config
+    }
+  },
   wrapSocket: (...args: unknown[]) => wrapSocketMock(...args),
 }))
 
@@ -59,7 +71,16 @@ beforeEach(() => {
   mockConfig.antibanDeafSessionEnabled = true
   adapterLoadMock.mockResolvedValue({ day: 2 })
   adapterSaveMock.mockResolvedValue(undefined)
-  wrapSocketMock.mockImplementation((sock) => ({ ...sock, antiban: { exportWarmUpState: () => ({ day: 2 }), getStats: () => ({}) } }))
+  wrapSocketMock.mockImplementation((sock) => ({
+    ...sock,
+    antiban: {
+      exportWarmUpState: () => ({ day: 2 }),
+      getStats: () => ({}),
+      rateLimiter: { config: {} },
+      health: { config: {} },
+      timelock: { config: {} },
+    },
+  }))
 })
 
 describe('antiban helper', () => {
@@ -93,35 +114,17 @@ describe('antiban helper', () => {
       sock,
       expect.objectContaining({
         logging: false,
-        rateLimiter: expect.objectContaining({
-          maxPerMinute: 8,
-          maxPerHour: 200,
-          maxPerDay: 1500,
-          minDelayMs: 1500,
-          maxDelayMs: 5000,
-          newChatDelayMs: 3000,
-          maxIdenticalMessages: 200,
-          identicalMessageWindowMs: 60000,
-          burstAllowance: 20,
-        }),
-        warmUp: expect.objectContaining({
-          warmUpDays: 7,
-          day1Limit: 20,
-          growthFactor: 1.8,
-          inactivityThresholdHours: 72,
-        }),
-        lidResolver: expect.objectContaining({ canonical: 'pn', maxEntries: 10000 }),
-        jidCanonicalizer: expect.objectContaining({
-          enabled: true,
-          canonicalizeOutbound: true,
-          learnFromEvents: true,
-          resolverConfig: expect.objectContaining({ canonical: 'pn', maxEntries: 10000 }),
-        }),
-        health: expect.objectContaining({ autoPauseAt: 'high' }),
-        timelock: expect.objectContaining({
-          onTimelockDetected: expect.any(Function),
-          onTimelockLifted: expect.any(Function),
-        }),
+        maxPerMinute: 8,
+        maxPerHour: 200,
+        maxPerDay: 1500,
+        minDelayMs: 1500,
+        maxDelayMs: 5000,
+        newChatDelayMs: 3000,
+        warmupDays: 7,
+        day1Limit: 20,
+        growthFactor: 1.8,
+        inactivityThresholdHours: 72,
+        autoPauseAt: 'high',
       }),
       { day: 1 },
       expect.objectContaining({
@@ -201,20 +204,14 @@ describe('antiban helper', () => {
     expect(logger.info).not.toHaveBeenCalled()
   })
 
-  it('cria callbacks de observabilidade e deafSession no config', async () => {
+  it('cria callbacks de observabilidade e deafSession no runtime', async () => {
     const logger = createLogger()
     const { createAntiBanConfig, wrapSocketWithAntiBan } = await import('../src/core/connection/antiban.ts')
 
     const antibanConfig = createAntiBanConfig(logger as never, 'conn-z') as Record<string, unknown>
-    const health = antibanConfig.health as { onRiskChange: (status: unknown) => void; autoPauseAt: string }
-    const timelock = antibanConfig.timelock as {
-      onTimelockDetected: (state: unknown) => void
-      onTimelockLifted: (state: unknown) => void
-    }
-
-    health.onRiskChange({ risk: 'high', score: 90, reasons: ['burst'], recommendation: 'pause' })
-    timelock.onTimelockDetected({ enforcementType: 'temporary', expiresAt: new Date('2026-05-10T00:00:00.000Z'), errorCount: 2 })
-    timelock.onTimelockLifted({ enforcementType: 'temporary', errorCount: 0 })
+    expect(antibanConfig.autoPauseAt).toBe('high')
+    expect(antibanConfig).not.toHaveProperty('health')
+    expect(antibanConfig).not.toHaveProperty('timelock')
 
     const wrapped = wrapSocketWithAntiBan({ ev: { on: vi.fn() }, sendMessage: vi.fn() } as never, logger as never, 'conn-z', { day: 1 } as never)
     expect(wrapped).toHaveProperty('antiban')
@@ -227,14 +224,24 @@ describe('antiban helper', () => {
       }
     }
     const deafSession = wrapOptions?.deafSession
+    const wrappedAntiban = (wrapped as { antiban?: { health?: { config?: { onRiskChange?: (status: unknown) => void } }; timelock?: { config?: { onTimelockDetected?: (state: unknown) => void; onTimelockLifted?: (state: unknown) => void } }; rateLimiter?: { config?: Record<string, unknown> }; jidCanonicalizerModule?: unknown; lidResolverModule?: unknown } }).antiban
 
+    wrappedAntiban?.health?.config?.onRiskChange?.({ risk: 'high', score: 90, reasons: ['burst'], recommendation: 'pause' })
+    wrappedAntiban?.timelock?.config?.onTimelockDetected?.({ enforcementType: 'temporary', expiresAt: new Date('2026-05-10T00:00:00.000Z'), errorCount: 2 })
+    wrappedAntiban?.timelock?.config?.onTimelockLifted?.({ enforcementType: 'temporary', errorCount: 0 })
     deafSession?.onDeafSession({
       lastMessageAt: new Date('2026-05-17T17:00:00.000Z'),
       silenceDurationMs: 1000,
       connectedSinceMs: 9999,
     })
 
-    expect(health.autoPauseAt).toBe('high')
+    expect(wrappedAntiban?.rateLimiter?.config).toEqual(expect.objectContaining({
+      maxIdenticalMessages: 200,
+      identicalMessageWindowMs: 60000,
+      burstAllowance: 20,
+    }))
+    expect(wrappedAntiban?.jidCanonicalizerModule).toBeTruthy()
+    expect(wrappedAntiban?.lidResolverModule).toBeTruthy()
     expect(deafSession?.timeoutMs).toBe(300000)
     expect(deafSession?.minUptimeMs).toBe(120000)
     expect(deafSession?.autoReconnect).toBe(true)

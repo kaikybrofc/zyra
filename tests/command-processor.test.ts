@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 const mockConfig = {
   allowOwnMessages: false,
   commandPrefix: '!',
+  antibanIdenticalMessageWindowMs: 6000,
 }
 
 const mockCommands: Record<string, { execute: ReturnType<typeof vi.fn>; name: string; description: string }> = {}
@@ -166,6 +167,121 @@ describe('CommandProcessor', () => {
       { text: '❌ Ocorreu um erro interno ao executar este comando.' },
       expect.any(Object)
     )
+    expect(sqlStore.recordCommandLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commandName: 'ping',
+        success: false,
+      })
+    )
+  })
+
+  it('retenta envio quando o antiban bloqueia por rate limit e depois consegue reenviar', async () => {
+    vi.useFakeTimers()
+
+    try {
+      const sqlStore = {
+        enabled: true,
+        recordCommandLog: vi.fn(),
+      }
+      const logger = createLogger()
+      const blockedError = new Error('[baileys-antiban] Message blocked: Rate limit exceeded or identical message spam detected')
+      const sendMessage = vi.fn()
+        .mockRejectedValueOnce(blockedError)
+        .mockResolvedValueOnce(undefined)
+      const execute = vi.fn(async (ctx) => {
+        await ctx.reply('pong')
+      })
+
+      mockCommands.ping = { name: 'ping', description: 'ping', execute }
+
+      const sock = {
+        user: { id: 'bot@s.whatsapp.net' },
+        sendMessage,
+        groupMetadata: vi.fn(),
+        groupParticipantsUpdate: vi.fn(),
+      }
+
+      const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
+      const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
+
+      const processing = processor.process(sock as never, createMessage('!ping') as never)
+      await vi.advanceTimersByTimeAsync(6000)
+      await processing
+
+      expect(sendMessage).toHaveBeenCalledTimes(2)
+      expect(sendMessage).toHaveBeenNthCalledWith(
+        1,
+        'chat@s.whatsapp.net',
+        { text: 'pong' },
+        expect.any(Object)
+      )
+      expect(sendMessage).toHaveBeenNthCalledWith(
+        2,
+        'chat@s.whatsapp.net',
+        { text: 'pong' },
+        expect.any(Object)
+      )
+      expect(logger.warn).toHaveBeenCalledWith(
+        'envio bloqueado pelo antiban, aplicando retentativa',
+        expect.objectContaining({
+          attempt: 1,
+          maxAttempts: 3,
+          retryDelayMs: 6000,
+          antiBanReason: 'Rate limit exceeded or identical message spam detected',
+        })
+      )
+      expect(sqlStore.recordCommandLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          commandName: 'ping',
+          success: true,
+        })
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('nao reagenda automaticamente quando o antiban bloqueia por warm-up limit', async () => {
+    const sqlStore = {
+      enabled: true,
+      recordCommandLog: vi.fn(),
+    }
+    const logger = createLogger()
+    const blockedError = new Error('[baileys-antiban] Message blocked: Warm-up limit: day 1 cap reached')
+    const sendMessage = vi.fn()
+      .mockRejectedValueOnce(blockedError)
+      .mockResolvedValueOnce(undefined)
+    const execute = vi.fn(async (ctx) => {
+      await ctx.reply('pong')
+    })
+
+    mockCommands.ping = { name: 'ping', description: 'ping', execute }
+
+    const sock = {
+      user: { id: 'bot@s.whatsapp.net' },
+      sendMessage,
+      groupMetadata: vi.fn(),
+      groupParticipantsUpdate: vi.fn(),
+    }
+
+    const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
+    const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
+
+    await processor.process(sock as never, createMessage('!ping') as never)
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'envio bloqueado pelo antiban sem retentativa automatica',
+      expect.objectContaining({
+        attempt: 1,
+        maxAttempts: 3,
+        antiBanReason: 'Warm-up limit: day 1 cap reached',
+      })
+    )
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      'envio bloqueado pelo antiban, aplicando retentativa',
+      expect.anything()
+    )
+    expect(sendMessage).toHaveBeenCalledTimes(2)
     expect(sqlStore.recordCommandLog).toHaveBeenCalledWith(
       expect.objectContaining({
         commandName: 'ping',
