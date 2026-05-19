@@ -60,6 +60,7 @@ type ResolveOptions = {
 
 const resolvedCache = new Map<string, CacheEntry>()
 const inFlightResolutions = new Map<string, Promise<ResolvedPlayTrack>>()
+const YOUTUBE_ALLOWED_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com'])
 
 function collapseWhitespace(value: string): string {
   return value.trim().replace(/\s+/g, ' ')
@@ -89,7 +90,7 @@ function extractYoutubeVideoId(value: string): string | null {
       return YOUTUBE_ID_RE.test(candidate) ? candidate : null
     }
 
-    if (!hostname.endsWith('youtube.com')) return null
+    if (!YOUTUBE_ALLOWED_HOSTS.has(hostname)) return null
 
     const watchId = url.searchParams.get('v')?.trim() ?? ''
     if (YOUTUBE_ID_RE.test(watchId)) return watchId

@@ -25,7 +25,20 @@ describe('play resolver', () => {
   it('normaliza chaves de busca para texto, youtube e outras urls', () => {
     expect(__playResolverInternals.normalizeLookupKey('  Hello   World  ')).toBe('q:hello world')
     expect(__playResolverInternals.normalizeLookupKey('https://youtu.be/dQw4w9WgXcQ')).toBe('yt:dQw4w9WgXcQ')
+    expect(__playResolverInternals.normalizeLookupKey('https://www.youtube.com/watch?v=dQw4w9WgXcQ')).toBe('yt:dQw4w9WgXcQ')
     expect(__playResolverInternals.normalizeLookupKey('https://example.com/a?b=1')).toBe('url:https://example.com/a?b=1')
+  })
+
+  it('nao aceita hosts que apenas terminam com youtube.com', () => {
+    expect(__playResolverInternals.normalizeLookupKey('https://evil-youtube.com/watch?v=dQw4w9WgXcQ')).toBe(
+      'url:https://evil-youtube.com/watch?v=dQw4w9WgXcQ'
+    )
+    expect(__playResolverInternals.normalizeLookupKey('https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ')).toBe(
+      'url:https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ'
+    )
+    expect(__playResolverInternals.normalizeLookupKey('https://example.com/path/youtube.com/watch?v=dQw4w9WgXcQ')).toBe(
+      'url:https://example.com/path/youtube.com/watch?v=dQw4w9WgXcQ'
+    )
   })
 
   it('extrai candidatos da busca e limita a cinco itens únicos', () => {
