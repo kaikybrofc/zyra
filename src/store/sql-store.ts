@@ -1690,7 +1690,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
           })
           const normalizedActor = normalizeJid(event.actorJid)
           const normalizedTarget = normalizeJid(event.targetJid)
-          let actorId = normalizedActor ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null) : null
+          const actorId = normalizedActor ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null) : null
           let targetId = normalizedTarget ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedTarget }], null) : null
           if (messageDbId && !targetId) {
             const senderUserId = await getMessageSenderUserId(pool, messageDbId)
@@ -1723,7 +1723,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
           if (!eventType) return
           const normalizedActor = normalizeJid(event.actorJid)
           const normalizedTarget = normalizeJid(event.targetJid)
-          let actorId = normalizedActor ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null) : null
+          const actorId = normalizedActor ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null) : null
           let targetId = normalizedTarget ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedTarget }], null) : null
           const messageKey = event.messageKey ?? null
           const messageChatJid = normalizeJid(messageKey?.chatJid ?? null)
