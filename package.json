@@ -87,6 +87,9 @@
     "baileys": {
       "libsignal": "$libsignal"
     },
+    "pm2": {
+      "ws": "8.20.1"
+    },
     "link-preview-js": "4.0.1"
   }
 }
