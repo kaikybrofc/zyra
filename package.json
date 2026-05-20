@@ -58,7 +58,7 @@
     "@hapi/boom": "^10.0.1",
     "@kaikybrofc/logger-module": "^1.0.4",
     "baileys": "npm:@whiskeysockets/baileys@7.0.0-rc11",
-    "baileys-antiban": "^3.8.8",
+    "baileys-antiban": "3.8.11",
     "libsignal": "^6.0.0",
     "dotenv": "^16.4.5",
     "fflate": "^0.8.2",
