@@ -1,6 +1,6 @@
 import { BufferJSON, type Chat, type Contact, type GroupMetadata, type GroupParticipant, type LIDMapping, type WAMessage, type proto } from 'baileys'
-import type { RowDataPacket } from 'mysql2/promise'
-import { randomUUID } from 'node:crypto'
+import type { PoolConnection, RowDataPacket } from 'mysql2/promise'
+import { createHash, randomUUID } from 'node:crypto'
 import { config } from '../config/index.js'
 import { ensureMysqlConnection } from '../core/db/connection.js'
 import { getMysqlPool } from '../core/db/mysql.js'
@@ -386,75 +386,140 @@ export function createSqlStore(connectionId?: string): SqlStore {
     return rows[0]?.user_id ?? null
   }
 
+  const buildUserMaterializationLockKey = (identifiers: Array<{ type: UserIdentifierType; value: string }>) => {
+    const serialized = identifiers
+      .map((entry) => `${entry.type}:${entry.value}`)
+      .sort()
+      .join('|')
+    const digest = createHash('sha1').update(`${resolvedConnectionId}:${serialized}`).digest('hex')
+    return `zyra:user:${digest}`
+  }
+
+  const withUserMaterializationTransaction = async <T>(
+    pool: NonNullable<ReturnType<typeof getMysqlPool>>,
+    identifiers: Array<{ type: UserIdentifierType; value: string }>,
+    action: 'ensureUserByIdentifiers' | 'createIsolatedUserForPnLid',
+    fn: (connection: PoolConnection) => Promise<T>
+  ): Promise<T> => {
+    const connection = await pool.getConnection()
+    const lockKey = buildUserMaterializationLockKey(identifiers)
+    let lockAcquired = false
+    try {
+      const [lockRows] = await connection.query<RowDataPacket[]>(`SELECT GET_LOCK(?, 10) AS acquired`, [lockKey])
+      lockAcquired = Number(lockRows[0]?.acquired ?? 0) === 1
+      if (!lockAcquired) {
+        throw new Error(`nao foi possivel adquirir lock de materializacao de usuario para ${action}`)
+      }
+      await connection.beginTransaction()
+      try {
+        const result = await fn(connection)
+        await connection.commit()
+        return result
+      } catch (error) {
+        await connection.rollback()
+        throw error
+      }
+    } catch (error) {
+      getStoreLogger().warn('falha na materializacao atomica de usuario', {
+        err: error,
+        action,
+        connectionId: resolvedConnectionId,
+        identifierCount: identifiers.length,
+        identifierTypes: identifiers.map((entry) => entry.type),
+        lockAcquired,
+      })
+      throw error
+    } finally {
+      if (lockAcquired) {
+        try {
+          await connection.query(`SELECT RELEASE_LOCK(?)`, [lockKey])
+        } catch {
+          // noop
+        }
+      }
+      connection.release()
+    }
+  }
+
   const createIsolatedUserForPnLid = async (
     pool: NonNullable<ReturnType<typeof getMysqlPool>>,
     pn: string,
     lid: string
-  ): Promise<string> => {
-    const isolatedUserId = randomUUID()
-    await pool.execute(
-      `INSERT INTO users (id, connection_id, display_name)
-       VALUES (UNHEX(REPLACE(?, '-', '')), ?, NULL)`,
-      [isolatedUserId, resolvedConnectionId]
+  ): Promise<string> =>
+    withUserMaterializationTransaction(
+      pool,
+      [
+        { type: 'pn', value: pn },
+        { type: 'lid', value: lid },
+        { type: 'jid', value: lid },
+      ],
+      'createIsolatedUserForPnLid',
+      async (connection) => {
+        const isolatedUserId = randomUUID()
+        await connection.execute(
+          `INSERT INTO users (id, connection_id, display_name)
+           VALUES (UNHEX(REPLACE(?, '-', '')), ?, NULL)`,
+          [isolatedUserId, resolvedConnectionId]
+        )
+        await connection.execute(
+          `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
+           VALUES (?, UNHEX(REPLACE(?, '-', '')), 'pn', ?)
+           ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
+          [resolvedConnectionId, isolatedUserId, pn]
+        )
+        await connection.execute(
+          `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
+           VALUES (?, UNHEX(REPLACE(?, '-', '')), 'lid', ?)
+           ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
+          [resolvedConnectionId, isolatedUserId, lid]
+        )
+        await connection.execute(
+          `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
+           VALUES (?, UNHEX(REPLACE(?, '-', '')), 'jid', ?)
+           ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
+          [resolvedConnectionId, isolatedUserId, lid]
+        )
+        await connection.execute(
+          `UPDATE lid_mappings
+           SET user_id = UNHEX(REPLACE(?, '-', ''))
+           WHERE connection_id = ?
+             AND (pn = ? OR lid = ?)`,
+          [isolatedUserId, resolvedConnectionId, pn, lid]
+        )
+        await connection.execute(
+          `DELETE gp
+           FROM group_participants gp
+           INNER JOIN group_participants existing
+             ON existing.connection_id = gp.connection_id
+            AND existing.group_jid = gp.group_jid
+            AND existing.user_id = UNHEX(REPLACE(?, '-', ''))
+           WHERE gp.connection_id = ?
+             AND gp.participant_jid = ?
+             AND existing.participant_jid <> gp.participant_jid`,
+          [isolatedUserId, resolvedConnectionId, lid]
+        )
+        await connection.execute(
+          `DELETE dup
+           FROM group_participants dup
+           INNER JOIN group_participants keep
+             ON keep.connection_id = dup.connection_id
+            AND keep.group_jid = dup.group_jid
+            AND keep.participant_jid = dup.participant_jid
+            AND HEX(keep.user_id) < HEX(dup.user_id)
+           WHERE dup.connection_id = ?
+             AND dup.participant_jid = ?`,
+          [resolvedConnectionId, lid]
+        )
+        await connection.execute(
+          `UPDATE IGNORE group_participants
+           SET user_id = UNHEX(REPLACE(?, '-', ''))
+           WHERE connection_id = ?
+             AND participant_jid = ?`,
+          [isolatedUserId, resolvedConnectionId, lid]
+        )
+        return isolatedUserId
+      }
     )
-    await pool.execute(
-      `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
-       VALUES (?, UNHEX(REPLACE(?, '-', '')), 'pn', ?)
-       ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
-      [resolvedConnectionId, isolatedUserId, pn]
-    )
-    await pool.execute(
-      `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
-       VALUES (?, UNHEX(REPLACE(?, '-', '')), 'lid', ?)
-       ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
-      [resolvedConnectionId, isolatedUserId, lid]
-    )
-    await pool.execute(
-      `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
-       VALUES (?, UNHEX(REPLACE(?, '-', '')), 'jid', ?)
-       ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
-      [resolvedConnectionId, isolatedUserId, lid]
-    )
-    await pool.execute(
-      `UPDATE lid_mappings
-       SET user_id = UNHEX(REPLACE(?, '-', ''))
-       WHERE connection_id = ?
-         AND (pn = ? OR lid = ?)`,
-      [isolatedUserId, resolvedConnectionId, pn, lid]
-    )
-    await pool.execute(
-      `DELETE gp
-       FROM group_participants gp
-       INNER JOIN group_participants existing
-         ON existing.connection_id = gp.connection_id
-        AND existing.group_jid = gp.group_jid
-        AND existing.user_id = UNHEX(REPLACE(?, '-', ''))
-       WHERE gp.connection_id = ?
-         AND gp.participant_jid = ?
-         AND existing.participant_jid <> gp.participant_jid`,
-      [isolatedUserId, resolvedConnectionId, lid]
-    )
-    await pool.execute(
-      `DELETE dup
-       FROM group_participants dup
-       INNER JOIN group_participants keep
-         ON keep.connection_id = dup.connection_id
-        AND keep.group_jid = dup.group_jid
-        AND keep.participant_jid = dup.participant_jid
-        AND HEX(keep.user_id) < HEX(dup.user_id)
-       WHERE dup.connection_id = ?
-         AND dup.participant_jid = ?`,
-      [resolvedConnectionId, lid]
-    )
-    await pool.execute(
-      `UPDATE IGNORE group_participants
-       SET user_id = UNHEX(REPLACE(?, '-', ''))
-       WHERE connection_id = ?
-         AND participant_jid = ?`,
-      [isolatedUserId, resolvedConnectionId, lid]
-    )
-    return isolatedUserId
-  }
 
   const resolveUserIdentifierEntries = (value: string | null | undefined): Array<{ type: UserIdentifierType; value: string }> => {
     const normalizedJid = normalizeJid(value)
@@ -503,86 +568,89 @@ export function createSqlStore(connectionId?: string): SqlStore {
 
     type UserRow = RowDataPacket & { user_id: string }
     type ExistingUserRow = RowDataPacket & { display_name: string | null }
-    for (const entry of lookupIdentifiers) {
-      const [rows] = await pool.execute<UserRow[]>(
-        `SELECT LOWER(CONCAT(HEX(SUBSTR(user_id, 1, 4)),'-',HEX(SUBSTR(user_id, 5, 2)),'-',HEX(SUBSTR(user_id, 7, 2)),'-',HEX(SUBSTR(user_id, 9, 2)),'-',HEX(SUBSTR(user_id, 11, 6)))) AS user_id
-         FROM user_identifiers
-         WHERE connection_id = ?
-           AND id_type = ?
-           AND id_value = ?
-         LIMIT 1`,
-        [resolvedConnectionId, entry.type, entry.value]
-      )
-      if (rows[0]?.user_id) {
-        const userId = rows[0].user_id
-        if (normalizedDisplayName) {
-          const [existingRows] = await pool.execute<ExistingUserRow[]>(
-            `SELECT display_name
-             FROM users
-             WHERE connection_id = ?
-               AND id = UNHEX(REPLACE(?, '-', ''))
-             LIMIT 1`,
-            [resolvedConnectionId, userId]
-          )
-          const existingDisplayName = normalizeDisplayName(existingRows[0]?.display_name ?? null)
-          const betterDisplayName = pickBetterDisplayName(existingDisplayName, normalizedDisplayName)
-          if (betterDisplayName && betterDisplayName !== existingDisplayName) {
-            await pool.execute(
-              `UPDATE users
-               SET display_name = ?
-               WHERE connection_id = ?
-                 AND id = UNHEX(REPLACE(?, '-', ''))`,
-              [betterDisplayName, resolvedConnectionId, userId]
-            )
-          }
-        }
-        for (const ident of cleanIdentifiers) {
-          await pool.execute(
-            `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
-             VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?)
-             ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
-            [resolvedConnectionId, userId, ident.type, ident.value]
-          )
-        }
-        if (normalizedAliases?.length) {
-          for (const alias of normalizedAliases) {
-            await pool.execute(
-              `INSERT INTO user_aliases (connection_id, user_id, alias_type, alias_value)
-               VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?)
-               ON DUPLICATE KEY UPDATE last_seen = CURRENT_TIMESTAMP`,
-              [resolvedConnectionId, userId, alias.type, alias.value]
-            )
-          }
-        }
-        return userId
-      }
-    }
 
-    const userId = randomUUID()
-    await pool.execute(
-      `INSERT INTO users (id, connection_id, display_name)
-       VALUES (UNHEX(REPLACE(?, '-', '')), ?, ?)`,
-      [userId, resolvedConnectionId, normalizedDisplayName]
-    )
-    for (const ident of cleanIdentifiers) {
-      await pool.execute(
-        `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
-         VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?)
-         ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
-        [resolvedConnectionId, userId, ident.type, ident.value]
+    return withUserMaterializationTransaction(pool, lookupIdentifiers, 'ensureUserByIdentifiers', async (connection) => {
+      for (const entry of lookupIdentifiers) {
+        const [rows] = await connection.execute<UserRow[]>(
+          `SELECT LOWER(CONCAT(HEX(SUBSTR(user_id, 1, 4)),'-',HEX(SUBSTR(user_id, 5, 2)),'-',HEX(SUBSTR(user_id, 7, 2)),'-',HEX(SUBSTR(user_id, 9, 2)),'-',HEX(SUBSTR(user_id, 11, 6)))) AS user_id
+           FROM user_identifiers
+           WHERE connection_id = ?
+             AND id_type = ?
+             AND id_value = ?
+           LIMIT 1`,
+          [resolvedConnectionId, entry.type, entry.value]
+        )
+        if (rows[0]?.user_id) {
+          const userId = rows[0].user_id
+          if (normalizedDisplayName) {
+            const [existingRows] = await connection.execute<ExistingUserRow[]>(
+              `SELECT display_name
+               FROM users
+               WHERE connection_id = ?
+                 AND id = UNHEX(REPLACE(?, '-', ''))
+               LIMIT 1`,
+              [resolvedConnectionId, userId]
+            )
+            const existingDisplayName = normalizeDisplayName(existingRows[0]?.display_name ?? null)
+            const betterDisplayName = pickBetterDisplayName(existingDisplayName, normalizedDisplayName)
+            if (betterDisplayName && betterDisplayName !== existingDisplayName) {
+              await connection.execute(
+                `UPDATE users
+                 SET display_name = ?
+                 WHERE connection_id = ?
+                   AND id = UNHEX(REPLACE(?, '-', ''))`,
+                [betterDisplayName, resolvedConnectionId, userId]
+              )
+            }
+          }
+          for (const ident of cleanIdentifiers) {
+            await connection.execute(
+              `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
+               VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?)
+               ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
+              [resolvedConnectionId, userId, ident.type, ident.value]
+            )
+          }
+          if (normalizedAliases?.length) {
+            for (const alias of normalizedAliases) {
+              await connection.execute(
+                `INSERT INTO user_aliases (connection_id, user_id, alias_type, alias_value)
+                 VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?)
+                 ON DUPLICATE KEY UPDATE last_seen = CURRENT_TIMESTAMP`,
+                [resolvedConnectionId, userId, alias.type, alias.value]
+              )
+            }
+          }
+          return userId
+        }
+      }
+
+      const userId = randomUUID()
+      await connection.execute(
+        `INSERT INTO users (id, connection_id, display_name)
+         VALUES (UNHEX(REPLACE(?, '-', '')), ?, ?)`,
+        [userId, resolvedConnectionId, normalizedDisplayName]
       )
-    }
-    if (normalizedAliases?.length) {
-      for (const alias of normalizedAliases) {
-        await pool.execute(
-          `INSERT INTO user_aliases (connection_id, user_id, alias_type, alias_value)
+      for (const ident of cleanIdentifiers) {
+        await connection.execute(
+          `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
            VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?)
-           ON DUPLICATE KEY UPDATE last_seen = CURRENT_TIMESTAMP`,
-          [resolvedConnectionId, userId, alias.type, alias.value]
+           ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
+          [resolvedConnectionId, userId, ident.type, ident.value]
         )
       }
-    }
-    return userId
+      if (normalizedAliases?.length) {
+        for (const alias of normalizedAliases) {
+          await connection.execute(
+            `INSERT INTO user_aliases (connection_id, user_id, alias_type, alias_value)
+             VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?)
+             ON DUPLICATE KEY UPDATE last_seen = CURRENT_TIMESTAMP`,
+            [resolvedConnectionId, userId, alias.type, alias.value]
+          )
+        }
+      }
+      return userId
+    })
   }
 
   const toBase64 = (value: unknown): string | null => {
@@ -1624,16 +1692,10 @@ export function createSqlStore(connectionId?: string): SqlStore {
           const normalizedTarget = normalizeJid(event.targetJid)
           let actorId = normalizedActor ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedActor }], null) : null
           let targetId = normalizedTarget ? await ensureUserByIdentifiers(pool, [{ type: 'jid', value: normalizedTarget }], null) : null
-          if (messageDbId && (!targetId || !actorId)) {
+          if (messageDbId && !targetId) {
             const senderUserId = await getMessageSenderUserId(pool, messageDbId)
-            const isMessageEvent = eventType.startsWith('messages.') || eventType === 'message-receipt.update'
             if (senderUserId) {
-              if (!targetId) {
-                targetId = senderUserId
-              }
-              if (!actorId && isMessageEvent) {
-                actorId = senderUserId
-              }
+              targetId = senderUserId
             }
           }
           await pool.execute(
@@ -1676,16 +1738,10 @@ export function createSqlStore(connectionId?: string): SqlStore {
               : null
           const resolvedChatJid = normalizeJid(event.chatJid ?? messageChatJid ?? event.groupJid ?? null)
           const resolvedGroupJid = normalizeJid(event.groupJid ?? (resolvedChatJid && resolvedChatJid.endsWith('@g.us') ? resolvedChatJid : null))
-          if (messageDbId && (!targetId || !actorId)) {
+          if (messageDbId && !targetId) {
             const senderUserId = await getMessageSenderUserId(pool, messageDbId)
-            const isMessageEvent = eventType.startsWith('messages.') || eventType === 'message-receipt.update'
             if (senderUserId) {
-              if (!targetId) {
-                targetId = senderUserId
-              }
-              if (!actorId && isMessageEvent) {
-                actorId = senderUserId
-              }
+              targetId = senderUserId
             }
           }
           await pool.execute(

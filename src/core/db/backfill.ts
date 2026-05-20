@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { stat } from 'node:fs/promises'
 import path from 'node:path'
 import { type AuthenticationCreds, BufferJSON, type GroupMetadata, type WAMessage } from 'baileys'
-import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise'
+import type { PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise'
+import { createHash } from 'node:crypto'
 import { loadEnv } from '../../bootstrap/env.js'
 import { config } from '../../config/index.js'
 import { createLogger } from '../../observability/logger.js'
@@ -168,6 +169,15 @@ const cacheUserId = (userId: string, identifiers: Array<{ type: string; value: s
   }
 }
 
+const buildUserMaterializationLockKey = (connectionId: string, identifiers: Array<{ type: string; value: string }>) => {
+  const serialized = identifiers
+    .map((entry) => `${entry.type}:${entry.value}`)
+    .sort()
+    .join('|')
+  const digest = createHash('sha1').update(`${connectionId}:${serialized}`).digest('hex')
+  return `zyra:user:${digest}`
+}
+
 async function main() {
   if (!config.mysqlUrl) {
     logger.error('MYSQL_URL nao configurada')
@@ -330,52 +340,98 @@ async function main() {
       return cachedUserId
     }
 
-    type UserRow = RowDataPacket & { user_id: string; id_type: string; id_value: string }
-    const whereClauses = lookup.map(() => `(id_type = ? AND id_value = ?)`).join(' OR ')
-    const whereParams = lookup.flatMap((entry) => [entry.type, entry.value])
-    const [rows] = await pool.execute<UserRow[]>(
-      `SELECT LOWER(CONCAT(HEX(SUBSTR(user_id, 1, 4)),'-',HEX(SUBSTR(user_id, 5, 2)),'-',HEX(SUBSTR(user_id, 7, 2)),'-',HEX(SUBSTR(user_id, 9, 2)),'-',HEX(SUBSTR(user_id, 11, 6)))) AS user_id, id_type, id_value
-       FROM user_identifiers
-       WHERE connection_id = ?
-         AND (${whereClauses})`,
-      [connectionId, ...whereParams]
-    )
-    const existing = rows[0]?.user_id
-    if (existing) {
-      if (displayName) {
-        await pool.execute(
-          `UPDATE users
-           SET display_name = ?
-           WHERE connection_id = ?
-             AND id = UNHEX(REPLACE(?, '-', ''))
-             AND (display_name IS NULL OR display_name = '')`,
-          [displayName, connectionId, existing]
-        )
-      }
-      cacheUserId(
-        existing,
-        rows.map((row) => ({ type: row.id_type, value: row.id_value }))
-      )
-      cacheUserId(existing, clean)
-      return existing
-    }
+    const connection = await pool.getConnection()
+    const lockKey = buildUserMaterializationLockKey(connectionId, lookup)
+    let lockAcquired = false
 
-    const userId = randomUUID()
-    await pool.execute(
-      `INSERT INTO users (id, connection_id, display_name)
-       VALUES (UNHEX(REPLACE(?, '-', '')), ?, ?)`,
-      [userId, connectionId, displayName ?? null]
-    )
-    for (const ident of clean) {
-      await pool.execute(
-        `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
-         VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?)
-         ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
-        [connectionId, userId, ident.type, ident.value]
-      )
+    try {
+      const [lockRows] = await connection.query<RowDataPacket[]>(`SELECT GET_LOCK(?, 10) AS acquired`, [lockKey])
+      lockAcquired = Number(lockRows[0]?.acquired ?? 0) === 1
+      if (!lockAcquired) {
+        throw new Error('nao foi possivel adquirir lock de materializacao de usuario no backfill')
+      }
+
+      await connection.beginTransaction()
+      try {
+        type UserRow = RowDataPacket & { user_id: string; id_type: string; id_value: string }
+        const whereClauses = lookup.map(() => `(id_type = ? AND id_value = ?)`).join(' OR ')
+        const whereParams = lookup.flatMap((entry) => [entry.type, entry.value])
+        const [rows] = await connection.execute<UserRow[]>(
+          `SELECT LOWER(CONCAT(HEX(SUBSTR(user_id, 1, 4)),'-',HEX(SUBSTR(user_id, 5, 2)),'-',HEX(SUBSTR(user_id, 7, 2)),'-',HEX(SUBSTR(user_id, 9, 2)),'-',HEX(SUBSTR(user_id, 11, 6)))) AS user_id, id_type, id_value
+           FROM user_identifiers
+           WHERE connection_id = ?
+             AND (${whereClauses})`,
+          [connectionId, ...whereParams]
+        )
+        const existing = rows[0]?.user_id
+        if (existing) {
+          if (displayName) {
+            await connection.execute(
+              `UPDATE users
+               SET display_name = ?
+               WHERE connection_id = ?
+                 AND id = UNHEX(REPLACE(?, '-', ''))
+                 AND (display_name IS NULL OR display_name = '')`,
+              [displayName, connectionId, existing]
+            )
+          }
+          for (const ident of clean) {
+            await connection.execute(
+              `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
+               VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?)
+               ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
+              [connectionId, existing, ident.type, ident.value]
+            )
+          }
+          await connection.commit()
+          cacheUserId(
+            existing,
+            rows.map((row) => ({ type: row.id_type, value: row.id_value }))
+          )
+          cacheUserId(existing, clean)
+          return existing
+        }
+
+        const userId = randomUUID()
+        await connection.execute(
+          `INSERT INTO users (id, connection_id, display_name)
+           VALUES (UNHEX(REPLACE(?, '-', '')), ?, ?)`,
+          [userId, connectionId, displayName ?? null]
+        )
+        for (const ident of clean) {
+          await connection.execute(
+            `INSERT INTO user_identifiers (connection_id, user_id, id_type, id_value)
+             VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?)
+             ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
+            [connectionId, userId, ident.type, ident.value]
+          )
+        }
+        await connection.commit()
+        cacheUserId(userId, clean)
+        return userId
+      } catch (error) {
+        await connection.rollback()
+        throw error
+      }
+    } catch (error) {
+      logger.warn('falha na materializacao atomica de usuario no backfill', {
+        connectionId,
+        err: error,
+        identifierCount: lookup.length,
+        identifierTypes: lookup.map((entry) => entry.type),
+        lockAcquired,
+      })
+      throw error
+    } finally {
+      if (lockAcquired) {
+        try {
+          await connection.query(`SELECT RELEASE_LOCK(?)`, [lockKey])
+        } catch {
+          // noop
+        }
+      }
+      connection.release()
     }
-    cacheUserId(userId, clean)
-    return userId
   }
 
   const ensureUserByJid = async (jid: string, displayName?: string | null) => ensureUserByIdentifiers([{ type: 'jid', value: jid }], displayName)
@@ -799,11 +855,25 @@ async function main() {
     const applyContactDisplayNameCandidates = async (label: string, query: string, params: Array<string | number>) => {
       const [rows] = await pool.execute<ContactDisplayCandidateRow[]>(query, params)
       let updated = 0
+      let skippedNoSource = 0
+      let skippedGuardSameValue = 0
+      let skippedGuardWorseCandidate = 0
       for (const row of rows) {
         const current = normalizeDisplayName(row.current_display_name)
         const candidate = normalizeDisplayName(row.candidate_display_name)
+        if (!candidate) {
+          skippedNoSource += 1
+          continue
+        }
         const better = pickBetterDisplayName(current, candidate)
-        if (!better || better === current) continue
+        if (!better) {
+          skippedGuardWorseCandidate += 1
+          continue
+        }
+        if (better === current) {
+          skippedGuardSameValue += 1
+          continue
+        }
         await pool.execute(
           `UPDATE wa_contacts_cache
            SET display_name = ?
@@ -813,6 +883,16 @@ async function main() {
         )
         updated += 1
       }
+      logger.info('backfill step stats', {
+        step: label,
+        candidateRows: rows.length,
+        updated,
+        skipped: {
+          noSource: skippedNoSource,
+          guardSameValue: skippedGuardSameValue,
+          guardWorseCandidate: skippedGuardWorseCandidate,
+        },
+      })
       if (updated) logger.info('backfill atualizado', { item: label, affected: updated })
     }
 
@@ -837,14 +917,28 @@ async function main() {
     )
 
     let updatedFromJson = 0
+    let skippedNoSourceFromJson = 0
+    let skippedGuardSameValueFromJson = 0
+    let skippedGuardWorseCandidateFromJson = 0
     for (const row of rows) {
       const contactData = deserialize<Record<string, unknown>>(row.data_json)
       const candidateDisplayName = normalizeDisplayName(
         pickNestedString(contactData, [['name'], ['notify'], ['pushName'], ['verifiedName'], ['fullName']])
       )
       const currentDisplayName = normalizeDisplayName(row.display_name)
+      if (!candidateDisplayName) {
+        skippedNoSourceFromJson += 1
+        continue
+      }
       const betterDisplayName = pickBetterDisplayName(currentDisplayName, candidateDisplayName)
-      if (!betterDisplayName || betterDisplayName === currentDisplayName) continue
+      if (!betterDisplayName) {
+        skippedGuardWorseCandidateFromJson += 1
+        continue
+      }
+      if (betterDisplayName === currentDisplayName) {
+        skippedGuardSameValueFromJson += 1
+        continue
+      }
       await pool.execute(
         `UPDATE wa_contacts_cache
          SET display_name = ?
@@ -854,6 +948,16 @@ async function main() {
       )
       updatedFromJson += 1
     }
+    logger.info('backfill step stats', {
+      step: 'wa_contacts_cache.display_name(data_json)',
+      candidateRows: rows.length,
+      updated: updatedFromJson,
+      skipped: {
+        noSource: skippedNoSourceFromJson,
+        guardSameValue: skippedGuardSameValueFromJson,
+        guardWorseCandidate: skippedGuardWorseCandidateFromJson,
+      },
+    })
     if (updatedFromJson) logger.info('backfill atualizado', { item: 'wa_contacts_cache.display_name(data_json)', affected: updatedFromJson })
   }
 
@@ -1058,7 +1162,6 @@ async function main() {
     }
 
     if (!idRows.length) {
-      // Reinicia o cursor para revarrer registros antigos que possam ter ficado pendentes.
       await setCheckpoint('messages', 0)
       return
     }
@@ -1071,7 +1174,7 @@ async function main() {
       from_me: number
       data_json: unknown
     }
-    
+
     const [rows] = await pool.query<MessageRow[]>(
       `SELECT id, chat_jid, message_id, from_me, data_json
        FROM messages
@@ -1080,10 +1183,35 @@ async function main() {
     )
     rows.sort((left, right) => left.id - right.id)
 
+    const stats = {
+      selectedRows: rows.length,
+      checkpointFrom: lastCheckpoint,
+      checkpointTo: ids[ids.length - 1] ?? lastCheckpoint,
+      updated: {
+        sender_user_id: 0,
+        timestamp: 0,
+        is_ephemeral: 0,
+      },
+      skipped: {
+        noSource: {
+          sender_user_id: 0,
+          timestamp: 0,
+          is_ephemeral: 0,
+        },
+        alreadyConverged: 0,
+      },
+      errors: {
+        deserialize: 0,
+      },
+    }
+
     for (const row of rows) {
       const message = deserialize<WAMessage>(row.data_json)
-      if (!message?.key) continue
-      
+      if (!message?.key) {
+        stats.errors.deserialize += 1
+        continue
+      }
+
       const normalized = getNormalizedMessage(message)
       const messageText = getMessageText(message)
       const timestamp = toNumber(message.messageTimestamp)
@@ -1115,8 +1243,11 @@ async function main() {
         : null
       const textPreview = normalizeString(messageText, { maxLength: 512, truncate: true, trim: false })
 
+      if (timestamp === null) stats.skipped.noSource.timestamp += 1
+      if (isEphemeral === null) stats.skipped.noSource.is_ephemeral += 1
+
       await pool.execute(
-        `UPDATE messages SET 
+        `UPDATE messages SET
             timestamp = COALESCE(timestamp, ?),
             content_type = IF(content_type IS NULL OR content_type = '', ?, content_type),
             message_type = IF(message_type IS NULL OR message_type = '', ?, message_type),
@@ -1127,6 +1258,8 @@ async function main() {
          WHERE connection_id = ? AND id = ?`,
         [timestamp, contentType, messageType, status, isForwarded, isEphemeral, textPreview, connectionId, row.id]
       )
+      if (timestamp !== null) stats.updated.timestamp += 1
+      if (isEphemeral !== null) stats.updated.is_ephemeral += 1
 
       const senderIdentifierEntries = resolveMessageSenderIdentifierEntries(message)
       if (senderIdentifierEntries.length) {
@@ -1137,10 +1270,16 @@ async function main() {
              WHERE connection_id = ? AND id = ? AND sender_user_id IS NULL`,
             [senderUserId, connectionId, row.id]
           )
+          stats.updated.sender_user_id += 1
+        } else {
+          stats.skipped.noSource.sender_user_id += 1
         }
+      } else {
+        stats.skipped.noSource.sender_user_id += 1
       }
     }
 
+    logger.info('backfill step stats', { step: 'messages', ...stats })
     await setCheckpoint('messages', ids[ids.length - 1] ?? lastCheckpoint)
   }
 
@@ -1189,19 +1328,50 @@ async function main() {
       return
     }
 
+    const stats = {
+      selectedRows: rows.length,
+      updated: {
+        actor_user_id: 0,
+        target_user_id: 0,
+        message_db_id: 0,
+      },
+      resolved: {
+        targetFromMessageSender: 0,
+      },
+      skipped: {
+        noSource: {
+          actor_user_id: 0,
+          target_user_id: 0,
+          message_db_id: 0,
+        },
+      },
+      errors: {
+        deserialize: 0,
+      },
+    }
+
     for (const row of rows) {
       const record = deserialize<Record<string, unknown>>(row.data_json)
-      const messageKey = record ? resolveEventMessageKey(record) : null
+      if (!record) {
+        stats.errors.deserialize += 1
+        continue
+      }
+      const messageKey = resolveEventMessageKey(record)
       const messageDbId = row.message_db_id ?? (messageKey ? await resolveMessageDbId(messageKey.chatJid, messageKey.messageId, messageKey.fromMe) : null)
       const senderUserId = await getMessageSenderUserId(messageDbId)
-      const actorEntries = record && !row.actor_user_id ? resolveEventActorIdentifierEntries(record) : []
-      const targetEntries = record && !row.target_user_id ? resolveEventTargetIdentifierEntries(record) : []
+      const actorEntries = !row.actor_user_id ? resolveEventActorIdentifierEntries(record) : []
+      const targetEntries = !row.target_user_id ? resolveEventTargetIdentifierEntries(record) : []
       const actorUserId = actorEntries.length ? await ensureUserByIdentifiers(actorEntries) : null
       const targetUserId =
         targetEntries.length
           ? await ensureUserByIdentifiers(targetEntries)
           : senderUserId
+
+      if (!messageDbId) stats.skipped.noSource.message_db_id += 1
+      if (!actorUserId && !row.actor_user_id) stats.skipped.noSource.actor_user_id += 1
+      if (!targetUserId && !row.target_user_id) stats.skipped.noSource.target_user_id += 1
       if (!messageDbId && !actorUserId && !targetUserId) continue
+
       await pool.execute(
         `UPDATE message_events
          SET message_db_id = COALESCE(message_db_id, ?),
@@ -1211,8 +1381,16 @@ async function main() {
            AND id = ?`,
         [messageDbId, actorUserId ? 1 : 0, actorUserId, targetUserId ? 1 : 0, targetUserId, connectionId, row.id]
       )
+
+      if (messageDbId) stats.updated.message_db_id += 1
+      if (actorUserId) stats.updated.actor_user_id += 1
+      if (targetEntries.length === 0 && senderUserId && targetUserId) {
+        stats.resolved.targetFromMessageSender += 1
+      }
+      if (targetUserId) stats.updated.target_user_id += 1
     }
 
+    logger.info('backfill step stats', { step: 'message_events', ...stats })
     await setCheckpoint('message_events', rows[rows.length - 1]?.id ?? lastCheckpoint)
   }
 

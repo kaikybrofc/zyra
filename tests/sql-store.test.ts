@@ -35,10 +35,23 @@ vi.mock('../src/utils/message.js', () => ({
   getNormalizedMessage: (...args: unknown[]) => getNormalizedMessageMock(...args),
 }))
 
-const createPool = (rows: Record<string, unknown>[] = []) => ({
-  execute: vi.fn().mockResolvedValue([rows]),
-  query: vi.fn().mockResolvedValue([rows]),
-})
+const createPool = (rows: Record<string, unknown>[] = []) => {
+  const connection = {
+    execute: vi.fn().mockResolvedValue([rows]),
+    query: vi.fn().mockResolvedValue([rows]),
+    beginTransaction: vi.fn().mockResolvedValue(undefined),
+    commit: vi.fn().mockResolvedValue(undefined),
+    rollback: vi.fn().mockResolvedValue(undefined),
+    release: vi.fn(),
+  }
+
+  return {
+    execute: vi.fn().mockResolvedValue([rows]),
+    query: vi.fn().mockResolvedValue([rows]),
+    getConnection: vi.fn().mockResolvedValue(connection),
+    __connection: connection,
+  }
+}
 
 beforeEach(() => {
   vi.resetModules()
@@ -179,6 +192,14 @@ describe('sql-store', () => {
         return [[]]
       }),
       query: vi.fn().mockResolvedValue([[]]),
+      getConnection: vi.fn().mockResolvedValue({
+        execute: vi.fn().mockResolvedValue([[]]),
+        query: vi.fn().mockResolvedValue([[{ acquired: 1 }]]),
+        beginTransaction: vi.fn().mockResolvedValue(undefined),
+        commit: vi.fn().mockResolvedValue(undefined),
+        rollback: vi.fn().mockResolvedValue(undefined),
+        release: vi.fn(),
+      }),
     }
     getMysqlPoolMock.mockReturnValue(pool)
 
@@ -206,6 +227,14 @@ describe('sql-store', () => {
         .mockResolvedValueOnce([[{ display_name: 'João Silva' }]])
         .mockResolvedValue([[]]),
       query: vi.fn().mockResolvedValue([[]]),
+      getConnection: vi.fn().mockResolvedValue({
+        execute: vi.fn().mockResolvedValue([[]]),
+        query: vi.fn().mockResolvedValue([[{ acquired: 1 }]]),
+        beginTransaction: vi.fn().mockResolvedValue(undefined),
+        commit: vi.fn().mockResolvedValue(undefined),
+        rollback: vi.fn().mockResolvedValue(undefined),
+        release: vi.fn(),
+      }),
     }
     getMysqlPoolMock.mockReturnValue(pool)
 
@@ -233,6 +262,14 @@ describe('sql-store', () => {
         .mockResolvedValueOnce([[{ display_name: null }]])
         .mockResolvedValue([[]]),
       query: vi.fn().mockResolvedValue([[]]),
+      getConnection: vi.fn().mockResolvedValue({
+        execute: vi.fn().mockResolvedValue([[]]),
+        query: vi.fn().mockResolvedValue([[{ acquired: 1 }]]),
+        beginTransaction: vi.fn().mockResolvedValue(undefined),
+        commit: vi.fn().mockResolvedValue(undefined),
+        rollback: vi.fn().mockResolvedValue(undefined),
+        release: vi.fn(),
+      }),
     }
     getMysqlPoolMock.mockReturnValue(pool)
 
@@ -261,6 +298,14 @@ describe('sql-store', () => {
         .mockResolvedValueOnce([[{ display_name: 'João Silva' }]])
         .mockResolvedValue([[]]),
       query: vi.fn().mockResolvedValue([[]]),
+      getConnection: vi.fn().mockResolvedValue({
+        execute: vi.fn().mockResolvedValue([[]]),
+        query: vi.fn().mockResolvedValue([[{ acquired: 1 }]]),
+        beginTransaction: vi.fn().mockResolvedValue(undefined),
+        commit: vi.fn().mockResolvedValue(undefined),
+        rollback: vi.fn().mockResolvedValue(undefined),
+        release: vi.fn(),
+      }),
     }
     getMysqlPoolMock.mockReturnValue(pool)
 
@@ -288,6 +333,14 @@ describe('sql-store', () => {
         .mockResolvedValueOnce([[{ display_name: '5511999999999' }]])
         .mockResolvedValue([[]]),
       query: vi.fn().mockResolvedValue([[]]),
+      getConnection: vi.fn().mockResolvedValue({
+        execute: vi.fn().mockResolvedValue([[]]),
+        query: vi.fn().mockResolvedValue([[{ acquired: 1 }]]),
+        beginTransaction: vi.fn().mockResolvedValue(undefined),
+        commit: vi.fn().mockResolvedValue(undefined),
+        rollback: vi.fn().mockResolvedValue(undefined),
+        release: vi.fn(),
+      }),
     }
     getMysqlPoolMock.mockReturnValue(pool)
 
@@ -315,6 +368,14 @@ describe('sql-store', () => {
         .mockResolvedValueOnce([[{ display_name: '5511999999999' }]])
         .mockResolvedValue([[]]),
       query: vi.fn().mockResolvedValue([[]]),
+      getConnection: vi.fn().mockResolvedValue({
+        execute: vi.fn().mockResolvedValue([[]]),
+        query: vi.fn().mockResolvedValue([[{ acquired: 1 }]]),
+        beginTransaction: vi.fn().mockResolvedValue(undefined),
+        commit: vi.fn().mockResolvedValue(undefined),
+        rollback: vi.fn().mockResolvedValue(undefined),
+        release: vi.fn(),
+      }),
     }
     getMysqlPoolMock.mockReturnValue(pool)
 
@@ -333,11 +394,200 @@ describe('sql-store', () => {
     expect(updateChatCall?.[1]).toContain('João Silva')
   })
 
+  it('confirma materializacao atomica de usuario ao persistir contato', async () => {
+    mockConfig.mysqlUrl = 'mysql://test'
+    const connection = {
+      execute: vi.fn()
+        .mockResolvedValueOnce([[]])
+        .mockResolvedValueOnce([[]])
+        .mockResolvedValueOnce([[]])
+        .mockResolvedValueOnce([[]])
+        .mockResolvedValueOnce([[]]),
+      query: vi.fn().mockResolvedValue([[{ acquired: 1 }]]),
+      beginTransaction: vi.fn().mockResolvedValue(undefined),
+      commit: vi.fn().mockResolvedValue(undefined),
+      rollback: vi.fn().mockResolvedValue(undefined),
+      release: vi.fn(),
+    }
+    const pool = {
+      execute: vi.fn()
+        .mockResolvedValueOnce([[{ display_name: null }]])
+        .mockResolvedValueOnce([[{ display_name: null }]])
+        .mockResolvedValue([[]]),
+      query: vi.fn().mockResolvedValue([[]]),
+      getConnection: vi.fn().mockResolvedValue(connection),
+    }
+    getMysqlPoolMock.mockReturnValue(pool)
+
+    const { createSqlStore } = await import('../src/store/sql-store.ts')
+    const store = createSqlStore('tenant')
+
+    await store.setContact('5511999999999@s.whatsapp.net', {
+      id: '5511999999999@s.whatsapp.net',
+      name: 'João Silva',
+      notify: 'João Silva',
+    } as never)
+
+    expect(connection.beginTransaction).toHaveBeenCalledOnce()
+    expect(connection.commit).toHaveBeenCalledOnce()
+    expect(connection.rollback).not.toHaveBeenCalled()
+    expect(connection.release).toHaveBeenCalledOnce()
+    expect(connection.query).toHaveBeenNthCalledWith(1, 'SELECT GET_LOCK(?, 10) AS acquired', [expect.stringContaining('zyra:user:')])
+    expect(connection.query).toHaveBeenNthCalledWith(2, 'SELECT RELEASE_LOCK(?)', [expect.stringContaining('zyra:user:')])
+
+    const insertUserCall = connection.execute.mock.calls.find(([sql]) =>
+      typeof sql === 'string' && sql.includes('INSERT INTO users')
+    )
+    const insertIdentifierCall = connection.execute.mock.calls.find(([sql]) =>
+      typeof sql === 'string' && sql.includes('INSERT INTO user_identifiers')
+    )
+    expect(insertUserCall).toBeTruthy()
+    expect(insertIdentifierCall).toBeTruthy()
+  })
+
+  it('faz rollback da materializacao de usuario quando a transacao falha', async () => {
+    mockConfig.mysqlUrl = 'mysql://test'
+    const connection = {
+      execute: vi.fn()
+        .mockResolvedValueOnce([[]])
+        .mockResolvedValueOnce([[]])
+        .mockRejectedValueOnce(new Error('boom')),
+      query: vi.fn().mockResolvedValue([[{ acquired: 1 }]]),
+      beginTransaction: vi.fn().mockResolvedValue(undefined),
+      commit: vi.fn().mockResolvedValue(undefined),
+      rollback: vi.fn().mockResolvedValue(undefined),
+      release: vi.fn(),
+    }
+    const pool = {
+      execute: vi.fn(),
+      query: vi.fn().mockResolvedValue([[]]),
+      getConnection: vi.fn().mockResolvedValue(connection),
+    }
+    getMysqlPoolMock.mockReturnValue(pool)
+
+    const { createSqlStore } = await import('../src/store/sql-store.ts')
+    const store = createSqlStore('tenant')
+
+    await expect(store.setContact('5511999999999@s.whatsapp.net', {
+      id: '5511999999999@s.whatsapp.net',
+      name: 'João Silva',
+      notify: 'João Silva',
+    } as never)).resolves.toBeUndefined()
+
+    expect(connection.beginTransaction).toHaveBeenCalledOnce()
+    expect(connection.commit).not.toHaveBeenCalled()
+    expect(connection.rollback).toHaveBeenCalledOnce()
+    expect(connection.release).toHaveBeenCalledOnce()
+    expect(connection.query).toHaveBeenNthCalledWith(1, 'SELECT GET_LOCK(?, 10) AS acquired', [expect.stringContaining('zyra:user:')])
+    expect(connection.query).toHaveBeenNthCalledWith(2, 'SELECT RELEASE_LOCK(?)', [expect.stringContaining('zyra:user:')])
+    expect(pool.execute).not.toHaveBeenCalled()
+  })
+
+  it('recordMessageEvent nao inventa actor_user_id e usa sender apenas como target fallback', async () => {
+    mockConfig.mysqlUrl = 'mysql://test'
+    const senderUserId = '11111111-1111-1111-1111-111111111111'
+    const pool = {
+      execute: vi.fn()
+        .mockResolvedValueOnce([[{ id: 321 }]])
+        .mockResolvedValueOnce([[{ sender_user_id: senderUserId }]])
+        .mockResolvedValueOnce([[]]),
+      query: vi.fn().mockResolvedValue([[]]),
+      getConnection: vi.fn().mockResolvedValue({
+        execute: vi.fn().mockResolvedValue([[]]),
+        query: vi.fn().mockResolvedValue([[{ acquired: 1 }]]),
+        beginTransaction: vi.fn().mockResolvedValue(undefined),
+        commit: vi.fn().mockResolvedValue(undefined),
+        rollback: vi.fn().mockResolvedValue(undefined),
+        release: vi.fn(),
+      }),
+    }
+    getMysqlPoolMock.mockReturnValue(pool)
+
+    const { createSqlStore } = await import('../src/store/sql-store.ts')
+    const store = createSqlStore('tenant')
+
+    await store.recordMessageEvent({
+      key: { chatJid: 'chat@s.whatsapp.net', messageId: 'msg-1', fromMe: false },
+      type: 'delete',
+    })
+
+    const insertEventCall = pool.execute.mock.calls.find(([sql]) =>
+      typeof sql === 'string' && sql.includes('INSERT INTO message_events')
+    )
+    expect(insertEventCall).toBeTruthy()
+    expect(insertEventCall?.[1]).toEqual([
+      'tenant',
+      'chat@s.whatsapp.net',
+      'msg-1',
+      'delete',
+      0,
+      null,
+      1,
+      senderUserId,
+      321,
+      null,
+    ])
+  })
+
+  it('recordEvent nao inventa actor_user_id e usa sender apenas como target fallback', async () => {
+    mockConfig.mysqlUrl = 'mysql://test'
+    const senderUserId = '11111111-1111-1111-1111-111111111111'
+    const pool = {
+      execute: vi.fn()
+        .mockResolvedValueOnce([[{ id: 654 }]])
+        .mockResolvedValueOnce([[{ sender_user_id: senderUserId }]])
+        .mockResolvedValueOnce([[]]),
+      query: vi.fn().mockResolvedValue([[]]),
+      getConnection: vi.fn().mockResolvedValue({
+        execute: vi.fn().mockResolvedValue([[]]),
+        query: vi.fn().mockResolvedValue([[{ acquired: 1 }]]),
+        beginTransaction: vi.fn().mockResolvedValue(undefined),
+        commit: vi.fn().mockResolvedValue(undefined),
+        rollback: vi.fn().mockResolvedValue(undefined),
+        release: vi.fn(),
+      }),
+    }
+    getMysqlPoolMock.mockReturnValue(pool)
+
+    const { createSqlStore } = await import('../src/store/sql-store.ts')
+    const store = createSqlStore('tenant')
+
+    await store.recordEvent({
+      type: 'message.delete',
+      messageKey: { chatJid: 'chat@s.whatsapp.net', messageId: 'msg-1', fromMe: false },
+    })
+
+    const insertEventCall = pool.execute.mock.calls.find(([sql]) =>
+      typeof sql === 'string' && sql.includes('INSERT INTO events_log')
+    )
+    expect(insertEventCall).toBeTruthy()
+    expect(insertEventCall?.[1]).toEqual([
+      'tenant',
+      'message.delete',
+      0,
+      null,
+      1,
+      senderUserId,
+      'chat@s.whatsapp.net',
+      null,
+      654,
+      null,
+    ])
+  })
+
   it('setMessage nao apaga timestamp existente com payload parcial', async () => {
     mockConfig.mysqlUrl = 'mysql://test'
     const pool = {
       execute: vi.fn().mockResolvedValue([[]]),
       query: vi.fn().mockResolvedValue([[]]),
+      getConnection: vi.fn().mockResolvedValue({
+        execute: vi.fn().mockResolvedValue([[]]),
+        query: vi.fn().mockResolvedValue([[{ acquired: 1 }]]),
+        beginTransaction: vi.fn().mockResolvedValue(undefined),
+        commit: vi.fn().mockResolvedValue(undefined),
+        rollback: vi.fn().mockResolvedValue(undefined),
+        release: vi.fn(),
+      }),
     }
     getMysqlPoolMock.mockReturnValue(pool)
 
@@ -361,6 +611,14 @@ describe('sql-store', () => {
     const pool = {
       execute: vi.fn().mockResolvedValue([[]]),
       query: vi.fn().mockResolvedValue([[]]),
+      getConnection: vi.fn().mockResolvedValue({
+        execute: vi.fn().mockResolvedValue([[]]),
+        query: vi.fn().mockResolvedValue([[{ acquired: 1 }]]),
+        beginTransaction: vi.fn().mockResolvedValue(undefined),
+        commit: vi.fn().mockResolvedValue(undefined),
+        rollback: vi.fn().mockResolvedValue(undefined),
+        release: vi.fn(),
+      }),
     }
     getMysqlPoolMock.mockReturnValue(pool)
 
