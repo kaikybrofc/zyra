@@ -17,8 +17,92 @@ permissions:
   contents: write
 
 jobs:
+  validate-wiki:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate wiki structure and runbook headings
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -d "docs/wiki" ]; then
+            echo "Diretório docs/wiki não encontrado. Nada para validar."
+            exit 0
+          fi
+
+          required_files=(
+            "docs/wiki/Home.md"
+            "docs/wiki/_Sidebar.md"
+            "docs/wiki/_Footer.md"
+          )
+
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "Arquivo obrigatório ausente: $file"
+              exit 1
+            fi
+          done
+
+          while IFS= read -r page; do
+            [ -n "$page" ] || continue
+            if [ ! -f "docs/wiki/${page}.md" ]; then
+              echo "Link da wiki aponta para página ausente: ${page}.md"
+              exit 1
+            fi
+          done < <(
+            {
+              grep -hoE '\[[^]]+\]\([^)]+\)' docs/wiki/Home.md docs/wiki/_Sidebar.md docs/wiki/_Footer.md || true
+            } | sed -E 's/.*\(([^)#]+)(#.*)?\).*/\1/' | grep -vE '^(https?://|\.\./|/|#)' | sort -u
+          )
+
+          changed_runbooks=()
+          if [ "$EVENT_NAME" = "push" ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            while IFS= read -r file; do
+              case "$file" in
+                docs/wiki/Troubleshooting.md|docs/wiki/Produção.md)
+                  changed_runbooks+=("$file")
+                  ;;
+              esac
+            done < <(git diff --name-only "$BEFORE_SHA" "$CURRENT_SHA")
+          fi
+
+          if [ ${#changed_runbooks[@]} -eq 0 ]; then
+            echo "Nenhum runbook monitorado foi alterado neste evento; pulando validação de headings obrigatórios."
+            exit 0
+          fi
+
+          required_headings=(
+            "## Cenário"
+            "## Sintomas"
+            "## Impacto"
+            "## Pré-checks"
+            "## Diagnóstico"
+            "## Mitigação imediata"
+            "## Correção definitiva"
+            "## Validação pós-correção"
+            "## Prevenção / hardening"
+          )
+
+          for file in "${changed_runbooks[@]}"; do
+            for heading in "${required_headings[@]}"; do
+              if ! grep -Fq "$heading" "$file"; then
+                echo "Runbook alterado sem heading obrigatório em $file: $heading"
+                exit 1
+              fi
+            done
+          done
+
   sync-wiki:
     runs-on: ubuntu-latest
+    needs: validate-wiki
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
