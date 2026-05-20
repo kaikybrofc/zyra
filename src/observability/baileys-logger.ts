@@ -21,7 +21,7 @@ const mergeMeta = (base: Meta, extra?: Meta): Meta | undefined => {
 }
 
 const getErrorMeta = (meta: Meta | undefined): { errorName: string | null; errorMessage: string | null } => {
-  const err = meta?.err
+  const err = meta?.err ?? meta?.error
   if (err instanceof Error) {
     return { errorName: err.name, errorMessage: err.message }
   }
@@ -35,19 +35,38 @@ const getErrorMeta = (meta: Meta | undefined): { errorName: string | null; error
 }
 
 const classifyKnownDecryptNoise = (message: string, meta: Meta | undefined) => {
-  const { errorName, errorMessage } = getErrorMeta(meta)
-  const isMessageCounterError = errorName === 'MessageCounterError' && errorMessage === 'Key used already or never filled'
-  if (!isMessageCounterError) return null
   if (message !== 'failed to decrypt message' && message !== 'transaction failed, rolling back') return null
+
+  const { errorName, errorMessage } = getErrorMeta(meta)
+  if (!errorMessage) return null
+
+  let classification: string | null = null
+  if (errorName === 'MessageCounterError' && errorMessage === 'Key used already or never filled') {
+    classification = 'signal-message-counter-error'
+  } else if (errorMessage === 'Over 2000 messages into the future!') {
+    classification = 'signal-message-too-far-future'
+  } else if (errorMessage === 'No session found to decrypt message') {
+    classification = 'signal-no-session-for-decrypt'
+  } else if (errorMessage === 'No matching sessions found for message') {
+    classification = 'signal-no-matching-session'
+  } else if (errorMessage === 'Bad MAC') {
+    classification = 'signal-bad-mac'
+  } else if (errorMessage === 'Expected Buffer instead of: Object') {
+    classification = 'signal-invalid-buffer-shape'
+  }
+
+  if (!classification) return null
+
   const remoteJid = typeof meta?.sender === 'string' ? meta.sender : typeof meta?.remoteJid === 'string' ? meta.remoteJid : null
   const author = typeof meta?.author === 'string' ? meta.author : typeof meta?.participant === 'string' ? meta.participant : null
   return {
-    classification: 'signal-message-counter-error',
+    classification,
     canonical: message === 'failed to decrypt message',
     key: [
       typeof meta?.connectionId === 'string' ? meta.connectionId : 'default',
       author ?? '',
       remoteJid ?? '',
+      classification,
       errorName,
       errorMessage,
     ].join('::'),

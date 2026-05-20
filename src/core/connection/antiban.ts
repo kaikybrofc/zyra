@@ -59,6 +59,11 @@ const buildDeafSessionConfig = (logger: AppLogger, connectionId: string) => {
 const resolveStateAdapter = (connectionId: string): FileStateAdapter =>
   new FileStateAdapter(path.resolve(process.cwd(), config.antibanStateDir, connectionId))
 
+const isInvalidPersistedWarmUpStateError = (error: unknown): boolean => {
+  if (!(error instanceof SyntaxError)) return false
+  return typeof error.message === 'string' && error.message.length > 0
+}
+
 /**
  * Cria a configuração do Anti-Ban baseada nas configurações globais da aplicação.
  * @param logger Logger da aplicação para reportar riscos e bloqueios.
@@ -146,10 +151,29 @@ const attachAntiBanRuntimeExtensions = (sock: SocketWithAntiBan, logger: AppLogg
  */
 export async function loadAntiBanWarmUpState(connectionId: string, logger: AppLogger): Promise<WarmUpState | undefined> {
   if (!config.antibanEnabled) return undefined
+  const stateAdapter = resolveStateAdapter(connectionId)
   try {
-    const state = await resolveStateAdapter(connectionId).load('warmup')
+    const state = await stateAdapter.load('warmup')
     return state ?? undefined
   } catch (error) {
+    if (isInvalidPersistedWarmUpStateError(error)) {
+      try {
+        await stateAdapter.delete('warmup')
+        logger.warn('estado de warm-up do antiban corrompido foi descartado', {
+          connectionId,
+          err: error,
+        })
+        return undefined
+      } catch (deleteError) {
+        logger.warn('falha ao remover estado de warm-up corrompido do antiban', {
+          connectionId,
+          err: deleteError,
+          originalErr: error,
+        })
+        return undefined
+      }
+    }
+
     logger.warn('falha ao carregar estado de warm-up do antiban', {
       connectionId,
       err: error,
