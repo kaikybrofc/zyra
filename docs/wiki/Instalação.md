@@ -73,11 +73,11 @@ Para reproduzir o fluxo da CI com mais fidelidade:
 npm ci
 ```
 
-## Observação sobre dependência privada
+## Observação sobre dependências
 
-O projeto depende de `@kaikybrofc/logger-module` via GitHub Packages.
+O projeto não depende mais de pacotes privados para a instalação padrão.
 
-Se `npm install` ou `npm ci` falhar nessa dependência, revise a autenticação do registry antes de seguir.
+Se `npm install` ou `npm ci` falhar, revise rede, cache local do npm e resolução de dependências públicas.
 
 ## Configuração inicial
 

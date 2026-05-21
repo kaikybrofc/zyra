@@ -128,11 +128,11 @@ Para reproduzir o ambiente da CI com mais fidelidade:
 npm ci
 ```
 
-### 3. Observação sobre dependência privada
+### 3. Observação sobre dependências
 
-O projeto utiliza o pacote `@kaikybrofc/logger-module` via GitHub Packages.
+O projeto não depende mais de pacotes privados para instalação padrão.
 
-Se a instalação falhar nessa dependência, verifique autenticação no registry do GitHub antes de prosseguir.
+Se `npm install` ou `npm ci` falhar, trate como falha local de rede, cache ou resolução de dependências públicas.
 
 ## Configuração
 
@@ -224,11 +224,10 @@ O repositório inclui `Dockerfile` multi-stage e `docker-compose.yml` com:
 
 ### Build da imagem
 
-O build usa secret para autenticar no GitHub Packages:
+Build local da imagem:
 
 ```bash
-export NPM_TOKEN=seu_token_aqui
-DOCKER_BUILDKIT=1 docker build --secret id=npm_token,env=NPM_TOKEN -t zyra:local .
+DOCKER_BUILDKIT=1 docker build -t zyra:local .
 ```
 
 ### Subir a stack

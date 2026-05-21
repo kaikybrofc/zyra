@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Node.js 20+ is required (`package.json` engines says `>=20`; CI tests Node 20.x and 22.x).
 - Package manager is npm (`package-lock.json` is committed).
 - Install dependencies with `npm ci` when you want a clean CI-like install, or `npm install` for local iteration.
-- This repo depends on a GitHub Packages package (`@kaikybrofc/logger-module`). CI authenticates with `NODE_AUTH_TOKEN`; Docker build uses `NPM_TOKEN` as a BuildKit secret. If install fails on that package, check GitHub Packages auth first.
+- This repo installs entirely from public dependencies. If install fails, treat it as a normal npm/network/cache/dependency-resolution issue.
 - `.npmrc` contains `legacy-peer-deps=true`.
 
 ## Common commands
@@ -63,7 +63,7 @@ PM2 starts two processes from `ecosystem.config.cjs`:
 
 ### Docker / compose
 
-- `DOCKER_BUILDKIT=1 docker build --secret id=npm_token,env=NPM_TOKEN -t zyra:local .`
+- `DOCKER_BUILDKIT=1 docker build -t zyra:local .`
 - `docker compose up -d --build`
 - `docker compose logs -f zyra`
 - `docker compose logs -f backfill`

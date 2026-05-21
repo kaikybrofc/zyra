@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import winston from 'winston'
 import { format, type TransformableInfo } from 'logform'
-import { criarInstanciaLogger, type LoggerInstancia } from '@kaikybrofc/logger-module'
+import { criarInstanciaLogger, type LoggerInstancia } from './logger-module.js'
 import { config } from '../config/index.js'
 
 export type AppLogger = LoggerInstancia & {

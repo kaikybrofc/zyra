@@ -4,7 +4,7 @@ const criarInstanciaLoggerMock = vi.fn()
 const formatCombineMock = vi.fn((...parts: unknown[]) => ({ type: 'combine', parts }))
 const formatFactoryMock = vi.fn((fn: (info: Record<string, unknown>) => unknown) => () => ({ type: 'custom-filter', fn }))
 
-vi.mock('@kaikybrofc/logger-module', () => ({
+vi.mock('../src/observability/logger-module.ts', () => ({
   criarInstanciaLogger: (...args: unknown[]) => criarInstanciaLoggerMock(...args),
 }))
 

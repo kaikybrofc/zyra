@@ -12,14 +12,7 @@ RUN apk add --no-cache \
 
 COPY package*.json .npmrc ./
 # postinstall runs patch-package automatically
-RUN --mount=type=secret,id=npm_token \
-    sh -c 'TOKEN="$(cat /run/secrets/npm_token)" && \
-    printf "%s\n%s\n%s\n" \
-      "legacy-peer-deps=true" \
-      "@kaikybrofc:registry=https://npm.pkg.github.com" \
-      "//npm.pkg.github.com/:_authToken=${TOKEN}" > /tmp/.npmrc && \
-    NPM_CONFIG_USERCONFIG=/tmp/.npmrc npm ci && \
-    rm -f /tmp/.npmrc'
+RUN npm ci
 
 COPY tsconfig.json ./
 COPY src/ ./src/
