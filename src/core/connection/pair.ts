@@ -6,11 +6,18 @@ import { config } from '../../config/index.js'
 import { initMysqlSchema } from '../db/init.js'
 import { getMysqlPool } from '../db/mysql.js'
 import { closeRedisClient } from '../redis/client.js'
-import { createSocket, flushSocketCredsNow, type SocketWithCredsFlush } from './socket.js'
+import { createSocket, flushSocketCredsNow, type SocketWithCredsFlush, unregisterShutdownTarget } from './socket.js'
 import { createLogger } from '../../observability/logger.js'
 import { renderQrInTerminal } from '../../events/qr-terminal.js'
 
 const PAIR_TIMEOUT_MS = Math.max(60_000, Number(process.env.WA_PAIR_TIMEOUT_MS ?? 10 * 60_000))
+const PAIR_VALIDATE_TIMEOUT_MS = Math.max(30_000, Number(process.env.WA_PAIR_VALIDATE_TIMEOUT_MS ?? 120_000))
+const PAIR_USAGE = 'uso: npm run session:pair -- --connection <id>'
+
+function formatErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message
+  return String(error)
+}
 
 function parseConnectionId(argv: string[]): string | null {
   for (let index = 0; index < argv.length; index++) {
@@ -25,6 +32,24 @@ function parseConnectionId(argv: string[]): string | null {
   return null
 }
 
+function extractDisconnectStatusCode(update: {
+  lastDisconnect?: { error?: unknown }
+}): number | null {
+  const error = update.lastDisconnect?.error as
+    | (Boom & { output?: { statusCode?: number } })
+    | (Error & { output?: { statusCode?: number } })
+    | undefined
+
+  const explicitStatus = error?.output?.statusCode
+  if (typeof explicitStatus === 'number') return explicitStatus
+
+  const message = error instanceof Error ? error.message : String(error ?? '')
+  if (/\b515\b/.test(message)) return DisconnectReason.restartRequired
+  if (/\b401\b/.test(message)) return DisconnectReason.loggedOut
+
+  return null
+}
+
 async function closeResources(): Promise<void> {
   await closeRedisClient().catch(() => undefined)
   const pool = getMysqlPool()
@@ -33,13 +58,66 @@ async function closeResources(): Promise<void> {
   }
 }
 
+async function validateSessionBoot(connectionId: string, logger: ReturnType<typeof createLogger>): Promise<void> {
+  logger.info('pairing: iniciando validacao pos-pareamento (reconexao controlada)', { connectionId })
+  const validationSock = (await createSocket(connectionId, logger)) as SocketWithCredsFlush
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false
+    const timeoutId = setTimeout(() => {
+      if (settled) return
+      settled = true
+      reject(new Error(`timeout na validacao de inicializacao da conexao ${connectionId}`))
+    }, PAIR_VALIDATE_TIMEOUT_MS)
+
+    const cleanup = () => {
+      clearTimeout(timeoutId)
+      validationSock.ev.removeAllListeners('connection.update')
+    }
+
+    validationSock.ev.on('connection.update', (update) => {
+      if (settled) return
+
+      if (update.qr) {
+        settled = true
+        cleanup()
+        reject(new Error(`validacao falhou: QR reapareceu para a conexao ${connectionId} (sessao nao estabilizou)`))
+        return
+      }
+
+      if (update.connection === 'open') {
+        settled = true
+        cleanup()
+        logger.info('pairing: validacao concluida, conexao abriu sem QR', { connectionId })
+        resolve()
+        return
+      }
+
+      if (update.connection === 'close') {
+        const statusCode = extractDisconnectStatusCode(update)
+        settled = true
+        cleanup()
+        reject(
+          new Error(
+            `validacao falhou: conexao ${connectionId} encerrou antes de abrir${statusCode ? ` (status ${statusCode})` : ''}`
+          )
+        )
+      }
+    })
+  }).finally(async () => {
+    await flushSocketCredsNow(validationSock, 'pairing_validation_finalize').catch(() => undefined)
+    await validationSock.end(undefined).catch(() => undefined)
+    unregisterShutdownTarget(connectionId, validationSock)
+  })
+}
+
 async function main(): Promise<void> {
   loadEnv()
   const logger = createLogger()
   const connectionId = parseConnectionId(process.argv.slice(2))
 
   if (!connectionId) {
-    throw new Error('informe a conexão com --connection <id>')
+    throw new Error(`informe a conexão com --connection <id>\n${PAIR_USAGE}`)
   }
 
   if (!config.mysqlUrl) {
@@ -52,6 +130,7 @@ async function main(): Promise<void> {
 
   await new Promise<void>((resolve, reject) => {
     let settled = false
+    let pairingConfigured = false
     const timeoutId = setTimeout(() => {
       if (settled) return
       settled = true
@@ -70,6 +149,11 @@ async function main(): Promise<void> {
         renderQrInTerminal(logger, update.qr, connectionId)
       }
 
+      if (update.isNewLogin) {
+        pairingConfigured = true
+        logger.info('novo login detectado, aguardando estabilizacao da conexao', { connectionId })
+      }
+
       if (update.connection === 'open') {
         settled = true
         cleanup()
@@ -84,24 +168,80 @@ async function main(): Promise<void> {
       }
 
       if (update.connection === 'close') {
-        const statusCode = (update.lastDisconnect?.error as Boom | undefined)?.output?.statusCode
+        const statusCode = extractDisconnectStatusCode(update)
+        logger.warn('pairing: conexao encerrada durante fluxo', {
+          connectionId,
+          statusCode,
+          pairingConfigured,
+          expectedAfterNewLogin: pairingConfigured && statusCode === DisconnectReason.restartRequired,
+        })
+        if (statusCode === DisconnectReason.restartRequired && pairingConfigured) {
+          settled = true
+          cleanup()
+          try {
+            await flushSocketCredsNow(sock, 'pairing_restart_required')
+            logger.info('pairing: restart esperado apos novo login; credenciais persistidas com sucesso', {
+              connectionId,
+              statusCode,
+              nextAction: 'inicie/reinicie o processo principal para conectar com a sessao salva',
+            })
+            resolve()
+          } catch (error) {
+            reject(error)
+          }
+          return
+        }
+        if (pairingConfigured && statusCode === null) {
+          settled = true
+          cleanup()
+          try {
+            await flushSocketCredsNow(sock, 'pairing_post_login_close')
+            logger.info('pairing: encerramento transitorio apos novo login; credenciais persistidas com sucesso', {
+              connectionId,
+              nextAction: 'inicie/reinicie o processo principal para conectar com a sessao salva',
+            })
+            resolve()
+          } catch (error) {
+            reject(error)
+          }
+          return
+        }
         if (statusCode === DisconnectReason.restartRequired) {
           return
         }
         settled = true
         cleanup()
+        logger.error('pairing: falha real durante o fechamento da conexao', {
+          connectionId,
+          statusCode,
+          pairingConfigured,
+          recommendation:
+            statusCode === DisconnectReason.loggedOut
+              ? 'sessao invalidada pelo WhatsApp; execute novo pareamento'
+              : 'verifique conectividade/rede e tente novamente',
+        })
         reject(new Error(`pairing encerrado antes de abrir a conexão ${connectionId}${statusCode ? ` (status ${statusCode})` : ''}`))
       }
     })
   })
 
+  await flushSocketCredsNow(sock, 'pairing_finalize').catch(() => undefined)
   await sock.end(undefined).catch(() => undefined)
+  unregisterShutdownTarget(connectionId, sock)
+  await validateSessionBoot(connectionId, logger)
+  logger.info('pairing: sessao validada com sucesso no WhatsApp e no socket local', {
+    connectionId,
+  })
   await closeResources()
 }
 
 main().catch(async (error) => {
   const logger = createLogger()
-  logger.error('falha no pairing via terminal', { err: error })
+  logger.error('falha no pairing via terminal', {
+    err: error,
+    message: formatErrorMessage(error),
+    usage: PAIR_USAGE,
+  })
   await closeResources()
   process.exitCode = 1
 })
