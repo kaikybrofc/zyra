@@ -39,6 +39,8 @@ Artefatos envolvidos:
 - `WA_AUTH_DIR`
 - persistência de credenciais e debounce de `creds.update`
 
+Além de armazenar credenciais, `auth_creds` também participa da descoberta de startup: sem `WA_CONNECTION_IDS`, o bootstrap pode consultar o MySQL para decidir quais `connection_id` devem subir.
+
 ## 2. Store runtime em memória
 
 A memória é o primeiro hot path do sistema.

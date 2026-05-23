@@ -40,6 +40,7 @@
     "pm2:logs": "pm2 logs zyra zyra-backfill",
     "pm2:save": "pm2 save",
     "pm2:startup": "pm2 startup",
+    "session:pair": "tsx src/core/connection/pair.ts",
     "db:init": "tsx src/core/db/init.ts",
     "db:verify": "tsx src/core/db/verify.ts",
     "db:delete-session": "tsx src/core/db/delete-session.ts",

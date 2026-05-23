@@ -38,7 +38,7 @@ A aplicação suporta tanto uso local simples quanto cenários distribuídos com
 
 ## Principais Capacidades
 
-- **Multi-instância nativa** com isolamento por `WA_CONNECTION_ID`
+- **Boot multi-conexão nativo** com várias sessões ativas no mesmo processo e isolamento por `connection_id`
 - **Persistência híbrida** com prioridade para MySQL, Redis e fallback local em disco
 - **Arquitetura modular de comandos** com `CommandContext` e camada de runtime dedicada
 - **Store de alta performance** para chats, contatos, grupos e mensagens
@@ -53,7 +53,7 @@ A aplicação suporta tanto uso local simples quanto cenários distribuídos com
 ### Fluxo principal
 
 1. `src/index.ts` carrega o ambiente, valida a configuração e inicia o bootstrap.
-2. `src/bootstrap/start.ts` garante schema MySQL, gerencia ciclo de socket e reconexão.
+2. `src/bootstrap/start.ts` garante schema MySQL, resolve quais conexões devem subir e gerencia ciclo de socket/reconexão por conexão.
 3. `src/core/connection/socket.ts` cria o socket Baileys com auth, store, antiban e shutdown gracioso.
 4. `src/events/register.ts` registra os handlers centrais dos eventos do WhatsApp.
 5. `src/router/index.ts` enfileira o processamento por chat.
@@ -144,13 +144,28 @@ cp .env.example .env
 
 Variáveis centrais:
 
-- `WA_CONNECTION_ID`: identificador lógico da instância
-- `MYSQL_URL`: persistência SQL e auditoria
+- `WA_CONNECTION_ID`: identificador lógico para boot simples de uma sessão ou fallback legado
+- `WA_CONNECTION_IDS`: lista CSV para subir várias conexões no mesmo processo
+- `MYSQL_URL`: persistência SQL, auditoria e descoberta automática via `auth_creds`
 - `WA_REDIS_URL`: cache quente e apoio à store/auth
 - `WA_AUTH_DIR`: diretório local de fallback para sessão
 - `WA_COMMAND_PREFIX`: prefixo de comandos
 - `WA_ANTIBAN_ENABLED`: ativa proteção antiban
 - `WA_MEDIA_AUTO_DOWNLOAD`: baixa mídias recebidas para disco
+
+### Estratégia de startup das conexões
+
+O processo principal resolve quais conexões devem subir nesta ordem:
+
+1. `WA_CONNECTION_IDS` — override explícito em CSV
+2. descoberta automática no MySQL via `auth_creds`
+3. fallback legado para `WA_CONNECTION_ID`
+
+Isso permite operar de três formas:
+
+- **simples**: uma sessão fixa com `WA_CONNECTION_ID=default`
+- **multi-conexão explícita**: uma lista como `WA_CONNECTION_IDS=default,loja1,loja2`
+- **descoberta automática**: com `MYSQL_URL` configurado e sem `WA_CONNECTION_IDS`, o bootstrap recupera os `connection_id` já persistidos em `auth_creds`
 
 Depois da configuração inicial do banco:
 
@@ -178,6 +193,39 @@ npm run start
 npm run build
 npm run start:prod
 ```
+
+### Exemplos de uso
+
+#### 1. Uma conexão explícita
+
+```env
+WA_CONNECTION_ID=default
+MYSQL_URL=mysql://user:pass@127.0.0.1:3306/zyra
+WA_REDIS_URL=redis://127.0.0.1:6379
+```
+
+Use esse modo quando quiser um processo principal subindo apenas uma sessão lógica.
+
+#### 2. Múltiplas conexões explícitas no mesmo processo
+
+```env
+WA_CONNECTION_IDS=default,loja1,loja2
+MYSQL_URL=mysql://user:pass@127.0.0.1:3306/zyra
+WA_REDIS_URL=redis://127.0.0.1:6379
+```
+
+Nesse modo, o processo `zyra` sobe todas as conexões listadas e mantém reconexão isolada por `connection_id`.
+
+#### 3. Descoberta automática via `auth_creds`
+
+```env
+MYSQL_URL=mysql://user:pass@127.0.0.1:3306/zyra
+WA_REDIS_URL=redis://127.0.0.1:6379
+# WA_CONNECTION_IDS ausente
+# WA_CONNECTION_ID usado apenas como fallback se nenhuma sessão for encontrada
+```
+
+Esse modo é útil quando as sessões já foram persistidas no MySQL e você quer que o bootstrap descubra automaticamente quais conexões devem subir.
 
 ## Comandos de Desenvolvimento
 
@@ -254,6 +302,8 @@ Observações:
 
 - sessões e mídias são persistidas no volume `zyra-data`
 - as métricas do antiban ficam expostas na porta `9108`
+- o serviço `zyra` pode subir uma única sessão com `WA_CONNECTION_ID` ou várias sessões com `WA_CONNECTION_IDS`
+- sem `WA_CONNECTION_IDS`, a stack pode descobrir conexões já persistidas em `auth_creds` quando `MYSQL_URL` estiver configurado
 
 ## Produção com PM2
 
@@ -272,6 +322,7 @@ npm run pm2:stop
 npm run pm2:delete
 npm run pm2:save
 npm run pm2:startup
+npm run session:pair -- --connection loja2
 ```
 
 Fluxo recomendado para manter o serviço persistente no servidor:
@@ -281,6 +332,16 @@ npm run pm2:start
 npm run pm2:save
 npm run pm2:startup
 ```
+
+Notas operacionais:
+
+- o processo `zyra` pode manter múltiplas sessões ativas ao mesmo tempo
+- prefira `WA_CONNECTION_IDS` quando quiser controle explícito do conjunto de sessões
+- prefira descoberta via MySQL quando `auth_creds` já for a fonte de verdade das sessões persistidas
+- para parear uma nova conta via QR no terminal, use `npm run session:pair -- --connection <id>`
+- após o pairing, reinicie o PM2 para o boot redescobrir a nova sessão via `auth_creds`
+- se quiser esse fluxo dinâmico, deixe `WA_CONNECTION_IDS` ausente no processo principal
+- logs e métricas passam a representar o runtime agregado do processo, com snapshots por `connection_id`
 
 ## Manutenção e Banco
 

@@ -1,16 +1,16 @@
 import type { Pool } from 'mysql2/promise'
 import { config } from '../../config/index.js'
 
-let ensuring: Promise<void> | null = null
-let ensured = false
+const ensuringByConnection = new Map<string, Promise<void>>()
+const ensuredConnectionIds = new Set<string>()
 
 /**
  * Garante o registro da conexao na tabela `connections` do MySQL.
  */
-export async function ensureMysqlConnection(pool: Pool): Promise<void> {
-  if (ensured) return
+export async function ensureMysqlConnection(pool: Pool, connectionId = config.connectionId ?? 'default'): Promise<void> {
+  if (ensuredConnectionIds.has(connectionId)) return
+  let ensuring = ensuringByConnection.get(connectionId)
   if (!ensuring) {
-    const connectionId = config.connectionId ?? 'default'
     ensuring = pool
       .execute(
         `INSERT INTO connections (id, label)
@@ -19,12 +19,13 @@ export async function ensureMysqlConnection(pool: Pool): Promise<void> {
         [connectionId, connectionId]
       )
       .then(() => {
-        ensured = true
+        ensuredConnectionIds.add(connectionId)
       })
       .catch(() => undefined)
       .finally(() => {
-        ensuring = null
+        ensuringByConnection.delete(connectionId)
       })
+    ensuringByConnection.set(connectionId, ensuring)
   }
   await ensuring
 }

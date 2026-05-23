@@ -25,7 +25,7 @@ O Zyra é um motor de bot para WhatsApp baseado em Baileys, com foco em:
 
 ### Fatos operacionais importantes
 
-- Cada instância é isolada por `WA_CONNECTION_ID` em runtime e por `connection_id` no armazenamento.
+- Cada conexão é isolada por `connection_id` no runtime e no armazenamento, mesmo quando um único processo sobe várias sessões.
 - A estratégia de autenticação prioriza **MySQL**, depois **Redis** e por fim **disco local** como fallback.
 - Em produção com PM2, o ecossistema sobe **dois processos**: `zyra` e `zyra-backfill`.
 - Em Docker Compose, a stack padrão sobe `zyra`, `backfill`, `mysql` e `redis`.

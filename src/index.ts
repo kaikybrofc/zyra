@@ -121,8 +121,15 @@ const validateEnvironment = (): ValidationResult => {
   ensurePositiveNumber('WA_RECONNECT_MAX_ATTEMPTS')
   ensurePositiveNumber('WA_VERSION_CACHE_TTL_MS')
 
-  if (!config.connectionId.trim()) {
-    errors.push('WA_CONNECTION_ID não pode estar vazio.')
+  if (config.connectionIds) {
+    const hasInvalidConnectionIds = config.connectionIds.some((connectionId) => !connectionId.trim())
+    if (hasInvalidConnectionIds) {
+      errors.push('WA_CONNECTION_IDS contém valores inválidos.')
+    }
+  }
+
+  if (!config.connectionIds?.length && !config.mysqlUrl && !config.connectionId.trim()) {
+    errors.push('WA_CONNECTION_ID não pode estar vazio quando não houver descoberta automática de conexões.')
   }
 
   return { errors, warnings }

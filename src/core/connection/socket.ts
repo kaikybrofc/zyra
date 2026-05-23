@@ -23,7 +23,7 @@ type SocketWithSignalRepository = {
 /**
  * Extensão do socket para incluir métodos de persistência imediata e Anti-Ban.
  */
-type SocketWithCredsFlush = ReturnType<typeof makeWASocket> & {
+export type SocketWithCredsFlush = ReturnType<typeof makeWASocket> & {
   /** Força a persistência imediata das credenciais no disco/DB. */
   flushCredsNow?: (reason: string) => Promise<void>
   /** Ações do Anti-Ban acopladas ao socket. */
@@ -403,6 +403,10 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
 /**
  * Remove um alvo de shutdown da conexão atual caso ele ainda aponte para o mesmo socket.
  */
+export async function flushSocketCredsNow(sock: ReturnType<typeof makeWASocket>, reason: string): Promise<void> {
+  await (sock as SocketWithCredsFlush).flushCredsNow?.(reason)
+}
+
 export const unregisterShutdownTarget = (connectionId: string, sock?: ReturnType<typeof makeWASocket>) => {
   for (const target of shutdownTargets) {
     if (target.connectionId !== connectionId) continue

@@ -14,7 +14,15 @@ Use esta convenção ao ler a documentação:
 - `connection_id`: chave de partição no banco e em parte da persistência
 - `connectionId`: naming interno do runtime
 
-Cada instância deve ter um `WA_CONNECTION_ID` único. Esse valor afeta:
+Cada conexão é isolada por `connection_id`, mas o processo principal pode subir uma ou várias conexões.
+
+A resolução do bootstrap segue esta ordem:
+
+1. `WA_CONNECTION_IDS` — lista CSV explícita
+2. descoberta automática no MySQL via `auth_creds`
+3. fallback legado para `WA_CONNECTION_ID`
+
+Esse valor afeta:
 
 - auth e sessão
 - chaves Redis
@@ -37,7 +45,8 @@ Se a resolução da estratégia centralizada falhar durante o bootstrap, o socke
 
 ### Identidade e comportamento geral
 
-- `WA_CONNECTION_ID`: identificador lógico da instância
+- `WA_CONNECTION_ID`: identificador lógico para boot simples de uma sessão ou fallback legado
+- `WA_CONNECTION_IDS`: lista CSV para subir várias conexões no mesmo processo
 - `WA_COMMAND_PREFIX`: prefixo dos comandos
 - `WA_PRINT_QR`: controla exibição do QR no terminal
 - `LOG_LEVEL`: nível de log
@@ -114,7 +123,7 @@ Essas variáveis controlam o comportamento do pipeline por `connectionId:chatId`
 
 ### Ambiente local simples
 
-Use quando quiser subir uma única instância com menos dependências:
+Use quando quiser subir uma única sessão com menos complexidade operacional:
 
 - `WA_CONNECTION_ID=default`
 - `MYSQL_URL` configurado
@@ -122,14 +131,23 @@ Use quando quiser subir uma única instância com menos dependências:
 - `WA_PRINT_QR=true`
 - `LOG_LEVEL=debug` ou `info`
 
-### Ambiente compartilhado / multi-instância
+### Múltiplas conexões explícitas no mesmo processo
 
-Use quando múltiplas sessões compartilham a mesma infraestrutura:
+Use quando quiser controlar exatamente quais sessões o runtime principal deve subir:
 
-- `WA_CONNECTION_ID` único por sessão
+- `WA_CONNECTION_IDS=default,loja1,loja2`
 - `MYSQL_URL` obrigatório
 - `WA_REDIS_URL` recomendado
-- disciplina de prefixo e segregação operacional por conexão
+- disciplina de segregação por `connection_id`
+
+### Descoberta automática via banco
+
+Use quando o MySQL já é a fonte de verdade das sessões persistidas:
+
+- `MYSQL_URL` obrigatório
+- `WA_CONNECTION_IDS` ausente
+- `WA_CONNECTION_ID` mantido apenas como fallback se nenhuma sessão for encontrada
+- `WA_REDIS_URL` recomendado para hot cache compartilhado
 
 ### Produção com PM2
 
@@ -149,12 +167,13 @@ A stack padrão já injeta:
 - `WA_REDIS_URL=redis://redis:6379`
 - `MYSQL_URL=mysql://zyra:zyra@mysql:3306/zyra`
 
-Ajuste `.env` conforme o ambiente, mantendo a mesma lógica de isolamento.
+Você pode manter esse modo simples, trocar para `WA_CONNECTION_IDS` no `.env` ou deixar o bootstrap descobrir as sessões em `auth_creds`.
 
 ## Exemplo mínimo de `.env`
 
 ```env
 WA_CONNECTION_ID=default
+# WA_CONNECTION_IDS=default,loja1,loja2
 WA_COMMAND_PREFIX=!
 MYSQL_URL=mysql://user:pass@127.0.0.1:3306/zyra
 WA_REDIS_URL=redis://127.0.0.1:6379

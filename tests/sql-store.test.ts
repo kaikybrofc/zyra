@@ -65,6 +65,46 @@ beforeEach(() => {
 })
 
 describe('sql-store', () => {
+  it('garante o registro mysql usando o resolvedConnectionId', async () => {
+    mockConfig.mysqlUrl = 'mysql://test'
+    const pool = createPool([])
+    getMysqlPoolMock.mockReturnValue(pool)
+
+    const { createSqlStore } = await import('../src/store/sql-store.ts')
+    const store = createSqlStore('tenant-a')
+
+    await store.recordCommandLog({
+      chatJid: 'chat@s.whatsapp.net',
+      commandName: 'ping',
+      success: true,
+    })
+
+    expect(ensureMysqlConnectionMock).toHaveBeenCalledWith(pool, 'tenant-a')
+  })
+
+  it('isola ensureMysqlConnection entre stores de conexões diferentes', async () => {
+    mockConfig.mysqlUrl = 'mysql://test'
+    const pool = createPool([])
+    getMysqlPoolMock.mockReturnValue(pool)
+
+    const { createSqlStore } = await import('../src/store/sql-store.ts')
+    const storeA = createSqlStore('tenant-a')
+    const storeB = createSqlStore('tenant-b')
+
+    await storeA.recordCommandLog({
+      chatJid: 'chat-a@s.whatsapp.net',
+      commandName: 'ping',
+      success: true,
+    })
+    await storeB.recordCommandLog({
+      chatJid: 'chat-b@s.whatsapp.net',
+      commandName: 'pong',
+      success: true,
+    })
+
+    expect(ensureMysqlConnectionMock).toHaveBeenNthCalledWith(1, pool, 'tenant-a')
+    expect(ensureMysqlConnectionMock).toHaveBeenNthCalledWith(2, pool, 'tenant-b')
+  })
   it('retorna store desabilitada com fallbacks seguros quando mysql nao esta configurado', async () => {
     const { createSqlStore } = await import('../src/store/sql-store.ts')
     const store = createSqlStore('tenant')

@@ -16,6 +16,9 @@ module.exports = {
       },
       env_production: {
         NODE_ENV: 'production',
+        // Para subir várias sessões fixas no mesmo processo, injete WA_CONNECTION_IDS via ambiente.
+        // Exemplo: WA_CONNECTION_IDS=default,loja1,loja2
+        // Para pairing dinâmico via terminal + descoberta no próximo restart, deixe WA_CONNECTION_IDS ausente.
         WA_ANTIBAN_ENABLED: 'true',
         WA_ANTIBAN_DEAF_SESSION_ENABLED: 'true',
         WA_ANTIBAN_DEAF_SESSION_TIMEOUT_MS: '300000',

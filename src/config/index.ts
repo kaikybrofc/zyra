@@ -72,6 +72,21 @@ export const config = {
   get mysqlRetryIntervalMs() {
     return readNumber(process.env.WA_MYSQL_RETRY_MS, 60_000)
   },
+  /** Lista explícita de conexões a subir no processo (WA_CONNECTION_IDS em CSV). */
+  get connectionIds() {
+    const raw = process.env.WA_CONNECTION_IDS
+    if (!raw) return null
+    const seen = new Set<string>()
+    const values = raw
+      .split(',')
+      .map((value) => value.trim())
+      .filter((value) => {
+        if (!value || seen.has(value)) return false
+        seen.add(value)
+        return true
+      })
+    return values.length ? values : null
+  },
   /** Identificador único da conexão do bot (WA_CONNECTION_ID). */
   get connectionId() {
     return process.env.WA_CONNECTION_ID ?? 'default'

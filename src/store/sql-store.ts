@@ -323,7 +323,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
       const pool = getMysqlPool()
       if (!pool) return fallback
       if (options?.ensureConnection) {
-        await ensureMysqlConnection(pool)
+        await ensureMysqlConnection(pool, resolvedConnectionId)
       }
       return await fn(pool)
     } catch (error) {

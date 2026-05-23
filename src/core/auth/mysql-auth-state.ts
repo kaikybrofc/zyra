@@ -166,7 +166,7 @@ export async function useMysqlAuthState(connectionId?: string): Promise<MysqlAut
     if (!pool) return fallback
     if (!mysqlHealthy && Date.now() - lastMysqlFailureAt < mysqlRetryIntervalMs) return fallback
     try {
-      await ensureMysqlConnection(pool)
+      await ensureMysqlConnection(pool, resolvedConnectionId)
       if (!mysqlHealthy) markMysqlHealthy()
       return await fn(pool)
     } catch (error) {

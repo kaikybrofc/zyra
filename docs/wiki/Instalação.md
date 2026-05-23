@@ -89,7 +89,7 @@ cp .env.example .env
 
 Variáveis mínimas para a primeira subida:
 
-- `WA_CONNECTION_ID`
+- `WA_CONNECTION_ID` para uma sessão explícita, ou `WA_CONNECTION_IDS` para várias sessões explícitas
 - `MYSQL_URL`
 - `WA_COMMAND_PREFIX` (opcional)
 - `WA_REDIS_URL` (opcional, recomendado)
@@ -128,6 +128,8 @@ npm run start
 ```
 
 Com o processo ativo, acompanhe o bootstrap e faça o pareamento via QR Code quando necessário.
+
+Se `WA_CONNECTION_IDS` não estiver definido e o MySQL já tiver sessões persistidas em `auth_creds`, o bootstrap pode descobrir automaticamente quais conexões devem subir.
 
 ## Checklist de aceite
 

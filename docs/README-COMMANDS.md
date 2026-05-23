@@ -129,6 +129,7 @@ Comandos úteis:
 Configurações relevantes:
 - `WA_COMMAND_PREFIX`
 - `WA_CONNECTION_ID`
+- `WA_CONNECTION_IDS`
 - `MYSQL_URL`
 - `WA_REDIS_URL`
 

@@ -1,8 +1,8 @@
 import { DisconnectReason, jidDecode, type BaileysEventMap, type GroupMetadata, type WAMessage, type WASocket } from 'baileys'
 import { Boom } from '@hapi/boom'
-import qrcode from 'qrcode-terminal'
 import type { AppLogger } from '../observability/logger.js'
 import { config } from '../config/index.js'
+import { renderQrInTerminal } from './qr-terminal.js'
 import { handleIncomingMessages } from '../router/index.js'
 import { createSqlStore } from '../store/sql-store.js'
 import { getMessageText, getNormalizedMessage } from '../utils/message.js'
@@ -499,8 +499,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
       const { connection, lastDisconnect, qr, receivedPendingNotifications, isNewLogin } = update
 
       if (qr && config.printQRInTerminal) {
-        logger.info('QR code recebido, escaneie com seu WhatsApp')
-        qrcode.generate(qr, { small: true })
+        renderQrInTerminal(logger, qr, connectionId)
       }
 
       logger.info('connection.update', {

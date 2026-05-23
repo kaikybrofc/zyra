@@ -88,14 +88,17 @@ vi.mock('../src/core/db/mysql.js', () => ({
   getMysqlPool: () => mysqlPoolRef.value,
 }))
 
+const ensureMysqlConnectionMock = vi.fn(async () => undefined)
+
 vi.mock('../src/core/db/connection.js', () => ({
-  ensureMysqlConnection: vi.fn(async () => undefined),
+  ensureMysqlConnection: (...args: unknown[]) => ensureMysqlConnectionMock(...args),
 }))
 
 describe('mysql-auth-state', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.resetModules()
+    ensureMysqlConnectionMock.mockReset().mockResolvedValue(undefined)
     fileStore.clear()
     redisStore.clear()
     queries.length = 0
@@ -126,6 +129,7 @@ describe('mysql-auth-state', () => {
 
     const insert = queries.find((query) => query.sql.includes('INSERT INTO auth_creds'))
     expect(insert?.params?.[1]).toBe(serialize(good))
+    expect(ensureMysqlConnectionMock).toHaveBeenCalledWith(pool, 'conn')
   })
 
   it('mantem mysql quando completo e sincroniza redis', async () => {
@@ -141,6 +145,18 @@ describe('mysql-auth-state', () => {
 
     expect(state.creds.advSecretKey).toBe(mysqlCreds.advSecretKey)
     expect(redisStore.get(credsKey)).toBe(serialize(mysqlCreds))
+  })
+
+  it('garante conexões mysql separadas para connectionIds diferentes', async () => {
+    const credsA = initAuthCreds()
+    mysqlCredsSerialized = serialize(credsA)
+
+    const { useMysqlAuthState } = await import('../src/core/auth/mysql-auth-state.ts')
+    await useMysqlAuthState('conn-a')
+    await useMysqlAuthState('conn-b')
+
+    expect(ensureMysqlConnectionMock).toHaveBeenCalledWith(pool, 'conn-a')
+    expect(ensureMysqlConnectionMock).toHaveBeenCalledWith(pool, 'conn-b')
   })
 
   it('atualiza disco quando necessario', async () => {

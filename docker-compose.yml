@@ -5,7 +5,11 @@ services:
     volumes:
       - zyra-data:/app/data
     environment:
+      # Modo simples: uma única conexão explícita.
       WA_CONNECTION_ID: default
+      # Para múltiplas conexões no mesmo processo, prefira definir WA_CONNECTION_IDS no .env.
+      # Exemplo: WA_CONNECTION_IDS=default,loja1,loja2
+      # Sem WA_CONNECTION_IDS, o bootstrap ainda pode descobrir conexões em auth_creds.
       WA_REDIS_URL: redis://redis:6379
       MYSQL_URL: mysql://zyra:zyra@mysql:3306/zyra
       WA_ANTIBAN_ENABLED: "true"
