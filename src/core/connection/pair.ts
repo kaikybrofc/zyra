@@ -1,4 +1,7 @@
 import process from 'node:process'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import type { RowDataPacket } from 'mysql2/promise'
 import { DisconnectReason } from 'baileys'
 import { Boom } from '@hapi/boom'
 import { loadEnv } from '../../bootstrap/env.js'
@@ -13,6 +16,8 @@ import { renderQrInTerminal } from '../../events/qr-terminal.js'
 const PAIR_TIMEOUT_MS = Math.max(60_000, Number(process.env.WA_PAIR_TIMEOUT_MS ?? 10 * 60_000))
 const PAIR_VALIDATE_TIMEOUT_MS = Math.max(30_000, Number(process.env.WA_PAIR_VALIDATE_TIMEOUT_MS ?? 120_000))
 const PAIR_USAGE = 'uso: npm run session:pair -- --connection <id>'
+const PM2_APP_NAME = process.env.WA_PM2_APP_NAME?.trim() || 'zyra'
+const execFileAsync = promisify(execFile)
 
 function formatErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message
@@ -48,6 +53,98 @@ function extractDisconnectStatusCode(update: {
   if (/\b401\b/.test(message)) return DisconnectReason.loggedOut
 
   return null
+}
+
+function normalizeConnectionIds(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>()
+  const normalized: string[] = []
+  for (const value of values) {
+    const trimmed = value?.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    normalized.push(trimmed)
+  }
+  return normalized
+}
+
+async function loadConnectionIdsFromMysql(): Promise<string[]> {
+  const pool = getMysqlPool()
+  if (!pool) return []
+  type ConnectionRow = RowDataPacket & { connection_id: string }
+  const [rows] = await pool.execute<ConnectionRow[]>(
+    `SELECT connection_id FROM auth_creds ORDER BY updated_at ASC, connection_id ASC`
+  )
+  return normalizeConnectionIds(rows.map((row) => row.connection_id))
+}
+
+async function restartPm2WithConnectionList(connectionId: string, logger: ReturnType<typeof createLogger>): Promise<void> {
+  let stdout = ''
+  try {
+    const result = await execFileAsync('pm2', ['jlist'], { timeout: 10_000 })
+    stdout = result.stdout
+  } catch (error) {
+    logger.info('pairing: pm2 indisponivel, reinicio automatico ignorado', {
+      connectionId,
+      appName: PM2_APP_NAME,
+      err: error,
+    })
+    return
+  }
+
+  type Pm2Entry = {
+    name?: string
+    pm2_env?: {
+      status?: string
+      WA_CONNECTION_IDS?: string
+      env?: {
+        WA_CONNECTION_IDS?: string
+      }
+    }
+  }
+
+  let entries: Pm2Entry[] = []
+  try {
+    entries = JSON.parse(stdout) as Pm2Entry[]
+  } catch (error) {
+    logger.warn('pairing: falha ao ler lista de processos do pm2', {
+      connectionId,
+      appName: PM2_APP_NAME,
+      err: error,
+    })
+    return
+  }
+
+  const app = entries.find((entry) => entry.name === PM2_APP_NAME)
+  const appStatus = app?.pm2_env?.status ?? 'unknown'
+  if (!app || appStatus !== 'online') {
+    logger.info('pairing: app do pm2 nao esta online, reinicio automatico ignorado', {
+      connectionId,
+      appName: PM2_APP_NAME,
+      appStatus,
+    })
+    return
+  }
+
+  const currentCsv = app.pm2_env?.env?.WA_CONNECTION_IDS ?? app.pm2_env?.WA_CONNECTION_IDS ?? ''
+  const fromPm2 = currentCsv ? currentCsv.split(',') : []
+  const fromMysql = fromPm2.length ? [] : await loadConnectionIdsFromMysql()
+  const merged = normalizeConnectionIds([...fromPm2, ...fromMysql, connectionId])
+  const updatedCsv = merged.join(',')
+
+  await execFileAsync('pm2', ['restart', PM2_APP_NAME, '--update-env'], {
+    timeout: 30_000,
+    env: {
+      ...process.env,
+      WA_CONNECTION_IDS: updatedCsv,
+    },
+  })
+
+  logger.info('pairing: pm2 reiniciado com lista atualizada de conexoes', {
+    connectionId,
+    appName: PM2_APP_NAME,
+    total: merged.length,
+    connectionIds: merged,
+  })
 }
 
 async function closeResources(): Promise<void> {
@@ -232,6 +329,7 @@ async function main(): Promise<void> {
   logger.info('pairing: sessao validada com sucesso no WhatsApp e no socket local', {
     connectionId,
   })
+  await restartPm2WithConnectionList(connectionId, logger)
   await closeResources()
 }
 
