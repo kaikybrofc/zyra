@@ -350,7 +350,7 @@ Scripts utilitários disponíveis:
 ```bash
 npm run db:init
 npm run db:verify
-npm run db:delete-session
+npm run db:delete-session -- --connection loja2
 npm run db:backfill
 npm run db:repair-group-participants
 npm run db:nulls

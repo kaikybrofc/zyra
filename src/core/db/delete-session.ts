@@ -13,6 +13,19 @@ const logger = createLogger()
 const DEFAULT_TIMEOUT_MS = Number(process.env.WA_DELETE_SESSION_TIMEOUT_MS ?? 15000)
 const REDIS_SCAN_MAX_MS = Number(process.env.WA_DELETE_SESSION_REDIS_MAX_MS ?? 60000)
 
+const parseConnectionId = (argv: string[]): string | null => {
+  for (let index = 0; index < argv.length; index++) {
+    const current = argv[index]
+    if (current === '--connection') {
+      return argv[index + 1]?.trim() || null
+    }
+    if (current?.startsWith('--connection=')) {
+      return current.slice('--connection='.length).trim() || null
+    }
+  }
+  return null
+}
+
 const withTimeout = async <T>(label: string, promise: Promise<T>, timeoutMs = DEFAULT_TIMEOUT_MS) => {
   let timeoutId: NodeJS.Timeout | null = null
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -63,13 +76,16 @@ const scanAndDelete = async (client: Awaited<ReturnType<typeof getRedisClient>>,
 }
 
 async function main() {
-  const connectionId = config.connectionId ?? 'default'
+  const connectionId = parseConnectionId(process.argv.slice(2)) || config.connectionId || 'default'
+  if (!connectionId.trim()) {
+    throw new Error('connectionId alvo não pode ser vazio')
+  }
 
   const pool = getMysqlPool()
   if (pool) {
     try {
       logger.info('apagando sessao no MySQL', { connectionId })
-      await withTimeout('mysql.ensure', ensureMysqlConnection(pool))
+      await withTimeout('mysql.ensure', ensureMysqlConnection(pool, connectionId))
       await withTimeout('mysql.auth_creds', pool.execute(`DELETE FROM auth_creds WHERE connection_id = ?`, [connectionId]))
       await withTimeout('mysql.signal_keys', pool.execute(`DELETE FROM signal_keys WHERE connection_id = ?`, [connectionId]))
       logger.info('sessao apagada no MySQL', { connectionId })
@@ -87,8 +103,8 @@ async function main() {
     let client: Awaited<ReturnType<typeof getRedisClient>> | null = null
     try {
       client = await withTimeout('redis.connect', getRedisClient())
-      const redisPrefix = getRedisNamespace()
-      const legacyPrefix = getLegacyRedisNamespace()
+      const redisPrefix = getRedisNamespace(connectionId)
+      const legacyPrefix = getLegacyRedisNamespace(connectionId)
       const prefixes = [redisPrefix, legacyPrefix].filter(Boolean) as string[]
       for (const prefix of prefixes) {
         const credsKey = `${prefix}:creds`

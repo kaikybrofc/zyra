@@ -84,6 +84,12 @@ npm run session:pair -- --connection loja2
 npm run pm2:restart
 ```
 
+Para remover uma conexão específica sem trocar `WA_CONNECTION_ID` no ambiente:
+
+```bash
+npm run db:delete-session -- --connection loja2
+```
+
 Fluxo recomendado para persistência no boot do servidor:
 
 ```bash

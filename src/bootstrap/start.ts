@@ -86,7 +86,7 @@ const loadConnectionIdsFromMysql = async (): Promise<string[]> => {
 
 const resolveStartupConnectionIds = async (): Promise<string[]> => {
   if (config.connectionIds?.length) {
-    return config.connectionIds
+    return normalizeConnectionIds(config.connectionIds)
   }
   if (config.mysqlUrl) {
     const fromMysql = await loadConnectionIdsFromMysql()

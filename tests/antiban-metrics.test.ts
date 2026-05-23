@@ -137,6 +137,27 @@ describe('antiban metrics server', () => {
     expect(res.body).toContain('connection_id="conn\\"a\\\\b"')
   })
 
+  it('mantém snapshots operacionais mesmo quando stats estão vazios', async () => {
+    const { startAntiBanMetricsServer } = await import('../src/observability/antiban-metrics.ts')
+    startAntiBanMetricsServer({
+      logger: logger as never,
+      getStats: () => ({}),
+      getOperationalSnapshots: () => [
+        { connectionId: 'conn-a', socketActive: false },
+        { connectionId: 'conn-b', socketActive: true },
+      ],
+    })
+
+    const res = createResponse()
+    await serverHandler?.({ url: '/metrics?format=json' }, res)
+
+    const payload = JSON.parse(res.body) as { operations: Array<{ connectionId: string; socketActive?: boolean }> }
+    expect(payload.operations).toEqual([
+      expect.objectContaining({ connectionId: 'conn-a', socketActive: false }),
+      expect.objectContaining({ connectionId: 'conn-b', socketActive: true }),
+    ])
+  })
+
   it('responde 404 para rotas desconhecidas', async () => {
     const { startAntiBanMetricsServer } = await import('../src/observability/antiban-metrics.ts')
     startAntiBanMetricsServer({

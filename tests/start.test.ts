@@ -78,6 +78,21 @@ describe('startup multi-connection', () => {
     expect(createSocketMock).toHaveBeenNthCalledWith(2, 'conn-b', logger)
   })
 
+  it('prioriza WA_CONNECTION_IDS sobre descoberta no mysql', async () => {
+    mockConfig.connectionIds = [' explicit-a ', 'explicit-a', 'explicit-b']
+    mockConfig.mysqlUrl = 'mysql://test'
+    getMysqlPoolMock.mockReturnValue({
+      execute: vi.fn().mockResolvedValue([[{ connection_id: 'db-a' }, { connection_id: 'db-b' }], []]),
+    })
+
+    const { start } = await import('../src/bootstrap/start.ts')
+    await start()
+
+    expect(createSocketMock).toHaveBeenCalledTimes(2)
+    expect(createSocketMock).toHaveBeenNthCalledWith(1, 'explicit-a', logger)
+    expect(createSocketMock).toHaveBeenNthCalledWith(2, 'explicit-b', logger)
+  })
+
   it('carrega conexões de auth_creds quando mysql esta configurado', async () => {
     mockConfig.mysqlUrl = 'mysql://test'
     getMysqlPoolMock.mockReturnValue({
@@ -188,6 +203,20 @@ describe('startup multi-connection', () => {
 
     releaseReconnect()
     await Promise.all([pendingA, pendingB])
+    expect(createSocketMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('ignora reconnect quando shutdown está em andamento', async () => {
+    mockConfig.connectionIds = ['conn-a', 'conn-b']
+    isShutdownInProgressMock.mockReturnValue(false)
+
+    const { start } = await import('../src/bootstrap/start.ts')
+    await start()
+
+    isShutdownInProgressMock.mockReturnValue(true)
+    const reconnectA = registerEventsMock.mock.calls[0]?.[0]?.reconnect as (() => Promise<void>)
+    await reconnectA()
+
     expect(createSocketMock).toHaveBeenCalledTimes(2)
   })
 

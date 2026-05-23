@@ -96,6 +96,28 @@ describe('session pair command', () => {
     process.argv = argv
   })
 
+  it('conclui com sucesso quando o novo login pede restart antes do open', async () => {
+    const argv = process.argv
+    process.argv = ['node', 'pair.ts', '--connection', 'loja2']
+
+    const importPromise = import('../src/core/connection/pair.ts')
+    await vi.waitFor(() => {
+      expect(createSocketMock).toHaveBeenCalledTimes(1)
+      expect(currentEmitter).toBeTruthy()
+    })
+    currentEmitter?.emit('connection.update', { isNewLogin: true })
+    currentEmitter?.emit('connection.update', {
+      connection: 'close',
+      lastDisconnect: { error: { output: { statusCode: 515 } } },
+    })
+    await importPromise
+
+    expect(flushSocketCredsNowMock).toHaveBeenCalledTimes(1)
+    expect(flushSocketCredsNowMock.mock.calls[0]?.[1]).toBe('pairing_restart_required')
+
+    process.argv = argv
+  })
+
   it('falha quando mysql não está configurado', async () => {
     const argv = process.argv
     process.argv = ['node', 'pair.ts', '--connection', 'loja2']
@@ -103,7 +125,13 @@ describe('session pair command', () => {
 
     await import('../src/core/connection/pair.ts')
 
-    expect(logger.error).toHaveBeenCalled()
+    expect(logger.error).toHaveBeenCalledWith(
+      'falha no pairing via terminal',
+      expect.objectContaining({
+        message: expect.stringContaining('MYSQL_URL é obrigatório'),
+        usage: 'uso: npm run session:pair -- --connection <id>',
+      })
+    )
     expect(createSocketMock).not.toHaveBeenCalled()
 
     process.argv = argv
@@ -115,7 +143,13 @@ describe('session pair command', () => {
 
     await import('../src/core/connection/pair.ts')
 
-    expect(logger.error).toHaveBeenCalled()
+    expect(logger.error).toHaveBeenCalledWith(
+      'falha no pairing via terminal',
+      expect.objectContaining({
+        message: expect.stringContaining('informe a conexão com --connection <id>'),
+        usage: 'uso: npm run session:pair -- --connection <id>',
+      })
+    )
     expect(createSocketMock).not.toHaveBeenCalled()
 
     process.argv = argv
