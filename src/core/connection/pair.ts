@@ -202,10 +202,19 @@ async function validateSessionBoot(connectionId: string, logger: ReturnType<type
       }
     })
   }).finally(async () => {
-    await flushSocketCredsNow(validationSock, 'pairing_validation_finalize').catch(() => undefined)
-    await validationSock.end(undefined).catch(() => undefined)
-    unregisterShutdownTarget(connectionId, validationSock)
+    await shutdownPairSocket(connectionId, validationSock, 'pairing_validation_finalize')
   })
+}
+
+async function shutdownPairSocket(connectionId: string, sock: SocketWithCredsFlush, reason: string): Promise<void> {
+  await flushSocketCredsNow(sock, reason).catch(() => undefined)
+  try {
+    ;(sock.ev as { removeAllListeners?: (...args: unknown[]) => unknown }).removeAllListeners?.()
+  } catch {
+    // noop: best effort teardown
+  }
+  await sock.end(undefined).catch(() => undefined)
+  unregisterShutdownTarget(connectionId, sock)
 }
 
 async function main(): Promise<void> {
@@ -322,14 +331,13 @@ async function main(): Promise<void> {
     })
   })
 
-  await flushSocketCredsNow(sock, 'pairing_finalize').catch(() => undefined)
-  await sock.end(undefined).catch(() => undefined)
-  unregisterShutdownTarget(connectionId, sock)
+  await shutdownPairSocket(connectionId, sock, 'pairing_finalize')
   await validateSessionBoot(connectionId, logger)
   logger.info('pairing: sessao validada com sucesso no WhatsApp e no socket local', {
     connectionId,
   })
   await restartPm2WithConnectionList(connectionId, logger)
+  await new Promise<void>((resolve) => setTimeout(resolve, 300))
   await closeResources()
 }
 
