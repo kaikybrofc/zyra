@@ -16,6 +16,10 @@ const normalizeDomain = (value: string | undefined): string | null => {
   return raw.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0] ?? null
 }
 
+/**
+ * Gerencia a moderação anti-link de um grupo, incluindo estado,
+ * whitelist de domínios e permissão para convites do próprio grupo.
+ */
 export const antilinkCommand: Command = {
   name: 'antilink',
   description: 'Anti-link do grupo: on/off, allow add|remove|list e invite on|off',

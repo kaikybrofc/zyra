@@ -75,6 +75,10 @@ const scanAndDelete = async (client: Awaited<ReturnType<typeof getRedisClient>>,
   return deleted
 }
 
+/**
+ * Remove os artefatos de autenticação de uma conexão no MySQL,
+ * Redis e sistema de arquivos local.
+ */
 async function main() {
   const connectionId = parseConnectionId(process.argv.slice(2)) || config.connectionId || 'default'
   if (!connectionId.trim()) {

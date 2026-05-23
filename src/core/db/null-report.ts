@@ -133,6 +133,10 @@ const formatRow = (item: { table: string; column: string; count: number; total: 
   return `${formatSeverity(severity)} ${item.table}.${item.column} -> ${item.count}/${item.total} (${coloredPercent})`
 }
 
+/**
+ * Gera um relatório de colunas nulas por tabela para a conexão atual,
+ * classificando os achados por criticidade operacional.
+ */
 export async function main() {
   if (!config.mysqlUrl) {
     logger.error('MYSQL_URL nao configurada')

@@ -21,6 +21,10 @@ const DATA_DIR = path.resolve(process.cwd(), '.zyra-data')
 const DATA_FILE = path.join(DATA_DIR, 'group-features.json')
 const REDIS_FEATURES_KEY = `${getRedisNamespace(config.connectionId)}:features:group`
 
+/**
+ * Persiste e consulta flags de recursos por grupo com camadas de fallback
+ * em memória, arquivo local, Redis e MySQL.
+ */
 class GroupFeatureStore {
   #loaded = false
   #data: GroupFeaturesData = {}
@@ -267,4 +271,7 @@ class GroupFeatureStore {
   }
 }
 
+/**
+ * Instância compartilhada para leitura e escrita das configurações de grupo.
+ */
 export const groupFeatureStore = new GroupFeatureStore()

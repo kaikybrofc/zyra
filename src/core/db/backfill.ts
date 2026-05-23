@@ -178,6 +178,10 @@ const buildUserMaterializationLockKey = (connectionId: string, identifiers: Arra
   return `zyra:user:${digest}`
 }
 
+/**
+ * Executa o worker de backfill responsável por recomputar e completar
+ * colunas derivadas e vínculos relacionais no banco.
+ */
 async function main() {
   if (!config.mysqlUrl) {
     logger.error('MYSQL_URL nao configurada')

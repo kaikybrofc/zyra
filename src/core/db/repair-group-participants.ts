@@ -120,6 +120,10 @@ const resolveUserIdForParticipant = async (conn: mysql.Connection, connectionId:
   return splitUserId
 }
 
+/**
+ * Reconstrói a tabela `group_participants` a partir dos metadados
+ * persistidos dos grupos para a conexão atual.
+ */
 export const repairGroupParticipants = async (): Promise<void> => {
   const logger = createLogger()
   if (!config.mysqlUrl) {

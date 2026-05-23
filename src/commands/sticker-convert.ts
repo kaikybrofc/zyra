@@ -14,6 +14,10 @@ const MESSAGES = {
     'Esse comando aceita apenas figurinha (sticker WebP).',
 }
 
+/**
+ * Cria um executor de comando para converter stickers WebP
+ * em um formato de saída compatível com o chat.
+ */
 const executeStickerConvert =
   (target: StickerConversionTarget): Command['execute'] =>
     async (ctx) => {
@@ -66,12 +70,18 @@ const executeStickerConvert =
       }
     }
 
+/**
+ * Converte uma figurinha WebP em imagem PNG.
+ */
 export const toImageCommand: Command = {
   name: 'toimg',
   description: 'Converte figurinha (WebP) para imagem PNG',
   execute: executeStickerConvert('png'),
 }
 
+/**
+ * Converte uma figurinha WebP em GIF animado.
+ */
 export const toGifCommand: Command = {
   name: 'togif',
   description: 'Converte figurinha (WebP) para GIF',

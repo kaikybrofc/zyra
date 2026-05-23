@@ -19,6 +19,9 @@ const SEARCH_RESULT_KEYS = ['resultado', 'resultados', 'results', 'itens', 'item
 const CANDIDATE_URL_KEYS = ['webpage_url', 'original_url', 'url', 'link', 'webpageUrl', 'originalUrl'] as const
 const THUMBNAIL_KEYS = ['thumbnail', 'thumbnail_url', 'thumbnailUrl', 'thumb', 'cover', 'image'] as const
 
+/**
+ * Representa uma mídia resolvida com metadados suficientes para envio e cache.
+ */
 export type ResolvedPlayTrack = {
   lookupKey: string
   originalInput: string
@@ -491,6 +494,10 @@ async function resolveWithoutCache(input: string, lookupKey: string, mode: Resol
   throw lastError ?? new Error(mode === 'video' ? 'Não foi possível resolver o vídeo solicitado' : 'Não foi possível resolver o áudio solicitado')
 }
 
+/**
+ * Resolve uma busca ou URL para uma mídia com stream reproduzível,
+ * reaproveitando cache e deduplicando resoluções em andamento.
+ */
 export async function resolvePlayInput(input: string, options: ResolveOptions = {}): Promise<ResolvedPlayTrack> {
   const normalizedInput = collapseWhitespace(input)
   const mode = options.mode ?? 'audio'
@@ -521,6 +528,10 @@ export async function resolvePlayInput(input: string, options: ResolveOptions = 
   return promise
 }
 
+/**
+ * Revalida uma mídia já resolvida quando o stream expirou,
+ * está prestes a expirar ou o chamador exige refresh.
+ */
 export async function refreshTrackIfNeeded(track: ResolvedPlayTrack, options: ResolveOptions = {}): Promise<ResolvedPlayTrack> {
   if (options.forceRefresh || isStreamExpiredOrNearExpire(track)) {
     return resolvePlayInput(track.originalInput, {
@@ -532,6 +543,9 @@ export async function refreshTrackIfNeeded(track: ResolvedPlayTrack, options: Re
   return track
 }
 
+/**
+ * Detecta erros transitórios típicos de stream para permitir nova tentativa.
+ */
 export function isLikelyTransientPlayStreamError(error: unknown): boolean {
   if (typeof error === 'number') {
     return TRANSIENT_FETCH_STATUSES.has(error)
@@ -550,6 +564,9 @@ export function isLikelyTransientPlayStreamError(error: unknown): boolean {
   return ['expired', 'forbidden', 'signature', 'unauthorized', 'bad gateway', 'service unavailable'].some((token) => normalized.includes(token))
 }
 
+/**
+ * Formata uma duração em milissegundos para exibição humana no chat.
+ */
 export function formatDurationMs(durationMs: number | null): string | null {
   if (!durationMs || durationMs <= 0) return null
   const totalSeconds = Math.floor(durationMs / 1_000)
@@ -564,6 +581,9 @@ export function formatDurationMs(durationMs: number | null): string | null {
   return `${minutes}:${String(seconds).padStart(2, '0')}`
 }
 
+/**
+ * Gera um nome de arquivo estável e seguro para salvar o áudio resolvido.
+ */
 export function buildPlayFileName(track: Pick<ResolvedPlayTrack, 'title'>): string {
   const base = track.title
     .normalize('NFKD')
@@ -576,6 +596,9 @@ export function buildPlayFileName(track: Pick<ResolvedPlayTrack, 'title'>): stri
   return `${base || 'audio'}.mp3`
 }
 
+/**
+ * Helpers internos expostos para cobertura de testes do resolvedor de mídia.
+ */
 export const __playResolverInternals = {
   buildLookupKey,
   normalizeLookupKey,

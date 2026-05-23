@@ -193,6 +193,10 @@ const persistGeneratedSticker = async (params: {
   })
 }
 
+/**
+ * Processa a criação de figurinhas a partir da mídia atual ou citada,
+ * aplicando template persistido de pack e autor quando disponível.
+ */
 const executeStickerCommand: Command['execute'] = async (ctx) => {
   const safeReply = async (text: string): Promise<void> => {
     try {
@@ -309,18 +313,27 @@ const executeStickerCommand: Command['execute'] = async (ctx) => {
   }
 }
 
+/**
+ * Comando principal para gerar figurinhas a partir de mídia compatível.
+ */
 export const stickerCommand: Command = {
   name: 'sticker',
   description: 'Converte mídia em figurinha (aliases: !s, !st). Ajuda: !s -h',
   execute: executeStickerCommand,
 }
 
+/**
+ * Alias curto do comando principal de figurinha.
+ */
 export const stickerAliasCommand: Command = {
   name: 's',
   description: 'Alias curto de !sticker. Suporta template salvo e !s -h',
   execute: executeStickerCommand,
 }
 
+/**
+ * Alias alternativo do comando principal de figurinha.
+ */
 export const stickerSecondAliasCommand: Command = {
   name: 'st',
   description: 'Segundo alias de !sticker. Ajuda detalhada: !st -h',

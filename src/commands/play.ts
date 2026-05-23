@@ -65,6 +65,10 @@ async function buildNowPlayingPayload(track: ResolvedPlayTrack): Promise<AnyMess
   }
 }
 
+/**
+ * Busca um áudio por nome ou URL, resolve um stream utilizável
+ * e envia a faixa no chat respeitando o limite do WhatsApp.
+ */
 export const playCommand: Command = {
   name: 'play',
   description: 'Busca um áudio por nome ou URL e envia o MP3 no chat',

@@ -44,6 +44,10 @@ function buildVideoCaption(track: ResolvedPlayTrack): string {
   ].filter((value): value is string => Boolean(value)).join('\n')
 }
 
+/**
+ * Busca um vídeo por nome ou URL, resolve um stream utilizável
+ * e envia o arquivo MP4 no chat respeitando o limite do WhatsApp.
+ */
 export const playVideoCommand: Command = {
   name: 'playvid',
   description: 'Busca um vídeo por nome ou URL e envia o MP4 no chat',

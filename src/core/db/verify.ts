@@ -11,6 +11,10 @@ const logger = createLogger()
 type TableRow = RowDataPacket & { table_name: string }
 type ColumnRow = RowDataPacket & { count: number }
 
+/**
+ * Verifica a quantidade de registros por tabela para a conexão atual,
+ * ajudando a inspecionar rapidamente a integridade do banco.
+ */
 async function main() {
   if (!config.mysqlUrl) {
     logger.error('MYSQL_URL nao configurada')
