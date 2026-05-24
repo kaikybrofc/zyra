@@ -31,11 +31,23 @@ const getLogger = (): AppLogger => {
   return loggerRef
 }
 
+/**
+ * Aguarda a quantidade de milissegundos informada.
+ *
+ * @param ms Tempo de espera em milissegundos.
+ * @returns Promise resolvida após o tempo definido.
+ */
 const wait = (ms: number) =>
   new Promise<void>((resolve) => {
     setTimeout(resolve, ms)
   })
 
+/**
+ * Obtém o estado em memória de uma conexão, criando-o quando necessário.
+ *
+ * @param connectionId Identificador lógico da conexão WhatsApp.
+ * @returns Runtime da conexão, com socket ativo e estado de reconexão.
+ */
 const getOrCreateRuntime = (connectionId: string): ConnectionRuntime => {
   const existing = runtimes.get(connectionId)
   if (existing) return existing
@@ -50,6 +62,13 @@ const getOrCreateRuntime = (connectionId: string): ConnectionRuntime => {
   return created
 }
 
+/**
+ * Garante que o schema do MySQL seja inicializado apenas uma vez por processo.
+ *
+ * Em caso de falha, permite nova tentativa em chamadas futuras.
+ *
+ * @returns Promise resolvida quando o schema estiver pronto.
+ */
 const ensureSchemaReady = async () => {
   const logger = getLogger()
   if (!schemaInitPromise) {
@@ -61,6 +80,12 @@ const ensureSchemaReady = async () => {
   await schemaInitPromise
 }
 
+/**
+ * Remove valores vazios, aplica trim e elimina duplicados mantendo a ordem.
+ *
+ * @param values Lista de identificadores de conexão em estado bruto.
+ * @returns Lista normalizada e única de connection ids.
+ */
 const normalizeConnectionIds = (values: Array<string | null | undefined>): string[] => {
   const seen = new Set<string>()
   const normalized: string[] = []
@@ -73,6 +98,11 @@ const normalizeConnectionIds = (values: Array<string | null | undefined>): strin
   return normalized
 }
 
+/**
+ * Carrega os connection ids persistidos no MySQL para bootstrap automático.
+ *
+ * @returns Lista de connection ids normalizada; vazia quando pool indisponível.
+ */
 const loadConnectionIdsFromMysql = async (): Promise<string[]> => {
   const pool = getMysqlPool()
   if (!pool) return []
@@ -84,6 +114,16 @@ const loadConnectionIdsFromMysql = async (): Promise<string[]> => {
   return normalizeConnectionIds(rows.map((row) => row.connection_id))
 }
 
+/**
+ * Resolve quais conexões devem subir no boot.
+ *
+ * Ordem de prioridade:
+ * 1) `config.connectionIds`
+ * 2) IDs existentes em `auth_creds` (quando MySQL está configurado)
+ * 3) `config.connectionId` ou fallback `'default'`
+ *
+ * @returns Lista final de connection ids sem duplicidade.
+ */
 const resolveStartupConnectionIds = async (): Promise<string[]> => {
   if (config.connectionIds?.length) {
     return normalizeConnectionIds(config.connectionIds)
@@ -95,6 +135,15 @@ const resolveStartupConnectionIds = async (): Promise<string[]> => {
   return normalizeConnectionIds([config.connectionId ?? 'default'])
 }
 
+/**
+ * Substitui o socket ativo de uma conexão por uma nova geração.
+ *
+ * A geração anterior é encerrada com limpeza de listeners para evitar vazamento
+ * de eventos e reconexões concorrentes.
+ *
+ * @param connectionId Identificador da conexão alvo.
+ * @param reason Motivo textual da substituição (log/observabilidade).
+ */
 const replaceSocket = async (connectionId: string, reason: string) => {
   const logger = getLogger()
   await ensureSchemaReady()
@@ -148,6 +197,16 @@ const replaceSocket = async (connectionId: string, reason: string) => {
   logger.info('Bot sendo iniciado com sucesso.', { connectionId, generation, reason })
 }
 
+/**
+ * Agenda uma reconexão respeitando janela mínima e garantindo exclusão mútua
+ * por `connectionId`.
+ *
+ * Se já existir reconexão em andamento, retorna a mesma Promise.
+ *
+ * @param connectionId Identificador da conexão alvo.
+ * @param reason Motivo textual da reconexão (log/observabilidade).
+ * @returns Promise da reconexão em andamento/concluída.
+ */
 const scheduleReconnect = async (connectionId: string, reason: string) => {
   const logger = getLogger()
   const runtime = getOrCreateRuntime(connectionId)
@@ -177,7 +236,15 @@ const scheduleReconnect = async (connectionId: string, reason: string) => {
 }
 
 /**
- * Inicializa o MySQL (se configurado), cria os sockets e registra eventos.
+ * Executa o bootstrap da aplicação.
+ *
+ * Responsabilidades:
+ * 1) Inicia servidor de métricas anti-ban (quando habilitado)
+ * 2) Resolve as conexões de inicialização
+ * 3) Garante runtime de cada conexão
+ * 4) Dispara conexão inicial via `scheduleReconnect('startup')`
+ *
+ * @throws Error Quando nenhuma conexão inicial puder ser resolvida.
  */
 export async function start(): Promise<void> {
   if (!metricsServerHandle && config.antibanEnabled && config.antibanMetricsEnabled) {

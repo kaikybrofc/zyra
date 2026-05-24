@@ -42,15 +42,35 @@ type ConnectionWaitResult = {
   statusCode: number | null
 }
 
+/**
+ * Extrai uma mensagem amigável de erro para logs e saída de CLI.
+ *
+ * @param error Erro em formato desconhecido.
+ * @returns Mensagem textual representando o erro.
+ */
 function formatErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message
   return String(error)
 }
 
+/**
+ * Formata o sufixo com status de desconexão para compor mensagens de erro.
+ *
+ * @param statusCode Código de status extraído do fechamento de conexão.
+ * @returns String vazia quando ausente ou sufixo no formato ` (status XXX)`.
+ */
 function formatStatusCodeSuffix(statusCode: number | null): string {
   return statusCode ? ` (status ${statusCode})` : ''
 }
 
+/**
+ * Lê `--connection` dos argumentos da CLI.
+ *
+ * Suporta os formatos `--connection <id>` e `--connection=<id>`.
+ *
+ * @param argv Argumentos já normalizados (ex: `process.argv.slice(2)`).
+ * @returns Connection id informado ou `null` quando ausente.
+ */
 function parseConnectionId(argv: string[]): string | null {
   for (let index = 0; index < argv.length; index++) {
     const current = argv[index]
@@ -64,6 +84,13 @@ function parseConnectionId(argv: string[]): string | null {
   return null
 }
 
+/**
+ * Valida e normaliza um `connection_id` recebido por CLI.
+ *
+ * @param connectionId Valor bruto informado pelo usuário.
+ * @returns Connection id válido e com trim aplicado.
+ * @throws Error Quando ausente/vazio ou contendo caracteres de controle.
+ */
 function validateConnectionId(connectionId: string | null): string {
   const trimmed = connectionId?.trim()
   if (!trimmed) {
@@ -79,6 +106,12 @@ function validateConnectionId(connectionId: string | null): string {
   return trimmed
 }
 
+/**
+ * Garante que `MYSQL_URL` está presente e utilizável no fluxo de pairing.
+ *
+ * @param mysqlUrl URL de conexão do MySQL/MariaDB.
+ * @throws Error Quando ausente, inválida, com protocolo incorreto ou sem nome de banco.
+ */
 function validateMysqlUrlForPairing(mysqlUrl: string | null | undefined): void {
   if (!mysqlUrl) {
     throw new Error('MYSQL_URL é obrigatório para pairing via terminal com descoberta posterior')
@@ -101,12 +134,28 @@ function validateMysqlUrlForPairing(mysqlUrl: string | null | undefined): void {
   }
 }
 
+/**
+ * Executa as validações obrigatórias antes do pareamento.
+ *
+ * @param connectionId Identificador solicitado pela CLI.
+ * @returns Connection id validado.
+ * @throws Error Quando qualquer pré-requisito não é atendido.
+ */
 function validatePairingPrerequisites(connectionId: string | null): string {
   const validatedConnectionId = validateConnectionId(connectionId)
   validateMysqlUrlForPairing(config.mysqlUrl)
   return validatedConnectionId
 }
 
+/**
+ * Extrai o código de status de desconexão de um `connection.update`.
+ *
+ * Inclui fallback por regex em mensagens de erro quando `output.statusCode`
+ * não está disponível.
+ *
+ * @param update Payload parcial de atualização de conexão.
+ * @returns Status code mapeado ou `null`.
+ */
 function extractDisconnectStatusCode(update: {
   lastDisconnect?: { error?: unknown }
 }): number | null {
@@ -125,10 +174,22 @@ function extractDisconnectStatusCode(update: {
   return null
 }
 
+/**
+ * Indica se o fechamento pós-login pode ser tratado como esperado no pairing.
+ *
+ * @param statusCode Código de fechamento extraído da conexão.
+ * @returns `true` para códigos compatíveis com troca/refresh de sessão.
+ */
 function isExpectedPostLoginClose(statusCode: number | null): boolean {
   return statusCode === null || EXPECTED_POST_LOGIN_CLOSE_CODES.has(statusCode)
 }
 
+/**
+ * Normaliza connection ids removendo vazios e duplicados, preservando ordem.
+ *
+ * @param values Lista de valores brutos.
+ * @returns Lista única de ids.
+ */
 function normalizeConnectionIds(values: Array<string | null | undefined>): string[] {
   const seen = new Set<string>()
   const normalized: string[] = []
@@ -141,6 +202,11 @@ function normalizeConnectionIds(values: Array<string | null | undefined>): strin
   return normalized
 }
 
+/**
+ * Carrega `connection_id` da tabela de credenciais para composição do boot.
+ *
+ * @returns Lista normalizada de conexões existentes no MySQL.
+ */
 async function loadConnectionIdsFromMysql(): Promise<string[]> {
   const pool = getMysqlPool()
   if (!pool) return []
@@ -151,6 +217,17 @@ async function loadConnectionIdsFromMysql(): Promise<string[]> {
   return normalizeConnectionIds(rows.map((row) => row.connection_id))
 }
 
+/**
+ * Reinicia a aplicação no PM2 com `WA_CONNECTION_IDS` atualizado após pairing.
+ *
+ * Estratégia:
+ * 1) Tenta ler lista atual via `pm2 jlist`
+ * 2) Fallback para IDs do MySQL quando variável não existe
+ * 3) Mescla com a conexão recém-pareada e reinicia com `--update-env`
+ *
+ * @param connectionId Conexão recém-validada.
+ * @param logger Logger para rastreabilidade do fluxo.
+ */
 async function restartPm2WithConnectionList(connectionId: string, logger: AppLogger): Promise<void> {
   let stdout = ''
   try {
@@ -247,6 +324,11 @@ async function restartPm2WithConnectionList(connectionId: string, logger: AppLog
   })
 }
 
+/**
+ * Fecha recursos de infraestrutura usados pelo script de pairing.
+ *
+ * @returns Promise resolvida após tentativa de fechar Redis e pool MySQL.
+ */
 async function closeResources(): Promise<void> {
   await closeRedisClient().catch(() => undefined)
   const pool = getMysqlPool()
@@ -349,6 +431,13 @@ async function waitForConnectionOutcome(
   })
 }
 
+/**
+ * Valida a sessão recém-pareada abrindo uma nova instância controlada do socket.
+ *
+ * @param connectionId Conexão a ser validada.
+ * @param logger Logger para telemetria de validação.
+ * @throws Error Quando a sessão não estabiliza sem QR.
+ */
 async function validateSessionBoot(connectionId: string, logger: AppLogger): Promise<void> {
   logger.info('pairing: iniciando validacao pos-pareamento (reconexao controlada)', { connectionId })
   const validationSock = (await createSocket(connectionId, logger)) as SocketWithCredsFlush
@@ -378,6 +467,14 @@ async function validateSessionBoot(connectionId: string, logger: AppLogger): Pro
   }
 }
 
+/**
+ * Executa teardown seguro de um socket usado no fluxo de pairing.
+ *
+ * @param connectionId Identificador da conexão.
+ * @param sock Socket a ser encerrado.
+ * @param reason Motivo textual de encerramento/persistência.
+ * @param logger Logger para rastreamento de falhas não críticas.
+ */
 async function shutdownPairSocket(connectionId: string, sock: SocketWithCredsFlush, reason: string, logger: AppLogger): Promise<void> {
   try {
     await flushSocketCredsNow(sock, reason)

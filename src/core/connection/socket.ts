@@ -203,21 +203,19 @@ const registerGracefulShutdown = () => {
 }
 
 /**
- * Fábrica (Factory) para criação e configuração completa do Socket Baileys.
- * * @remarks
- * Esta função orquestra diversos componentes vitais:
- * 1. **Auth**: Carrega a estratégia definida (MySQL, Redis, Disco).
- * 2. **Version**: Resolve a versão do protocolo com caching.
- * 3. **Sync**: Configura políticas de sincronização de histórico para evitar consumo excessivo de memória.
- * 4. **Store**: Vincula o repositório de mensagens e metadados ao barramento de eventos.
- * 5. **Graceful Shutdown**: Registra a instância para persistência segura em caso de encerramento do processo.
- * * @example
- * ```typescript
- * const sock = await createSocket('instancia-1', logger);
- * ```
- * * @param connectionId - Identificador único da sessão (connection_id).
- * @param logger - Instância do logger para monitoramento.
- * @returns Uma instância configurada de `WASocket`.
+ * Cria e configura uma instância completa de socket Baileys para uma conexão.
+ *
+ * @remarks
+ * Orquestra os componentes essenciais do runtime:
+ * 1) Resolve autenticação (MySQL/Redis/disco com fallback local)
+ * 2) Resolve versão do protocolo com cache em memória
+ * 3) Aplica política de history sync
+ * 4) Conecta store/caches e recursos anti-ban
+ * 5) Registra persistência de credenciais e graceful shutdown
+ *
+ * @param connectionId Identificador único da sessão (`connection_id`).
+ * @param logger Logger da aplicação para observabilidade do ciclo de vida.
+ * @returns Socket configurado e pronto para registro de eventos.
  */
 export async function createSocket(connectionId: string, logger: AppLogger) {
   const store = createBaileysStore(connectionId)
@@ -401,12 +399,25 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
 }
 
 /**
- * Remove um alvo de shutdown da conexão atual caso ele ainda aponte para o mesmo socket.
+ * Força a persistência imediata de credenciais quando suportado pelo socket.
+ *
+ * @param sock Instância de socket a ser persistida.
+ * @param reason Motivo textual da persistência forçada (telemetria/logs).
+ * @returns Promise resolvida após o flush, quando disponível.
  */
 export async function flushSocketCredsNow(sock: ReturnType<typeof makeWASocket>, reason: string): Promise<void> {
   await (sock as SocketWithCredsFlush).flushCredsNow?.(reason)
 }
 
+/**
+ * Remove alvos registrados para shutdown de uma conexão.
+ *
+ * Quando `sock` é informado, remove apenas o alvo que corresponde ao mesmo
+ * objeto de socket (proteção contra remover geração mais nova por engano).
+ *
+ * @param connectionId Identificador da conexão.
+ * @param sock Socket opcional para validação de identidade do alvo.
+ */
 export const unregisterShutdownTarget = (connectionId: string, sock?: ReturnType<typeof makeWASocket>) => {
   for (const target of shutdownTargets) {
     if (target.connectionId !== connectionId) continue

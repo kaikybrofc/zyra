@@ -92,10 +92,14 @@ type _AllEventsCoverageHint = MissingEvents extends never ? true : MissingEvents
 type EventHandler<K extends keyof BaileysEventMap> = (data: BaileysEventMap[K]) => void | Promise<void>
 
 /**
- * Registra todos os listeners de eventos do Baileys e integra com persistência SQL e logs.
- * Esta função é o coração da reatividade do bot, lidando desde conexões até mensagens e newsletters.
- * 
- * @param options Opções de configuração contendo o socket, logger e callbacks de ciclo de vida.
+ * Registra os listeners do Baileys e integra o pipeline com logs e persistência.
+ *
+ * @remarks
+ * Este módulo centraliza o tratamento de eventos de conexão, credenciais,
+ * mensagens, grupos, chamadas e newsletters, além de acionar rotas de negócio
+ * e registrar trilhas de auditoria no SQL quando habilitado.
+ *
+ * @param options Dependências e callbacks do ciclo de vida da conexão.
  */
 export function registerEvents({ sock, logger, reconnect, connectionId }: RegisterOptions): void {
   /** Socket com capability opcional de flush imediato de credenciais. */
