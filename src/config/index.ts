@@ -309,4 +309,12 @@ export const config = {
   get apiKey() {
     return process.env.WA_API_KEY ?? null
   },
+  /** Timeout em ms para requisições de webhook (WA_WEBHOOK_TIMEOUT_MS). */
+  get webhookTimeoutMs() {
+    return readNumber(process.env.WA_WEBHOOK_TIMEOUT_MS, 10_000)
+  },
+  /** Número máximo de tentativas de entrega antes de marcar como dead_letter (WA_WEBHOOK_MAX_ATTEMPTS). */
+  get webhookMaxAttempts() {
+    return readNumber(process.env.WA_WEBHOOK_MAX_ATTEMPTS, 4)
+  },
 }

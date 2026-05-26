@@ -149,6 +149,40 @@ export async function initMysqlSchema(logger?: AppLogger): Promise<void> {
          ON DUPLICATE KEY UPDATE config_json = VALUES(config_json)`
       )
     }
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS webhooks (
+        id VARCHAR(64) NOT NULL,
+        connection_id VARCHAR(128) NOT NULL,
+        url VARCHAR(2048) NOT NULL,
+        events_filter JSON NOT NULL,
+        active TINYINT(1) NOT NULL DEFAULT 1,
+        secret VARCHAR(256) NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        INDEX idx_webhooks_connection (connection_id, active)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+    )
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS webhook_deliveries (
+        id VARCHAR(64) NOT NULL,
+        webhook_id VARCHAR(64) NOT NULL,
+        connection_id VARCHAR(128) NOT NULL,
+        event_type VARCHAR(128) NOT NULL,
+        payload JSON NOT NULL,
+        status ENUM('pending','delivered','failed','dead_letter') NOT NULL DEFAULT 'pending',
+        attempts INT NOT NULL DEFAULT 0,
+        last_attempt_at TIMESTAMP NULL,
+        next_retry_at TIMESTAMP NULL,
+        response_status INT NULL,
+        response_body TEXT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        INDEX idx_wd_webhook (webhook_id),
+        INDEX idx_wd_connection_status (connection_id, status),
+        INDEX idx_wd_next_retry (status, next_retry_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+    )
     await ensureMysqlConnection(pool)
     logger?.info('schema mysql verificado/criado', { tables: statements.length, database: dbName })
   } finally {

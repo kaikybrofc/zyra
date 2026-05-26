@@ -19,6 +19,16 @@
       "key": "connection_id",
       "value": "minha-sessao",
       "type": "string"
+    },
+    {
+      "key": "webhook_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "delivery_id",
+      "value": "",
+      "type": "string"
     }
   ],
   "auth": {
@@ -311,6 +321,151 @@
               "path": ["connections", "{{connection_id}}", "groups"]
             },
             "description": "Retorna todos os grupos em que a instância participa, no formato original do Baileys (Record<string, GroupMetadata>). A instância precisa estar com status open."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "item": [
+        {
+          "name": "Listar webhooks",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/webhooks",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "webhooks"]
+            },
+            "description": "Retorna todos os webhooks cadastrados para a conexão."
+          }
+        },
+        {
+          "name": "Criar webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/webhooks",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "webhooks"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://meu-sistema.com/webhook\",\n  \"eventsFilter\": [\"*\"],\n  \"secret\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Cria um novo webhook para a conexão.\n\nCampos:\n- url (obrigatório): endpoint que receberá os eventos\n- eventsFilter (obrigatório): array com eventos ou grupos de eventos. Use [\"*\"] para todos.\n- secret (opcional): quando definido, cada requisição inclui o header x-webhook-signature: sha256=<hmac>\n\nFiltros aceitos: \"*\", \"connection\", \"messages\", \"groups\" ou eventos específicos como \"messages.upsert\", \"connection.update\"."
+          }
+        },
+        {
+          "name": "Criar webhook — somente mensagens",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/webhooks",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "webhooks"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://meu-sistema.com/webhook\",\n  \"eventsFilter\": [\"messages\"],\n  \"secret\": \"meu-segredo-hmac\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Exemplo: webhook que escuta apenas eventos de mensagens (messages.upsert, messages.update, messages.delete, message-receipt.update, messages.reaction) com assinatura HMAC."
+          }
+        },
+        {
+          "name": "Buscar webhook",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/webhooks/{{webhook_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "webhooks", "{{webhook_id}}"]
+            },
+            "description": "Retorna os dados de um webhook específico. Resposta 404 se não encontrado."
+          }
+        },
+        {
+          "name": "Atualizar webhook",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/webhooks/{{webhook_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "webhooks", "{{webhook_id}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://novo-endpoint.com/webhook\",\n  \"eventsFilter\": [\"connection.update\", \"messages.upsert\"],\n  \"active\": true,\n  \"secret\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Atualiza parcialmente um webhook. Todos os campos são opcionais: url, eventsFilter, active, secret."
+          }
+        },
+        {
+          "name": "Desativar webhook",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/webhooks/{{webhook_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "webhooks", "{{webhook_id}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"active\": false\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Desativa o webhook sem removê-lo. Para reativar, envie active: true."
+          }
+        },
+        {
+          "name": "Deletar webhook",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/webhooks/{{webhook_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "webhooks", "{{webhook_id}}"]
+            },
+            "description": "Remove o webhook permanentemente. Resposta 204 sem corpo. Resposta 404 se não encontrado."
+          }
+        },
+        {
+          "name": "Listar entregas",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/webhooks/{{webhook_id}}/deliveries",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "webhooks", "{{webhook_id}}", "deliveries"]
+            },
+            "description": "Retorna o histórico de entregas do webhook.\n\nStatus possíveis: pending, delivered, failed, dead_letter."
+          }
+        },
+        {
+          "name": "Retentar entrega",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/webhooks/{{webhook_id}}/deliveries/{{delivery_id}}/retry",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "webhooks", "{{webhook_id}}", "deliveries", "{{delivery_id}}", "retry"]
+            },
+            "description": "Força uma nova tentativa de entrega imediatamente. Útil para reprocessar entregas com status failed ou dead_letter. Retorna o registro atualizado da entrega."
           }
         }
       ]

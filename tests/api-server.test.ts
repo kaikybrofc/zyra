@@ -31,6 +31,7 @@ const serverCloseMock = vi.fn((cb?: (error?: Error | null) => void) => cb?.(null
 const handleConnectionsRoutesMock = vi.fn(async () => false)
 const handleMessagesRoutesMock = vi.fn(async () => false)
 const handleGroupsRoutesMock = vi.fn(async () => false)
+const handleWebhooksRoutesMock = vi.fn(async () => false)
 
 vi.mock('../src/config/index.js', () => ({ config: mockConfig }))
 vi.mock('node:http', () => ({
@@ -50,6 +51,9 @@ vi.mock('../src/api/routes/messages.js', () => ({
 }))
 vi.mock('../src/api/routes/groups.js', () => ({
   handleGroupsRoutes: (...args: unknown[]) => handleGroupsRoutesMock(...args),
+}))
+vi.mock('../src/api/routes/webhooks.js', () => ({
+  handleWebhooksRoutes: (...args: unknown[]) => handleWebhooksRoutesMock(...args),
 }))
 
 const logger = {
@@ -90,6 +94,7 @@ describe('startApiServer', () => {
     handleConnectionsRoutesMock.mockResolvedValue(false)
     handleMessagesRoutesMock.mockResolvedValue(false)
     handleGroupsRoutesMock.mockResolvedValue(false)
+    handleWebhooksRoutesMock.mockResolvedValue(false)
   })
 
   it('sobe servidor na porta e host configurados', async () => {
@@ -200,5 +205,17 @@ describe('startApiServer', () => {
 
     await expect(handle.stop()).resolves.toBeUndefined()
     expect(serverCloseMock).toHaveBeenCalled()
+  })
+
+  it('encaminha para handleWebhooksRoutes', async () => {
+    handleWebhooksRoutesMock.mockResolvedValue(true)
+    const { startApiServer } = await import('../src/api/server.ts')
+    startApiServer({ logger: logger as never })
+
+    const res = createResponse()
+    await serverHandler?.(makeReq('GET', '/connections/sess/webhooks'), res)
+
+    expect(handleWebhooksRoutesMock).toHaveBeenCalled()
+    expect(res.statusCode).not.toBe(404)
   })
 })

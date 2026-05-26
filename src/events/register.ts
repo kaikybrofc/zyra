@@ -6,6 +6,7 @@ import { renderQrInTerminal } from './qr-terminal.js'
 import { handleIncomingMessages } from '../router/index.js'
 import { createSqlStore } from '../store/sql-store.js'
 import { getMessageText, getNormalizedMessage } from '../utils/message.js'
+import { dispatchWebhookEvent, WEBHOOK_SUPPORTED_EVENTS } from '../webhook/dispatcher.js'
 
 /**
  * Opções de inicialização para o registro de eventos.
@@ -997,6 +998,9 @@ export function registerEvents({ sock, logger, reconnect, connectionId, onQrCode
         await handler(data as never)
       } else {
         logEvent(event, {})
+      }
+      if (WEBHOOK_SUPPORTED_EVENTS.has(event)) {
+        void dispatchWebhookEvent(connectionId, event, data)
       }
     })
   }
