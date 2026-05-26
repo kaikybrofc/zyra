@@ -30,7 +30,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && cp src/api/dashboard.html dist/api/dashboard.html",
     "start": "tsx src/index.ts",
     "start:prod": "node dist/index.js",
     "pm2:start": "npm run build && pm2 startOrRestart ecosystem.config.cjs --env production",

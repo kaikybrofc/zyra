@@ -7,6 +7,7 @@ import { handleMessagesRoutes } from './routes/messages.js'
 import { handleGroupsRoutes } from './routes/groups.js'
 import { handleWebhooksRoutes } from './routes/webhooks.js'
 import { handleGlobalWebhooksRoutes } from './routes/webhooks-global.js'
+import { serveDashboard } from './routes/dashboard.js'
 
 /**
  * Opções de inicialização do servidor HTTP da API REST.
@@ -43,6 +44,15 @@ type ApiServerHandle = {
  */
 export const startApiServer = ({ logger }: StartApiServerOptions): ApiServerHandle => {
   const server: Server = createServer(async (req, res) => {
+    const url = parseUrl(req)
+    const pathname = url.pathname
+
+    // Dashboard served before auth — auth is handled client-side by the page
+    if (pathname === '/' || pathname === '/dashboard') {
+      serveDashboard(req, res)
+      return
+    }
+
     const apiKey = config.apiKey
     if (apiKey) {
       const auth = req.headers['authorization'] ?? ''
@@ -53,9 +63,6 @@ export const startApiServer = ({ logger }: StartApiServerOptions): ApiServerHand
         return
       }
     }
-
-    const url = parseUrl(req)
-    const pathname = url.pathname
 
     try {
       if (await handleConnectionsRoutes(req, res, pathname, logger)) return

@@ -45,7 +45,9 @@ const rowToWebhook = (row: WebhookRow): WebhookRecord => ({
   id: row.id,
   connectionId: row.connection_id,
   url: row.url,
-  eventsFilter: JSON.parse(row.events_filter) as string[],
+  eventsFilter: (typeof row.events_filter === 'string'
+    ? JSON.parse(row.events_filter)
+    : row.events_filter) as string[],
   active: row.active === 1,
   secret: row.secret,
   createdAt: row.created_at.getTime(),
@@ -57,7 +59,7 @@ const rowToDelivery = (row: DeliveryRow): DeliveryRecord => ({
   webhookId: row.webhook_id,
   connectionId: row.connection_id,
   eventType: row.event_type,
-  payload: JSON.parse(row.payload),
+  payload: typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload,
   status: row.status,
   attempts: row.attempts,
   lastAttemptAt: row.last_attempt_at ? row.last_attempt_at.getTime() : null,
