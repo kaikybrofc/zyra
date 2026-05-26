@@ -189,5 +189,35 @@ describe('webhook store', () => {
       const matches = await store.getActiveWebhooksForEvent('conn1', 'connection.update')
       expect(matches).toHaveLength(0)
     })
+
+    it('inclui webhook global (__global__) no dispatch de qualquer instância', async () => {
+      executeMock.mockResolvedValue([[]])
+      await store.createWebhook(store.GLOBAL_WEBHOOK_CONNECTION_ID, { url: 'https://global.com', eventsFilter: ['*'] })
+      await store.createWebhook('conn1', { url: 'https://local.com', eventsFilter: ['*'] })
+
+      const matches = await store.getActiveWebhooksForEvent('conn1', 'messages.upsert')
+      expect(matches).toHaveLength(2)
+      expect(matches.map((w) => w.url).sort()).toEqual(['https://global.com', 'https://local.com'])
+    })
+
+    it('webhook global não aparece em instância diferente da que o criou', async () => {
+      executeMock.mockResolvedValue([[]])
+      await store.createWebhook(store.GLOBAL_WEBHOOK_CONNECTION_ID, { url: 'https://global.com', eventsFilter: ['*'] })
+
+      const matchesConn2 = await store.getActiveWebhooksForEvent('conn2', 'messages.upsert')
+      expect(matchesConn2.some((w) => w.url === 'https://global.com')).toBe(true)
+
+      const matchesConn1 = await store.getActiveWebhooksForEvent('conn1', 'messages.upsert')
+      expect(matchesConn1.some((w) => w.url === 'https://global.com')).toBe(true)
+    })
+
+    it('webhook global inativo não é disparado', async () => {
+      executeMock.mockResolvedValue([[]])
+      const wh = await store.createWebhook(store.GLOBAL_WEBHOOK_CONNECTION_ID, { url: 'https://global.com', eventsFilter: ['*'] })
+      await store.updateWebhook(wh.id, store.GLOBAL_WEBHOOK_CONNECTION_ID, { active: false })
+
+      const matches = await store.getActiveWebhooksForEvent('conn1', 'connection.update')
+      expect(matches).toHaveLength(0)
+    })
   })
 })

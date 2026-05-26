@@ -3,6 +3,8 @@ import type { RowDataPacket, OkPacket } from 'mysql2/promise'
 import { getMysqlPool } from '../core/db/mysql.js'
 import type { WebhookRecord, DeliveryRecord, DeliveryStatus } from './types.js'
 
+export const GLOBAL_WEBHOOK_CONNECTION_ID = '__global__'
+
 const webhooks = new Map<string, WebhookRecord>()
 const deliveries = new Map<string, DeliveryRecord>()
 
@@ -181,8 +183,12 @@ export const deleteWebhook = async (id: string, connectionId: string): Promise<b
 export const getActiveWebhooksForEvent = async (connectionId: string, event: string): Promise<WebhookRecord[]> => {
   const { webhookMatchesEvent } = await import('./events.js')
   await loadWebhooksForConnection(connectionId)
+  await loadWebhooksForConnection(GLOBAL_WEBHOOK_CONNECTION_ID)
   return Array.from(webhooks.values()).filter(
-    (wh) => wh.connectionId === connectionId && wh.active && webhookMatchesEvent(wh.eventsFilter, event)
+    (wh) =>
+      (wh.connectionId === connectionId || wh.connectionId === GLOBAL_WEBHOOK_CONNECTION_ID) &&
+      wh.active &&
+      webhookMatchesEvent(wh.eventsFilter, event)
   )
 }
 

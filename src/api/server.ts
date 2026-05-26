@@ -6,6 +6,7 @@ import { handleConnectionsRoutes } from './routes/connections.js'
 import { handleMessagesRoutes } from './routes/messages.js'
 import { handleGroupsRoutes } from './routes/groups.js'
 import { handleWebhooksRoutes } from './routes/webhooks.js'
+import { handleGlobalWebhooksRoutes } from './routes/webhooks-global.js'
 
 /**
  * Opções de inicialização do servidor HTTP da API REST.
@@ -60,6 +61,7 @@ export const startApiServer = ({ logger }: StartApiServerOptions): ApiServerHand
       if (await handleConnectionsRoutes(req, res, pathname, logger)) return
       if (await handleMessagesRoutes(req, res, pathname, logger)) return
       if (await handleGroupsRoutes(req, res, pathname, logger)) return
+      if (await handleGlobalWebhooksRoutes(req, res, pathname, logger)) return
       if (await handleWebhooksRoutes(req, res, pathname, logger)) return
 
       sendError(res, 404, 'rota não encontrada')

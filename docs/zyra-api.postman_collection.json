@@ -326,7 +326,112 @@
       ]
     },
     {
-      "name": "Webhooks",
+      "name": "Webhooks Globais",
+      "item": [
+        {
+          "name": "Listar webhooks globais",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/webhooks",
+              "host": ["{{base_url}}"],
+              "path": ["webhooks"]
+            },
+            "description": "Retorna todos os webhooks globais. Webhooks globais recebem eventos de todas as instâncias."
+          }
+        },
+        {
+          "name": "Criar webhook global",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/webhooks",
+              "host": ["{{base_url}}"],
+              "path": ["webhooks"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://meu-sistema.com/webhook\",\n  \"eventsFilter\": [\"*\"],\n  \"secret\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Cria um webhook global que recebe eventos de todas as instâncias.\n\nO payload de cada evento inclui o campo connectionId para identificar a instância de origem."
+          }
+        },
+        {
+          "name": "Buscar webhook global",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/webhooks/{{webhook_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["webhooks", "{{webhook_id}}"]
+            },
+            "description": "Retorna os dados de um webhook global específico."
+          }
+        },
+        {
+          "name": "Atualizar webhook global",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/webhooks/{{webhook_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["webhooks", "{{webhook_id}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"active\": true,\n  \"eventsFilter\": [\"messages\", \"connection.update\"]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Atualiza parcialmente um webhook global. Campos disponíveis: url, eventsFilter, active, secret."
+          }
+        },
+        {
+          "name": "Deletar webhook global",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/webhooks/{{webhook_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["webhooks", "{{webhook_id}}"]
+            },
+            "description": "Remove o webhook global permanentemente. Resposta 204 sem corpo."
+          }
+        },
+        {
+          "name": "Listar entregas (global)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/webhooks/{{webhook_id}}/deliveries",
+              "host": ["{{base_url}}"],
+              "path": ["webhooks", "{{webhook_id}}", "deliveries"]
+            },
+            "description": "Retorna o histórico de entregas de um webhook global."
+          }
+        },
+        {
+          "name": "Retentar entrega (global)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/webhooks/{{webhook_id}}/deliveries/{{delivery_id}}/retry",
+              "host": ["{{base_url}}"],
+              "path": ["webhooks", "{{webhook_id}}", "deliveries", "{{delivery_id}}", "retry"]
+            },
+            "description": "Força nova tentativa de entrega de um webhook global."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks por Instância",
       "item": [
         {
           "name": "Listar webhooks",
