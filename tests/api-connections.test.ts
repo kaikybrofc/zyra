@@ -1,0 +1,246 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ConnectionInfo, ConnectionStatus } from '../src/core/connection/manager.js'
+
+type FakeResponse = {
+  statusCode: number
+  headers: Record<string, string>
+  body: string
+  headersSent: boolean
+  setHeader: ReturnType<typeof vi.fn>
+  end: ReturnType<typeof vi.fn>
+}
+
+const createConnectionMock = vi.fn()
+const listConnectionsMock = vi.fn()
+const getConnectionMock = vi.fn()
+const setConnectionLabelMock = vi.fn()
+const connectMock = vi.fn(async () => undefined)
+const disconnectMock = vi.fn(async () => undefined)
+const restartMock = vi.fn(async () => undefined)
+const deleteConnectionMock = vi.fn(async () => undefined)
+
+const logger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+  trace: vi.fn(),
+}
+
+vi.mock('../src/core/connection/manager.js', () => ({
+  createConnection: (...args: unknown[]) => createConnectionMock(...args),
+  listConnections: (...args: unknown[]) => listConnectionsMock(...args),
+  getConnection: (...args: unknown[]) => getConnectionMock(...args),
+  setConnectionLabel: (...args: unknown[]) => setConnectionLabelMock(...args),
+  connect: (...args: unknown[]) => connectMock(...args),
+  disconnect: (...args: unknown[]) => disconnectMock(...args),
+  restart: (...args: unknown[]) => restartMock(...args),
+  deleteConnection: (...args: unknown[]) => deleteConnectionMock(...args),
+}))
+
+const makeInfo = (overrides: Partial<ConnectionInfo> = {}): ConnectionInfo => ({
+  connectionId: 'test-id',
+  label: null,
+  status: 'created' as ConnectionStatus,
+  socketGeneration: 0,
+  lastReconnectAt: 0,
+  reconnectInFlight: false,
+  socketActive: false,
+  qrCode: null,
+  qrCodeAt: null,
+  ...overrides,
+})
+
+const createResponse = (): FakeResponse => {
+  const res: FakeResponse = {
+    statusCode: 200,
+    headers: {},
+    body: '',
+    headersSent: false,
+    setHeader: vi.fn((key: string, value: string) => { res.headers[key] = value }),
+    end: vi.fn((body?: string) => { res.body = body ?? ''; res.headersSent = true }),
+  }
+  return res
+}
+
+const makeReq = (method: string, url: string, body = '') => ({
+  method,
+  url,
+  headers: { 'content-type': 'application/json' },
+  on: vi.fn((event: string, cb: (chunk?: unknown) => void) => {
+    if (event === 'data' && body) cb(Buffer.from(body))
+    if (event === 'end') cb()
+  }),
+})
+
+describe('handleConnectionsRoutes', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.clearAllMocks()
+    listConnectionsMock.mockReturnValue([])
+    getConnectionMock.mockReturnValue(null)
+  })
+
+  it('GET /connections retorna lista vazia', async () => {
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    const handled = await handleConnectionsRoutes(makeReq('GET', '/connections') as never, res as never, '/connections', logger as never)
+
+    expect(handled).toBe(true)
+    expect(res.statusCode).toBe(200)
+    expect(JSON.parse(res.body)).toEqual([])
+  })
+
+  it('GET /connections retorna lista com itens', async () => {
+    listConnectionsMock.mockReturnValue([makeInfo({ connectionId: 'a' }), makeInfo({ connectionId: 'b' })])
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('GET', '/connections') as never, res as never, '/connections', logger as never)
+
+    const data = JSON.parse(res.body) as ConnectionInfo[]
+    expect(data).toHaveLength(2)
+    expect(data.map((c) => c.connectionId)).toEqual(['a', 'b'])
+  })
+
+  it('POST /connections cria conexão com connectionId válido', async () => {
+    getConnectionMock.mockReturnValue(null)
+    createConnectionMock.mockReturnValue(makeInfo({ connectionId: 'nova' }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    const body = JSON.stringify({ connectionId: 'nova' })
+    await handleConnectionsRoutes(makeReq('POST', '/connections', body) as never, res as never, '/connections', logger as never)
+
+    expect(res.statusCode).toBe(201)
+    expect(createConnectionMock).toHaveBeenCalledWith('nova')
+  })
+
+  it('POST /connections retorna 400 sem connectionId', async () => {
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('POST', '/connections', '{}') as never, res as never, '/connections', logger as never)
+
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toMatchObject({ error: expect.stringContaining('connectionId') })
+  })
+
+  it('POST /connections retorna 409 para connectionId duplicado', async () => {
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'existente' }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    const body = JSON.stringify({ connectionId: 'existente' })
+    await handleConnectionsRoutes(makeReq('POST', '/connections', body) as never, res as never, '/connections', logger as never)
+
+    expect(res.statusCode).toBe(409)
+  })
+
+  it('GET /connections/:id retorna 404 para id inexistente', async () => {
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('GET', '/connections/nao-existe') as never, res as never, '/connections/nao-existe', logger as never)
+
+    expect(res.statusCode).toBe(404)
+  })
+
+  it('GET /connections/:id retorna info da conexão', async () => {
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-1', status: 'open' }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('GET', '/connections/sess-1') as never, res as never, '/connections/sess-1', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    const data = JSON.parse(res.body) as ConnectionInfo
+    expect(data.connectionId).toBe('sess-1')
+    expect(data.status).toBe('open')
+  })
+
+  it('PATCH /connections/:id atualiza label', async () => {
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-patch', label: 'Novo Label' }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    const body = JSON.stringify({ label: 'Novo Label' })
+    await handleConnectionsRoutes(makeReq('PATCH', '/connections/sess-patch', body) as never, res as never, '/connections/sess-patch', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(setConnectionLabelMock).toHaveBeenCalledWith('sess-patch', 'Novo Label')
+  })
+
+  it('DELETE /connections/:id retorna 204', async () => {
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-del' }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('DELETE', '/connections/sess-del') as never, res as never, '/connections/sess-del', logger as never)
+
+    expect(res.statusCode).toBe(204)
+    expect(deleteConnectionMock).toHaveBeenCalledWith('sess-del', logger)
+  })
+
+  it('POST /connections/:id/connect chama connect', async () => {
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-conn', status: 'connecting' }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('POST', '/connections/sess-conn/connect') as never, res as never, '/connections/sess-conn/connect', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(connectMock).toHaveBeenCalledWith('sess-conn', logger)
+  })
+
+  it('POST /connections/:id/disconnect chama disconnect', async () => {
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-disc', status: 'closed' }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('POST', '/connections/sess-disc/disconnect') as never, res as never, '/connections/sess-disc/disconnect', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(disconnectMock).toHaveBeenCalledWith('sess-disc', logger)
+  })
+
+  it('POST /connections/:id/restart chama restart', async () => {
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-rest', status: 'connecting' }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('POST', '/connections/sess-rest/restart') as never, res as never, '/connections/sess-rest/restart', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(restartMock).toHaveBeenCalledWith('sess-rest', logger)
+  })
+
+  it('GET /connections/:id/status retorna status resumido', async () => {
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-stat', status: 'open', socketActive: true }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('GET', '/connections/sess-stat/status') as never, res as never, '/connections/sess-stat/status', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    const data = JSON.parse(res.body) as { connectionId: string; status: string; socketActive: boolean }
+    expect(data.status).toBe('open')
+    expect(data.socketActive).toBe(true)
+  })
+
+  it('GET /connections/:id/qr retorna QR disponível', async () => {
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-qr', qrCode: 'qr-data', qrCodeAt: 1000 }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('GET', '/connections/sess-qr/qr') as never, res as never, '/connections/sess-qr/qr', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    const data = JSON.parse(res.body) as { qrCode: string }
+    expect(data.qrCode).toBe('qr-data')
+  })
+
+  it('GET /connections/:id/qr retorna 404 quando QR não disponível', async () => {
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-no-qr', qrCode: null }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('GET', '/connections/sess-no-qr/qr') as never, res as never, '/connections/sess-no-qr/qr', logger as never)
+
+    expect(res.statusCode).toBe(404)
+  })
+
+  it('retorna false para rota não reconhecida', async () => {
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    const handled = await handleConnectionsRoutes(makeReq('GET', '/other') as never, res as never, '/other', logger as never)
+
+    expect(handled).toBe(false)
+  })
+})

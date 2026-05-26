@@ -1,0 +1,319 @@
+{
+  "info": {
+    "name": "Zyra API",
+    "description": "Gerenciamento de instâncias WhatsApp via API REST do Zyra.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3009",
+      "type": "string"
+    },
+    {
+      "key": "api_key",
+      "value": "sua-chave-secreta",
+      "type": "string"
+    },
+    {
+      "key": "connection_id",
+      "value": "minha-sessao",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{api_key}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Conexões",
+      "item": [
+        {
+          "name": "Criar instância",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/connections",
+              "host": ["{{base_url}}"],
+              "path": ["connections"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"connectionId\": \"{{connection_id}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Registra uma nova instância sem iniciar conexão com o WhatsApp. O connectionId é o identificador único e imutável da instância."
+          }
+        },
+        {
+          "name": "Listar instâncias",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/connections",
+              "host": ["{{base_url}}"],
+              "path": ["connections"]
+            },
+            "description": "Retorna todas as instâncias registradas no processo atual."
+          }
+        },
+        {
+          "name": "Detalhes de uma instância",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}"]
+            },
+            "description": "Retorna os dados completos de uma instância específica."
+          }
+        },
+        {
+          "name": "Atualizar label",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Bot de Suporte\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Atribui um nome legível à instância. Envie null para remover o label."
+          }
+        },
+        {
+          "name": "Deletar instância",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}"]
+            },
+            "description": "Remove a instância permanentemente. Se houver socket ativo, ele é encerrado antes. Resposta 204 sem corpo."
+          }
+        },
+        {
+          "name": "Conectar instância (gerar QR)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/connect",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "connect"]
+            },
+            "description": "Inicia o processo de autenticação com o WhatsApp. Após chamar este endpoint, consulte /qr para obter o QR code."
+          }
+        },
+        {
+          "name": "Obter QR code",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/qr",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "qr"]
+            },
+            "description": "Retorna o QR code mais recente disponível para escaneamento. O QR expira em ~60s — consulte novamente se expirar."
+          }
+        },
+        {
+          "name": "Verificar status",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/status",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "status"]
+            },
+            "description": "Retorna apenas o status resumido da instância: connectionId, status e socketActive."
+          }
+        },
+        {
+          "name": "Desconectar instância",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/disconnect",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "disconnect"]
+            },
+            "description": "Encerra o socket sem remover a instância. A instância pode ser reconectada via /connect."
+          }
+        },
+        {
+          "name": "Reiniciar conexão",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/restart",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "restart"]
+            },
+            "description": "Desconecta e reconecta automaticamente. Útil para forçar novo ciclo de autenticação."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Mensagens",
+      "item": [
+        {
+          "name": "Enviar texto",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/messages/send",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "messages", "send"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"text\",\n  \"to\": \"5511999999999@s.whatsapp.net\",\n  \"text\": \"Olá! Mensagem enviada via API.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Envia uma mensagem de texto. A instância precisa estar com status open."
+          }
+        },
+        {
+          "name": "Enviar imagem",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/messages/send",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "messages", "send"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"image\",\n  \"to\": \"5511999999999@s.whatsapp.net\",\n  \"url\": \"https://example.com/imagem.jpg\",\n  \"caption\": \"Legenda opcional\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Envia uma imagem a partir de URL pública. O campo caption é opcional."
+          }
+        },
+        {
+          "name": "Enviar vídeo",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/messages/send",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "messages", "send"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"video\",\n  \"to\": \"5511999999999@s.whatsapp.net\",\n  \"url\": \"https://example.com/video.mp4\",\n  \"caption\": \"Legenda opcional\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Envia um vídeo a partir de URL pública. O campo caption é opcional."
+          }
+        },
+        {
+          "name": "Enviar áudio",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/messages/send",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "messages", "send"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"audio\",\n  \"to\": \"5511999999999@s.whatsapp.net\",\n  \"url\": \"https://example.com/audio.mp3\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Envia um áudio a partir de URL pública."
+          }
+        },
+        {
+          "name": "Enviar documento",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/messages/send",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "messages", "send"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"document\",\n  \"to\": \"5511999999999@s.whatsapp.net\",\n  \"url\": \"https://example.com/arquivo.pdf\",\n  \"fileName\": \"relatorio.pdf\",\n  \"mimetype\": \"application/pdf\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Envia um documento a partir de URL pública. O campo mimetype é opcional (padrão: application/octet-stream)."
+          }
+        },
+        {
+          "name": "Enviar mensagem para grupo",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/messages/send",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "messages", "send"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"text\",\n  \"to\": \"120363000000000000@g.us\",\n  \"text\": \"Mensagem para o grupo.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Envia mensagem de texto para um grupo. Use o JID do grupo (@g.us) no campo to."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Grupos",
+      "item": [
+        {
+          "name": "Listar grupos",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/connections/{{connection_id}}/groups",
+              "host": ["{{base_url}}"],
+              "path": ["connections", "{{connection_id}}", "groups"]
+            },
+            "description": "Retorna todos os grupos em que a instância participa, no formato original do Baileys (Record<string, GroupMetadata>). A instância precisa estar com status open."
+          }
+        }
+      ]
+    }
+  ]
+}

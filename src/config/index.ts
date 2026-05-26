@@ -293,4 +293,20 @@ export const config = {
   get healthHost() {
     return process.env.WA_HEALTH_HOST ?? '0.0.0.0'
   },
+  /** Habilita servidor HTTP da API REST (WA_API_ENABLED). */
+  get apiEnabled() {
+    return readBoolean(process.env.WA_API_ENABLED, false)
+  },
+  /** Porta do servidor HTTP da API REST (WA_API_PORT). */
+  get apiPort() {
+    return readNumber(process.env.WA_API_PORT, 3000)
+  },
+  /** Host de bind do servidor HTTP da API REST (WA_API_HOST). */
+  get apiHost() {
+    return process.env.WA_API_HOST ?? '0.0.0.0'
+  },
+  /** Chave de autenticação da API REST — se definida, exige Bearer token (WA_API_KEY). */
+  get apiKey() {
+    return process.env.WA_API_KEY ?? null
+  },
 }

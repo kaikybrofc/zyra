@@ -19,6 +19,12 @@ type RegisterOptions = {
   reconnect: () => Promise<void>
   /** Identificador único da conexão (usado para logs e banco de dados). */
   connectionId: string
+  /** Callback chamado sempre que um novo QR code é recebido do Baileys. */
+  onQrCode?: (qr: string) => void
+  /** Callback chamado quando a conexão é estabelecida com sucesso. */
+  onConnectionOpen?: () => void
+  /** Callback chamado quando a conexão é encerrada. */
+  onConnectionClose?: () => void
 }
 
 /**
@@ -101,7 +107,7 @@ type EventHandler<K extends keyof BaileysEventMap> = (data: BaileysEventMap[K]) 
  *
  * @param options Dependências e callbacks do ciclo de vida da conexão.
  */
-export function registerEvents({ sock, logger, reconnect, connectionId }: RegisterOptions): void {
+export function registerEvents({ sock, logger, reconnect, connectionId, onQrCode, onConnectionOpen, onConnectionClose }: RegisterOptions): void {
   /** Socket com capability opcional de flush imediato de credenciais. */
   const socketWithCredsFlush = sock as SocketWithCredsFlush
   /** Socket com capability opcional de consulta de metadados de newsletter. */
@@ -502,8 +508,9 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
     'connection.update': (update) => {
       const { connection, lastDisconnect, qr, receivedPendingNotifications, isNewLogin } = update
 
-      if (qr && config.printQRInTerminal) {
-        renderQrInTerminal(logger, qr, connectionId)
+      if (qr) {
+        if (config.printQRInTerminal) renderQrInTerminal(logger, qr, connectionId)
+        onQrCode?.(qr)
       }
 
       logger.info('connection.update', {
@@ -525,6 +532,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
       )
 
       if (connection === 'close') {
+        onConnectionClose?.()
         const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut
         const restartRequired = statusCode === DisconnectReason.restartRequired
@@ -551,6 +559,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
           })()
         }
       } else if (connection === 'open') {
+        onConnectionOpen?.()
         logger.info('conexão aberta')
         if (isNewLogin && !restartedAfterNewLogin) {
           restartedAfterNewLogin = true
