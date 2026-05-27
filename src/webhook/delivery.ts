@@ -3,6 +3,7 @@ import { config } from '../config/index.js'
 import type { WebhookRecord, DeliveryRecord } from './types.js'
 import type { WebhookPayload } from './types.js'
 import { createDelivery, updateDelivery } from './store.js'
+import { validateWebhookUrl } from './url-validation.js'
 
 const RETRY_DELAYS_MS = [
   30 * 1000,        // 1st retry: 30s
@@ -28,28 +29,33 @@ export const attemptDelivery = async (
     headers['x-webhook-signature'] = sign(webhook.secret, body)
   }
 
-  const timeoutMs = config.webhookTimeoutMs
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-
   let responseStatus: number | null = null
   let responseBody: string | null = null
   let success = false
 
-  try {
-    const response = await fetch(webhook.url, {
-      method: 'POST',
-      headers,
-      body,
-      signal: controller.signal,
-    })
-    responseStatus = response.status
-    responseBody = (await response.text()).slice(0, 1000)
-    success = response.ok
-  } catch {
-    // network error or timeout
-  } finally {
-    clearTimeout(timer)
+  const validatedUrl = validateWebhookUrl(webhook.url)
+  if (!validatedUrl.ok) {
+    responseBody = validatedUrl.reason
+  } else {
+    const timeoutMs = config.webhookTimeoutMs
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+
+    try {
+      const response = await fetch(validatedUrl.parsedUrl.toString(), {
+        method: 'POST',
+        headers,
+        body,
+        signal: controller.signal,
+      })
+      responseStatus = response.status
+      responseBody = (await response.text()).slice(0, 1000)
+      success = response.ok
+    } catch {
+      // network error or timeout
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   const attempts = delivery.attempts + 1

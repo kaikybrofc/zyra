@@ -430,7 +430,7 @@
 // State
 // ────────────────────────────────────────────────────────────────────────────
 const S = {
-  apiKey: sessionStorage.getItem('zyra_apikey') ?? null,
+  apiKey: null,
   instances: [],
   globalWebhooks: [],
   instanceWebhooks: {},    // { [connId]: WebhookRecord[] }
@@ -476,8 +476,6 @@ function showAuthOverlay() {
 async function saveApiKey() {
   const val = document.getElementById('api-key-input').value.trim()
   S.apiKey = val || null
-  if (S.apiKey) sessionStorage.setItem('zyra_apikey', S.apiKey)
-  else sessionStorage.removeItem('zyra_apikey')
   try {
     const r = await fetch('/connections', {
       headers: S.apiKey ? { authorization: `Bearer ${S.apiKey}` } : {},

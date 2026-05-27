@@ -140,6 +140,18 @@ describe('handleWebhooksRoutes', () => {
     expect(res.statusCode).toBe(400)
   })
 
+  it('POST /connections/:id/webhooks — retorna 400 com url local', async () => {
+    const res = makeRes()
+    await handleWebhooksRoutes(
+      makeReq('POST', '/connections/conn1/webhooks', { url: 'http://localhost:3000/hook', eventsFilter: ['*'] }) as never,
+      res as never,
+      '/connections/conn1/webhooks',
+      stubLogger as never,
+    )
+    expect(res.statusCode).toBe(400)
+    expect(createWebhookMock).not.toHaveBeenCalled()
+  })
+
   it('GET /connections/:id/webhooks/:wid — 404 quando não encontrado', async () => {
     const res = makeRes()
     const handled = await handleWebhooksRoutes(
@@ -177,6 +189,18 @@ describe('handleWebhooksRoutes', () => {
       stubLogger as never,
     )
     expect(res.statusCode).toBe(200)
+  })
+
+  it('PATCH /connections/:id/webhooks/:wid — retorna 400 com url local', async () => {
+    const res = makeRes()
+    await handleWebhooksRoutes(
+      makeReq('PATCH', '/connections/conn1/webhooks/wh1', { url: 'http://127.0.0.1/hook' }) as never,
+      res as never,
+      '/connections/conn1/webhooks/wh1',
+      stubLogger as never,
+    )
+    expect(res.statusCode).toBe(400)
+    expect(updateWebhookMock).not.toHaveBeenCalled()
   })
 
   it('PATCH /connections/:id/webhooks/:wid — 404 quando não encontrado', async () => {

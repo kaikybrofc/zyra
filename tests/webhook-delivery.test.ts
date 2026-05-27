@@ -108,6 +108,18 @@ describe('webhook delivery', () => {
     expect(updateCall?.[1]?.[0]).toBe('failed')
   })
 
+  it('não envia requisição para URL local e marca como failed', async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200, text: async () => 'ok' })
+    executeMock.mockResolvedValue([[]])
+
+    const { attemptDelivery } = await import('../src/webhook/delivery.ts')
+    await attemptDelivery(makeDelivery(), makeWebhook({ url: 'http://127.0.0.1:3000/hook' }))
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    const updateCall = executeMock.mock.calls.find((c) => String(c[0]).includes('UPDATE'))
+    expect(updateCall?.[1]?.[0]).toBe('failed')
+  })
+
   it('adiciona header x-webhook-signature quando secret presente', async () => {
     fetchMock.mockResolvedValue({ ok: true, status: 200, text: async () => 'ok' })
     executeMock.mockResolvedValue([[]])

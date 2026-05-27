@@ -118,7 +118,7 @@ describe('handleGlobalWebhooksRoutes', () => {
     )
     expect(handled).toBe(true)
     expect(res.statusCode).toBe(201)
-    expect(createWebhookMock).toHaveBeenCalledWith('__global__', expect.objectContaining({ url: 'https://x.com' }))
+    expect(createWebhookMock).toHaveBeenCalledWith('__global__', expect.objectContaining({ url: 'https://x.com/' }))
   })
 
   it('POST /webhooks — retorna 400 sem url', async () => {
@@ -141,6 +141,18 @@ describe('handleGlobalWebhooksRoutes', () => {
       stubLogger as never,
     )
     expect(res.statusCode).toBe(400)
+  })
+
+  it('POST /webhooks — retorna 400 com url local', async () => {
+    const res = makeRes()
+    await handleGlobalWebhooksRoutes(
+      makeReq('POST', '/webhooks', { url: 'http://localhost:3000/hook', eventsFilter: ['*'] }) as never,
+      res as never,
+      '/webhooks',
+      stubLogger as never,
+    )
+    expect(res.statusCode).toBe(400)
+    expect(createWebhookMock).not.toHaveBeenCalled()
   })
 
   it('GET /webhooks/:wid — 404 quando não encontrado', async () => {
@@ -182,6 +194,18 @@ describe('handleGlobalWebhooksRoutes', () => {
     )
     expect(res.statusCode).toBe(200)
     expect(updateWebhookMock).toHaveBeenCalledWith('wh1', '__global__', expect.any(Object))
+  })
+
+  it('PATCH /webhooks/:wid — retorna 400 com url local', async () => {
+    const res = makeRes()
+    await handleGlobalWebhooksRoutes(
+      makeReq('PATCH', '/webhooks/wh1', { url: 'http://127.0.0.1/hook' }) as never,
+      res as never,
+      '/webhooks/wh1',
+      stubLogger as never,
+    )
+    expect(res.statusCode).toBe(400)
+    expect(updateWebhookMock).not.toHaveBeenCalled()
   })
 
   it('PATCH /webhooks/:wid — 404 quando não encontrado', async () => {
