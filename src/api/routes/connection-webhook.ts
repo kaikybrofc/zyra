@@ -13,6 +13,7 @@ import {
   deleteConnection,
   setConnectionLabel,
 } from '../../core/connection/manager.js'
+import { startPairing, cancelPairing } from '../../core/connection/pairing-service.js'
 import {
   BodyTooLargeError,
   matchRoute,
@@ -112,6 +113,7 @@ const toTimestampMs = (value: string): number | null => {
 const resolveDesiredState = (action: CommandActionType): CommandResponse['desired_state'] => {
   if (action === 'pause') return 'paused'
   if (action === 'disconnect') return 'stopped'
+  if (action === 'pairing_cancel') return 'stopped'
   if (action === 'delete_soft' || action === 'delete_hard') return 'deleted'
   return 'running'
 }
@@ -299,21 +301,6 @@ export async function handleConnectionWebhookRoutes(
   const desiredState = resolveDesiredState(actionType)
 
   try {
-    if (actionType === 'pairing_start' || actionType === 'pairing_cancel') {
-      const response: CommandResponse = {
-        ok: false,
-        command_id: commandId,
-        connection_id: connectionId,
-        accepted: false,
-        action,
-        current_state: getConnection(connectionId)?.status ?? null,
-        desired_state: 'running',
-        reason: 'ação de pairing ainda não implementada nesta fase',
-      }
-      await finalizeAndReply(commandId, response, { status: 'rejected', httpStatus: 422 }, res)
-      return true
-    }
-
     if (actionType === 'register') {
       ensureConnectionExists(connectionId)
       if (payload.connection?.display_name !== undefined) {
@@ -334,6 +321,12 @@ export async function handleConnectionWebhookRoutes(
     } else if (actionType === 'resume') {
       ensureConnectionExists(connectionId)
       await resume(connectionId, logger)
+    } else if (actionType === 'pairing_start') {
+      ensureConnectionExists(connectionId)
+      await startPairing(connectionId)
+    } else if (actionType === 'pairing_cancel') {
+      ensureConnectionExists(connectionId)
+      await cancelPairing(connectionId)
     } else if (actionType === 'delete_soft' || actionType === 'delete_hard') {
       if (!getConnection(connectionId)) {
         const response: CommandResponse = invalidResponse(commandId, connectionId, action, 'conexão não encontrada')

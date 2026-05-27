@@ -7,6 +7,7 @@ import { handleIncomingMessages } from '../router/index.js'
 import { createSqlStore } from '../store/sql-store.js'
 import { getMessageText, getNormalizedMessage } from '../utils/message.js'
 import { dispatchWebhookEvent, WEBHOOK_SUPPORTED_EVENTS } from '../webhook/dispatcher.js'
+import { enqueueConnectionOutboxEvent } from '../core/webhooks/outbox-dispatcher.js'
 
 /**
  * Opções de inicialização para o registro de eventos.
@@ -544,6 +545,18 @@ export function registerEvents({ sock, logger, reconnect, connectionId, onQrCode
             statusCode,
             connectionId,
             recommendation: 'verifique reachout timelock/tctoken e reduza alcance para novos contatos temporariamente',
+          })
+        }
+        if (statusCode === DisconnectReason.loggedOut) {
+          void enqueueConnectionOutboxEvent(connectionId, 'connection.auth.logged_out', {
+            statusCode,
+            shouldReconnect: false,
+          })
+        } else if (statusCode) {
+          void enqueueConnectionOutboxEvent(connectionId, 'connection.error', {
+            statusCode,
+            restartRequired,
+            shouldReconnect,
           })
         }
 

@@ -1511,7 +1511,7 @@ Pode repetir ação destrutiva.
 - [x] criar `managed_connections`
 - [x] criar `connection_admin_events`
 - [x] criar `webhook_commands`
-- [ ] criar `webhook_outbox`
+- [x] criar `webhook_outbox`
 
 ### Core
 
@@ -1530,16 +1530,16 @@ Pode repetir ação destrutiva.
 
 ### Pairing
 
-- [ ] extrair `PairingService`
-- [ ] capturar QR sem terminal
-- [ ] expor QR por endpoint/callback
-- [ ] concluir pairing sem restart do PM2
+- [x] extrair `PairingService`
+- [x] capturar QR sem terminal
+- [x] expor QR por endpoint/callback
+- [x] concluir pairing sem restart do PM2
 
 ### Observabilidade
 
 - [x] persistir eventos administrativos
-- [ ] expor status consolidado por conexão
-- [ ] emitir callbacks de saída
+- [x] expor status consolidado por conexão
+- [x] emitir callbacks de saída
 
 ### Compatibilidade
 

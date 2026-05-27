@@ -520,6 +520,26 @@ CREATE TABLE webhook_commands (
   INDEX idx_webhook_commands_connection (connection_id, received_at),
   INDEX idx_webhook_commands_status (status, received_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE webhook_outbox (
+  id VARCHAR(64) NOT NULL,
+  webhook_id VARCHAR(64) NOT NULL,
+  connection_id VARCHAR(64) NOT NULL,
+  event_type VARCHAR(128) NOT NULL,
+  target_url VARCHAR(2048) NOT NULL,
+  payload_json JSON NOT NULL,
+  status ENUM('pending','delivered','failed','dead_letter') NOT NULL DEFAULT 'pending',
+  attempt_count INT NOT NULL DEFAULT 0,
+  next_attempt_at TIMESTAMP NULL,
+  last_error TEXT NULL,
+  response_status INT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_webhook_outbox_status_next (status, next_attempt_at),
+  INDEX idx_webhook_outbox_connection (connection_id, created_at),
+  INDEX idx_webhook_outbox_webhook (webhook_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
 ## Visão geral (como o Zyra usa o banco hoje)

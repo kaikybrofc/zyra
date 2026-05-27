@@ -38,10 +38,14 @@ type ApiServerHandle = {
  * - `POST   /connections/:id/connect`        — conectar (gera QR)
  * - `POST   /connections/:id/disconnect`     — desconectar
  * - `POST   /connections/:id/restart`        — reiniciar conexão
+ * - `POST   /connections/:id/pairing/start`  — iniciar pairing remoto
+ * - `POST   /connections/:id/pairing/cancel` — cancelar pairing remoto
+ * - `GET    /connections/:id/pairing`        — consultar estado do pairing
  * - `GET    /connections/:id/status`         — verificar status
  * - `GET    /connections/:id/qr`             — obter QR code atual
  * - `POST   /connections/:id/messages/send`  — enviar mensagem
  * - `GET    /connections/:id/groups`         — listar grupos
+ * - `POST   /webhooks/connections`           — ingress de comando assinado (HMAC)
  */
 export const startApiServer = ({ logger }: StartApiServerOptions): ApiServerHandle => {
   const server: Server = createServer(async (req, res) => {

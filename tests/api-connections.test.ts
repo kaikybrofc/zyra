@@ -18,6 +18,36 @@ const connectMock = vi.fn(async () => undefined)
 const disconnectMock = vi.fn(async () => undefined)
 const restartMock = vi.fn(async () => undefined)
 const deleteConnectionMock = vi.fn(async () => undefined)
+const startPairingMock = vi.fn(async () => ({
+  connectionId: 'test-id',
+  status: 'pending',
+  qrCode: null,
+  qrUpdatedAt: null,
+  qrExpiresAt: null,
+  startedAt: Date.now(),
+  finishedAt: null,
+  error: null,
+}))
+const getPairingStateMock = vi.fn(async () => ({
+  connectionId: 'test-id',
+  status: 'pending',
+  qrCode: null,
+  qrUpdatedAt: null,
+  qrExpiresAt: null,
+  startedAt: Date.now(),
+  finishedAt: null,
+  error: null,
+}))
+const cancelPairingMock = vi.fn(async () => ({
+  connectionId: 'test-id',
+  status: 'cancelled',
+  qrCode: null,
+  qrUpdatedAt: null,
+  qrExpiresAt: null,
+  startedAt: Date.now(),
+  finishedAt: Date.now(),
+  error: 'pairing cancelado',
+}))
 
 const logger = {
   info: vi.fn(),
@@ -36,6 +66,11 @@ vi.mock('../src/core/connection/manager.js', () => ({
   disconnect: (...args: unknown[]) => disconnectMock(...args),
   restart: (...args: unknown[]) => restartMock(...args),
   deleteConnection: (...args: unknown[]) => deleteConnectionMock(...args),
+}))
+vi.mock('../src/core/connection/pairing-service.js', () => ({
+  startPairing: (...args: unknown[]) => startPairingMock(...args),
+  getPairingState: (...args: unknown[]) => getPairingStateMock(...args),
+  cancelPairing: (...args: unknown[]) => cancelPairingMock(...args),
 }))
 
 const makeInfo = (overrides: Partial<ConnectionInfo> = {}): ConnectionInfo => ({
@@ -234,6 +269,51 @@ describe('handleConnectionsRoutes', () => {
     await handleConnectionsRoutes(makeReq('GET', '/connections/sess-no-qr/qr') as never, res as never, '/connections/sess-no-qr/qr', logger as never)
 
     expect(res.statusCode).toBe(404)
+  })
+
+  it('POST /connections/:id/pairing/start inicia pairing', async () => {
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-pairing' }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(
+      makeReq('POST', '/connections/sess-pairing/pairing/start') as never,
+      res as never,
+      '/connections/sess-pairing/pairing/start',
+      logger as never
+    )
+
+    expect(res.statusCode).toBe(202)
+    expect(startPairingMock).toHaveBeenCalledWith('sess-pairing')
+  })
+
+  it('GET /connections/:id/pairing retorna estado atual', async () => {
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-pairing' }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(
+      makeReq('GET', '/connections/sess-pairing/pairing') as never,
+      res as never,
+      '/connections/sess-pairing/pairing',
+      logger as never
+    )
+
+    expect(res.statusCode).toBe(200)
+    expect(getPairingStateMock).toHaveBeenCalledWith('sess-pairing')
+  })
+
+  it('POST /connections/:id/pairing/cancel cancela pairing', async () => {
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-pairing' }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(
+      makeReq('POST', '/connections/sess-pairing/pairing/cancel') as never,
+      res as never,
+      '/connections/sess-pairing/pairing/cancel',
+      logger as never
+    )
+
+    expect(res.statusCode).toBe(200)
+    expect(cancelPairingMock).toHaveBeenCalledWith('sess-pairing')
   })
 
   it('retorna false para rota não reconhecida', async () => {

@@ -13,6 +13,7 @@ import {
   type ManagedConnectionStatus,
   type UpsertManagedConnectionInput,
 } from '../../store/connection-admin-store.js'
+import { enqueueConnectionOutboxEvent } from '../webhooks/outbox-dispatcher.js'
 
 /** Estado da conexão ao longo do seu ciclo de vida em memória. */
 export type ConnectionStatus = 'created' | 'connecting' | 'qr' | 'open' | 'closed' | 'error'
@@ -254,6 +255,11 @@ class DefaultConnectionManager implements ConnectionManager {
       oldState: oldStatus,
       newState: runtime.status,
     })
+    this.emitOutbox(connectionId, 'connection.qr.updated', {
+      qrCode: qr,
+      qrUpdatedAt: runtime.qrCodeAt,
+      qrExpiresAt: runtime.qrCodeAt ? runtime.qrCodeAt + 60_000 : null,
+    })
   }
 
   setConnectionStatus(connectionId: string, status: 'open' | 'close'): void {
@@ -293,6 +299,7 @@ class DefaultConnectionManager implements ConnectionManager {
         oldState: oldStatus,
         newState: runtime.status,
       })
+      this.emitStatusChanged(connectionId, oldStatus, runtime.status, 'running', 'socket_update')
     }
   }
 
@@ -307,6 +314,7 @@ class DefaultConnectionManager implements ConnectionManager {
     const generation = ++runtime.socketGeneration
     const previousSocket = runtime.activeSocket
 
+    const previousStatus = runtime.status
     runtime.status = 'connecting'
     this.syncManagedConnection(connectionId, {
       status: runtimeStatusToManagedStatus[runtime.status],
@@ -314,6 +322,9 @@ class DefaultConnectionManager implements ConnectionManager {
       desiredState: 'running',
       webhookSource: 'manager.socket.replace',
     })
+    if (previousStatus !== runtime.status) {
+      this.emitStatusChanged(connectionId, previousStatus, runtime.status, 'running', reason)
+    }
 
     if (previousSocket) {
       unregisterShutdownTarget(connectionId, previousSocket)
@@ -446,6 +457,7 @@ class DefaultConnectionManager implements ConnectionManager {
       oldState: oldStatus,
       newState: runtime.status,
     })
+    this.emitStatusChanged(connectionId, oldStatus, runtime.status, 'stopped', 'disconnect')
 
     const sock = runtime.activeSocket
     if (!sock) return
@@ -485,6 +497,7 @@ class DefaultConnectionManager implements ConnectionManager {
       desiredState: 'running',
       webhookSource: 'manager.restart',
     })
+    this.emitStatusChanged(connectionId, 'closed', 'connecting', 'running', 'restart')
     await this.scheduleReconnect(connectionId, 'api_restart')
   }
 
@@ -510,6 +523,7 @@ class DefaultConnectionManager implements ConnectionManager {
       oldState: oldStatus,
       newState: 'paused',
     })
+    this.emitStatusChanged(connectionId, oldStatus, 'paused', 'paused', 'pause')
   }
 
   async resume(connectionId: string, logger: AppLogger): Promise<void> {
@@ -532,6 +546,7 @@ class DefaultConnectionManager implements ConnectionManager {
       oldState: runtime.status,
       newState: 'connecting',
     })
+    this.emitStatusChanged(connectionId, runtime.status, 'connecting', 'running', 'resume')
     await this.connect(connectionId, logger)
   }
 
@@ -552,6 +567,7 @@ class DefaultConnectionManager implements ConnectionManager {
       source: 'manager.delete',
       newState: 'deleted',
     })
+    this.emitStatusChanged(connectionId, 'closed', 'deleted', 'deleted', 'delete')
   }
 
   getOperationalSnapshots() {
@@ -608,6 +624,31 @@ class DefaultConnectionManager implements ConnectionManager {
         err: error,
         connectionId: event.connectionId,
         eventType: event.eventType,
+      })
+    })
+  }
+
+  private emitStatusChanged(
+    connectionId: string,
+    previous: string | null,
+    current: string,
+    desired: 'running' | 'stopped' | 'paused' | 'deleted',
+    reason: string
+  ): void {
+    this.emitOutbox(connectionId, 'connection.status.changed', {
+      previous,
+      current,
+      desired,
+      reason,
+    })
+  }
+
+  private emitOutbox(connectionId: string, eventType: string, data: unknown): void {
+    void enqueueConnectionOutboxEvent(connectionId, eventType, data).catch((error) => {
+      this.getLogger().debug('falha ao enfileirar evento no outbox', {
+        err: error,
+        connectionId,
+        eventType,
       })
     })
   }

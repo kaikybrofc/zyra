@@ -329,4 +329,20 @@ export const config = {
   get webhookMaxAttempts() {
     return readNumber(process.env.WA_WEBHOOK_MAX_ATTEMPTS, 4)
   },
+  /** Habilita callbacks assíncronos por outbox para eventos de conexão (WA_WEBHOOK_OUTBOX_ENABLED). */
+  get webhookOutboxEnabled() {
+    return readBoolean(process.env.WA_WEBHOOK_OUTBOX_ENABLED, true)
+  },
+  /** Tamanho máximo de lote processado por ciclo do worker de outbox (WA_WEBHOOK_OUTBOX_BATCH_SIZE). */
+  get webhookOutboxBatchSize() {
+    return readNumber(process.env.WA_WEBHOOK_OUTBOX_BATCH_SIZE, 50)
+  },
+  /** Backoff base em ms para retentativas do outbox (WA_WEBHOOK_OUTBOX_RETRY_BASE_MS). */
+  get webhookOutboxRetryBaseMs() {
+    return readNumber(process.env.WA_WEBHOOK_OUTBOX_RETRY_BASE_MS, 5_000)
+  },
+  /** Backoff máximo em ms para retentativas do outbox (WA_WEBHOOK_OUTBOX_RETRY_MAX_MS). */
+  get webhookOutboxRetryMaxMs() {
+    return readNumber(process.env.WA_WEBHOOK_OUTBOX_RETRY_MAX_MS, 300_000)
+  },
 }

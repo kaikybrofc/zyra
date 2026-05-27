@@ -7,11 +7,13 @@ import {
 import { startAntiBanMetricsServer } from '../observability/antiban-metrics.js'
 import { startApiServer } from '../api/server.js'
 import { startWebhookRetryWorker } from '../webhook/retry-worker.js'
+import { startWebhookOutboxWorker } from '../core/webhooks/outbox-dispatcher.js'
 import { config } from '../config/index.js'
 
 let metricsServerHandle: { stop: () => Promise<void> } | null = null
 let apiServerHandle: { stop: () => Promise<void> } | null = null
 let webhookWorkerHandle: { stop: () => void } | null = null
+let webhookOutboxWorkerHandle: { stop: () => void } | null = null
 
 /**
  * Executa o bootstrap da aplicação.
@@ -41,6 +43,10 @@ export async function start(): Promise<void> {
 
   if (!webhookWorkerHandle) {
     webhookWorkerHandle = startWebhookRetryWorker(logger)
+  }
+
+  if (!webhookOutboxWorkerHandle && config.webhookOutboxEnabled) {
+    webhookOutboxWorkerHandle = startWebhookOutboxWorker(logger)
   }
 
   await bootstrapConnections()

@@ -256,6 +256,48 @@ curl -s -X POST http://localhost:3000/connections/minha-sessao/restart \
 
 ---
 
+### Iniciar pairing remoto
+
+Inicia o fluxo de pareamento sem terminal e retorna estado inicial (`pending` ou `qr_ready`).
+
+```bash
+curl -s -X POST http://localhost:3000/connections/minha-sessao/pairing/start \
+  -H "Authorization: Bearer sua-chave-secreta" | jq
+```
+
+**Resposta `202`:**
+```json
+{
+  "connectionId": "minha-sessao",
+  "status": "pending",
+  "qrCode": null
+}
+```
+
+---
+
+### Consultar estado do pairing
+
+```bash
+curl -s http://localhost:3000/connections/minha-sessao/pairing \
+  -H "Authorization: Bearer sua-chave-secreta" | jq
+```
+
+**Resposta `200`:** inclui `status`, `qrCode`, `qrUpdatedAt` e `qrExpiresAt`.
+
+---
+
+### Cancelar pairing
+
+```bash
+curl -s -X POST http://localhost:3000/connections/minha-sessao/pairing/cancel \
+  -H "Authorization: Bearer sua-chave-secreta" | jq
+```
+
+**Resposta `200`:** estado final do pairing com `status: "cancelled"`.
+
+---
+
 ### Deletar instância
 
 Remove a instância permanentemente do manager. Se houver socket ativo, ele é encerrado antes.

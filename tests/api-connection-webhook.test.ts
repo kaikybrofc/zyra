@@ -71,6 +71,26 @@ const setConnectionLabelMock = vi.fn((connectionId: string, label: string | null
 const getWebhookCommandMock = vi.fn()
 const saveWebhookCommandReceivedMock = vi.fn()
 const finishWebhookCommandMock = vi.fn()
+const startPairingMock = vi.fn(async () => ({
+  connectionId: 'conn-pair',
+  status: 'pending',
+  qrCode: null,
+  qrUpdatedAt: null,
+  qrExpiresAt: null,
+  startedAt: Date.now(),
+  finishedAt: null,
+  error: null,
+}))
+const cancelPairingMock = vi.fn(async () => ({
+  connectionId: 'conn-pair',
+  status: 'cancelled',
+  qrCode: null,
+  qrUpdatedAt: null,
+  qrExpiresAt: null,
+  startedAt: Date.now(),
+  finishedAt: Date.now(),
+  error: 'pairing cancelado',
+}))
 
 vi.mock('../src/config/index.js', () => ({ config: mockConfig }))
 vi.mock('../src/core/connection/manager.js', () => ({
@@ -83,6 +103,10 @@ vi.mock('../src/core/connection/manager.js', () => ({
   resume: (...args: unknown[]) => resumeMock(...args),
   deleteConnection: (...args: unknown[]) => deleteConnectionMock(...args),
   setConnectionLabel: (...args: unknown[]) => setConnectionLabelMock(...args),
+}))
+vi.mock('../src/core/connection/pairing-service.js', () => ({
+  startPairing: (...args: unknown[]) => startPairingMock(...args),
+  cancelPairing: (...args: unknown[]) => cancelPairingMock(...args),
 }))
 vi.mock('../src/store/connection-admin-store.js', () => ({
   getWebhookCommand: (...args: unknown[]) => getWebhookCommandMock(...args),
@@ -292,6 +316,32 @@ describe('handleConnectionWebhookRoutes', () => {
     )
 
     expect(res.statusCode).toBe(422)
+  })
+
+  it('processa action pairing_start', async () => {
+    const timestamp = String(Date.now())
+    const body = JSON.stringify({
+      event: 'connection.command',
+      command_id: 'cmd-pair-start',
+      connection: { id: 'conn-pair' },
+      action: { type: 'pairing_start' },
+    })
+    const signature = signBody(timestamp, body)
+    const res = makeRes()
+
+    await handleConnectionWebhookRoutes(
+      makeReq(body, {
+        'x-zyra-timestamp': timestamp,
+        'x-zyra-delivery-id': 'delivery-pair-start',
+        'x-zyra-signature': signature,
+      }) as never,
+      res as never,
+      '/webhooks/connections',
+      logger as never
+    )
+
+    expect(res.statusCode).toBe(200)
+    expect(startPairingMock).toHaveBeenCalledWith('conn-pair')
   })
 
   it('retorna 413 quando payload excede limite configurado', async () => {

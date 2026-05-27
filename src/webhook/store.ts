@@ -156,7 +156,7 @@ export const updateWebhook = async (
   const pool = getMysqlPool()
   if (pool) {
     const setClauses: string[] = ['updated_at = NOW()']
-    const params: unknown[] = []
+    const params: Array<string | number | null> = []
     if (patch.url !== undefined) { setClauses.push('url = ?'); params.push(patch.url) }
     if (patch.eventsFilter !== undefined) { setClauses.push('events_filter = ?'); params.push(JSON.stringify(patch.eventsFilter)) }
     if (patch.active !== undefined) { setClauses.push('active = ?'); params.push(patch.active ? 1 : 0) }

@@ -10,6 +10,7 @@ import {
   restart,
   deleteConnection,
 } from '../../core/connection/manager.js'
+import { startPairing, getPairingState, cancelPairing } from '../../core/connection/pairing-service.js'
 import { readBody, parseJson, sendJson, sendError, matchRoute } from '../http.js'
 
 /**
@@ -102,6 +103,38 @@ export async function handleConnectionsRoutes(
     if (!getConnection(id)) { sendError(res, 404, 'conexão não encontrada'); return true }
     await restart(id, logger)
     sendJson(res, 200, getConnection(id))
+    return true
+  }
+
+  // POST /connections/:id/pairing/start
+  const pairingStartMatch = matchRoute('/connections/:id/pairing/start', pathname)
+  if (method === 'POST' && pairingStartMatch) {
+    const id = pairingStartMatch.params['id'] ?? ''
+    if (!getConnection(id)) {
+      createConnection(id)
+    }
+    const state = await startPairing(id)
+    sendJson(res, 202, state)
+    return true
+  }
+
+  // POST /connections/:id/pairing/cancel
+  const pairingCancelMatch = matchRoute('/connections/:id/pairing/cancel', pathname)
+  if (method === 'POST' && pairingCancelMatch) {
+    const id = pairingCancelMatch.params['id'] ?? ''
+    if (!getConnection(id)) { sendError(res, 404, 'conexão não encontrada'); return true }
+    const state = await cancelPairing(id)
+    sendJson(res, 200, state)
+    return true
+  }
+
+  // GET /connections/:id/pairing
+  const pairingGetMatch = matchRoute('/connections/:id/pairing', pathname)
+  if (method === 'GET' && pairingGetMatch) {
+    const id = pairingGetMatch.params['id'] ?? ''
+    if (!getConnection(id)) { sendError(res, 404, 'conexão não encontrada'); return true }
+    const state = await getPairingState(id)
+    sendJson(res, 200, state)
     return true
   }
 

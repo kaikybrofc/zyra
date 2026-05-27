@@ -104,6 +104,33 @@ export type CreateWebhookCommandInput = {
   payload: unknown
 }
 
+export type WebhookOutboxStatus = 'pending' | 'delivered' | 'failed' | 'dead_letter'
+
+export type WebhookOutboxRecord = {
+  id: string
+  webhookId: string
+  connectionId: string
+  eventType: string
+  targetUrl: string
+  payload: unknown
+  status: WebhookOutboxStatus
+  attemptCount: number
+  nextAttemptAt: number | null
+  lastError: string | null
+  responseStatus: number | null
+  createdAt: number
+  updatedAt: number
+}
+
+export type CreateWebhookOutboxInput = {
+  id: string
+  webhookId: string
+  connectionId: string
+  eventType: string
+  targetUrl: string
+  payload: unknown
+}
+
 type ManagedConnectionRow = RowDataPacket & {
   connection_id: string
   display_name: string | null
@@ -147,9 +174,26 @@ type WebhookCommandRow = RowDataPacket & {
   processed_at: Date | string | null
 }
 
+type WebhookOutboxRow = RowDataPacket & {
+  id: string
+  webhook_id: string
+  connection_id: string
+  event_type: string
+  target_url: string
+  payload_json: unknown
+  status: WebhookOutboxStatus
+  attempt_count: number
+  next_attempt_at: Date | string | null
+  last_error: string | null
+  response_status: number | null
+  created_at: Date | string
+  updated_at: Date | string
+}
+
 const managedConnections = new Map<string, ManagedConnectionRecord>()
 const connectionAdminEvents: ConnectionAdminEventRecord[] = []
 const webhookCommands = new Map<string, WebhookCommandRecord>()
+const webhookOutbox = new Map<string, WebhookOutboxRecord>()
 let nextEventId = 1
 
 const toMillis = (value: Date | string | null): number | null => {
@@ -211,6 +255,22 @@ const toWebhookCommandRecord = (row: WebhookCommandRow): WebhookCommandRecord =>
   response: parseJsonColumn(row.response_json),
   receivedAt: toMillis(row.received_at) ?? Date.now(),
   processedAt: toMillis(row.processed_at),
+})
+
+const toWebhookOutboxRecord = (row: WebhookOutboxRow): WebhookOutboxRecord => ({
+  id: row.id,
+  webhookId: row.webhook_id,
+  connectionId: row.connection_id,
+  eventType: row.event_type,
+  targetUrl: row.target_url,
+  payload: parseJsonColumn(row.payload_json),
+  status: row.status,
+  attemptCount: row.attempt_count,
+  nextAttemptAt: toMillis(row.next_attempt_at),
+  lastError: row.last_error,
+  responseStatus: row.response_status,
+  createdAt: toMillis(row.created_at) ?? Date.now(),
+  updatedAt: toMillis(row.updated_at) ?? Date.now(),
 })
 
 const asSqlDate = (value: number | null): Date | null => {
@@ -539,9 +599,150 @@ export const finishWebhookCommand = async (
   return updated
 }
 
+export const createWebhookOutboxEntry = async (
+  input: CreateWebhookOutboxInput
+): Promise<WebhookOutboxRecord> => {
+  const now = Date.now()
+  const record: WebhookOutboxRecord = {
+    id: input.id,
+    webhookId: input.webhookId,
+    connectionId: input.connectionId,
+    eventType: input.eventType,
+    targetUrl: input.targetUrl,
+    payload: input.payload,
+    status: 'pending',
+    attemptCount: 0,
+    nextAttemptAt: now,
+    lastError: null,
+    responseStatus: null,
+    createdAt: now,
+    updatedAt: now,
+  }
+  webhookOutbox.set(record.id, record)
+
+  const pool = getMysqlPool()
+  if (!pool) {
+    return record
+  }
+
+  await pool.execute(
+    `INSERT INTO webhook_outbox (
+       id, webhook_id, connection_id, event_type, target_url, payload_json,
+       status, attempt_count, next_attempt_at, last_error, response_status, created_at, updated_at
+     )
+     VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, NOW(), NULL, NULL, NOW(), NOW())`,
+    [
+      record.id,
+      record.webhookId,
+      record.connectionId,
+      record.eventType,
+      record.targetUrl,
+      JSON.stringify(record.payload ?? null),
+    ]
+  )
+  return record
+}
+
+export const getDueWebhookOutboxEntries = async (limit = 50): Promise<WebhookOutboxRecord[]> => {
+  const safeLimit = Math.max(1, Math.trunc(limit))
+  const pool = getMysqlPool()
+  if (!pool) {
+    const now = Date.now()
+    return Array.from(webhookOutbox.values())
+      .filter(
+        (entry) =>
+          (entry.status === 'pending' || entry.status === 'failed') &&
+          (entry.nextAttemptAt === null || entry.nextAttemptAt <= now)
+      )
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .slice(0, safeLimit)
+  }
+
+  const [rows] = await pool.execute<WebhookOutboxRow[]>(
+    `SELECT id, webhook_id, connection_id, event_type, target_url, payload_json, status,
+            attempt_count, next_attempt_at, last_error, response_status, created_at, updated_at
+     FROM webhook_outbox
+     WHERE status IN ('pending','failed')
+       AND (next_attempt_at IS NULL OR next_attempt_at <= NOW())
+     ORDER BY created_at ASC
+     LIMIT ?`,
+    [safeLimit]
+  )
+  const records = rows.map(toWebhookOutboxRecord)
+  for (const record of records) {
+    webhookOutbox.set(record.id, record)
+  }
+  return records
+}
+
+export const updateWebhookOutboxEntry = async (
+  id: string,
+  patch: {
+    status: WebhookOutboxStatus
+    attemptCount: number
+    nextAttemptAt: number | null
+    lastError: string | null
+    responseStatus: number | null
+  }
+): Promise<WebhookOutboxRecord | null> => {
+  const existing = webhookOutbox.get(id)
+  const now = Date.now()
+  const updated: WebhookOutboxRecord = {
+    id,
+    webhookId: existing?.webhookId ?? '',
+    connectionId: existing?.connectionId ?? '',
+    eventType: existing?.eventType ?? '',
+    targetUrl: existing?.targetUrl ?? '',
+    payload: existing?.payload ?? null,
+    status: patch.status,
+    attemptCount: patch.attemptCount,
+    nextAttemptAt: patch.nextAttemptAt,
+    lastError: patch.lastError,
+    responseStatus: patch.responseStatus,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  }
+  webhookOutbox.set(id, updated)
+
+  const pool = getMysqlPool()
+  if (!pool) {
+    return updated
+  }
+
+  await pool.execute(
+    `UPDATE webhook_outbox
+     SET status = ?, attempt_count = ?, next_attempt_at = ?,
+         last_error = ?, response_status = ?, updated_at = NOW()
+     WHERE id = ?`,
+    [
+      patch.status,
+      patch.attemptCount,
+      asSqlDate(patch.nextAttemptAt),
+      patch.lastError,
+      patch.responseStatus,
+      id,
+    ]
+  )
+
+  const [rows] = await pool.execute<WebhookOutboxRow[]>(
+    `SELECT id, webhook_id, connection_id, event_type, target_url, payload_json, status,
+            attempt_count, next_attempt_at, last_error, response_status, created_at, updated_at
+     FROM webhook_outbox
+     WHERE id = ?
+     LIMIT 1`,
+    [id]
+  )
+  const row = rows[0]
+  if (!row) return null
+  const record = toWebhookOutboxRecord(row)
+  webhookOutbox.set(record.id, record)
+  return record
+}
+
 export const _resetConnectionAdminStore = () => {
   managedConnections.clear()
   connectionAdminEvents.length = 0
   webhookCommands.clear()
+  webhookOutbox.clear()
   nextEventId = 1
 }

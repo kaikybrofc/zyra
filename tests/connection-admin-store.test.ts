@@ -91,4 +91,32 @@ describe('connection-admin-store', () => {
     expect(stored?.status).toBe('accepted')
     expect(stored?.response).toMatchObject({ ok: true, command_id: 'cmd-1' })
   })
+
+  it('cria e atualiza webhook_outbox em memória', async () => {
+    const store = await import('../src/store/connection-admin-store.ts')
+    store._resetConnectionAdminStore()
+
+    await store.createWebhookOutboxEntry({
+      id: 'out-1',
+      webhookId: 'wh-1',
+      connectionId: 'conn-1',
+      eventType: 'connection.status.changed',
+      targetUrl: 'https://example.com/hook',
+      payload: { event: 'connection.status.changed' },
+    })
+
+    const due = await store.getDueWebhookOutboxEntries(10)
+    expect(due).toHaveLength(1)
+    expect(due[0]?.id).toBe('out-1')
+
+    const updated = await store.updateWebhookOutboxEntry('out-1', {
+      status: 'delivered',
+      attemptCount: 1,
+      nextAttemptAt: null,
+      lastError: null,
+      responseStatus: 200,
+    })
+    expect(updated?.status).toBe('delivered')
+    expect(updated?.attemptCount).toBe(1)
+  })
 })
