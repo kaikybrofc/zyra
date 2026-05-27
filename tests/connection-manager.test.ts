@@ -4,6 +4,7 @@ const mockConfig = {
   connectionIds: null as string[] | null,
   connectionId: 'default',
   mysqlUrl: null as string | null,
+  connectionControlMode: 'legacy' as 'legacy' | 'managed' | 'hybrid',
 }
 
 const createSocketMock = vi.fn()
@@ -52,6 +53,7 @@ describe('ConnectionManager', () => {
     mockConfig.connectionIds = null
     mockConfig.connectionId = 'default'
     mockConfig.mysqlUrl = null
+    mockConfig.connectionControlMode = 'legacy'
     createSocketMock.mockImplementation(async () => makeSock())
     isShutdownInProgressMock.mockReturnValue(false)
     initMysqlSchemaMock.mockResolvedValue(undefined)
@@ -238,6 +240,53 @@ describe('ConnectionManager', () => {
     const manager = await import('../src/core/connection/manager.ts')
     const ids = await manager.resolveStartupConnectionIds()
     expect(ids).toEqual(['explicit-a', 'explicit-b'])
+  })
+
+  it('resolveStartupConnectionIds em modo managed usa apenas managed_connections em running', async () => {
+    mockConfig.connectionControlMode = 'managed'
+    mockConfig.mysqlUrl = 'mysql://test'
+    mockConfig.connectionIds = ['ignorado-no-managed']
+
+    const executeMock = vi.fn(async (query: string) => {
+      if (query.includes('FROM managed_connections') && query.includes("desired_state = 'running'")) {
+        return [[{ connection_id: 'managed-a' }, { connection_id: 'managed-b' }], []]
+      }
+      return [[], []]
+    })
+    getMysqlPoolMock.mockReturnValue({ execute: executeMock })
+
+    const manager = await import('../src/core/connection/manager.ts')
+    const ids = await manager.resolveStartupConnectionIds()
+    expect(ids).toEqual(['managed-a', 'managed-b'])
+  })
+
+  it('resolveStartupConnectionIds em modo hybrid migra auth_creds faltantes', async () => {
+    mockConfig.connectionControlMode = 'hybrid'
+    mockConfig.mysqlUrl = 'mysql://test'
+    mockConfig.connectionIds = ['explicit-a']
+
+    const executeMock = vi.fn(async (query: string) => {
+      if (query.includes("FROM managed_connections") && query.includes("desired_state = 'running'")) {
+        return [[{ connection_id: 'managed-a' }], []]
+      }
+      if (query.includes('FROM auth_creds')) {
+        return [[{ connection_id: 'legacy-a' }, { connection_id: 'managed-a' }], []]
+      }
+      if (query.includes('SELECT connection_id FROM managed_connections ORDER BY')) {
+        return [[{ connection_id: 'managed-a' }], []]
+      }
+      return [[], []]
+    })
+    getMysqlPoolMock.mockReturnValue({ execute: executeMock })
+
+    const manager = await import('../src/core/connection/manager.ts')
+    const ids = await manager.resolveStartupConnectionIds()
+    expect(ids).toEqual(['managed-a', 'explicit-a', 'legacy-a'])
+
+    const migrationInsert = executeMock.mock.calls.find((call) =>
+      String(call[0]).includes('INSERT INTO managed_connections')
+    )
+    expect(migrationInsert).toBeTruthy()
   })
 
   it('getOperationalSnapshots retorna snapshot por conexão', async () => {

@@ -1518,8 +1518,8 @@ Pode repetir ação destrutiva.
 - [x] criar `connection-admin-store`
 - [x] extrair `ConnectionManager`
 - [x] mover registry de runtimes para o manager
-- [ ] formalizar estados observados e desejados
-- [ ] adicionar lock por `connection_id`
+- [x] formalizar estados observados e desejados
+- [x] adicionar lock por `connection_id`
 
 ### HTTP
 
@@ -1543,9 +1543,9 @@ Pode repetir ação destrutiva.
 
 ### Compatibilidade
 
-- [ ] adicionar modo `hybrid`
-- [ ] migrar sessões legadas de `auth_creds`
-- [ ] manter CLI funcionando como fallback
+- [x] adicionar modo `hybrid`
+- [x] migrar sessões legadas de `auth_creds`
+- [x] manter CLI funcionando como fallback
 
 ---
 

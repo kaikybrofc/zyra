@@ -10,6 +10,7 @@ type ValidationResult = {
 
 const LOG_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error', 'fatal'])
 const BOOLEAN_VALUES = new Set(['true', 'false'])
+const CONNECTION_CONTROL_MODES = new Set(['legacy', 'managed', 'hybrid'])
 
 /**
  * Realiza validações básicas de ambiente e configuração antes da inicialização (boot).
@@ -61,6 +62,15 @@ const validateEnvironment = (): ValidationResult => {
     const parsed = Number(raw)
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
       errors.push(`${key} must be a valid port (1–65535) (current value: "${raw}").`)
+    }
+  }
+
+  const ensureEnum = (key: string, values: Set<string>) => {
+    const raw = process.env[key]
+    if (!raw) return
+    const normalized = raw.trim().toLowerCase()
+    if (!values.has(normalized)) {
+      errors.push(`${key} inválido ("${raw}"). Valores aceitos: ${Array.from(values).join(', ')}.`)
     }
   }
 
@@ -120,6 +130,7 @@ const validateEnvironment = (): ValidationResult => {
   ensurePositiveNumber('WA_RECONNECT_MAX_DELAY_MS')
   ensurePositiveNumber('WA_RECONNECT_MAX_ATTEMPTS')
   ensurePositiveNumber('WA_VERSION_CACHE_TTL_MS')
+  ensureEnum('WA_CONNECTION_CONTROL_MODE', CONNECTION_CONTROL_MODES)
 
   if (config.connectionIds) {
     const hasInvalidConnectionIds = config.connectionIds.some((connectionId) => !connectionId.trim())

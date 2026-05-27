@@ -87,6 +87,8 @@ class DefaultPairingService {
 
   private readonly runtimes = new Map<string, PairingRuntime>()
 
+  private readonly operationLocks = new Map<string, Promise<void>>()
+
   private get logger(): AppLogger {
     if (!this.loggerRef) this.loggerRef = createLogger()
     return this.loggerRef
@@ -112,7 +114,37 @@ class DefaultPairingService {
     return created
   }
 
+  private async withPairingLock<T>(
+    connectionId: string,
+    operation: 'pairing_start' | 'pairing_cancel',
+    task: () => Promise<T>
+  ): Promise<T> {
+    const previous = this.operationLocks.get(connectionId) ?? Promise.resolve()
+    let release: () => void = () => undefined
+    const current = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const chain = previous.catch(() => undefined).then(() => current)
+    this.operationLocks.set(connectionId, chain)
+
+    await previous.catch(() => undefined)
+
+    try {
+      return await task()
+    } finally {
+      release()
+      if (this.operationLocks.get(connectionId) === chain) {
+        this.operationLocks.delete(connectionId)
+      }
+      this.logger.debug('pairing lock liberado', { connectionId, operation })
+    }
+  }
+
   async startPairing(connectionId: string): Promise<PairingStateView> {
+    return this.withPairingLock(connectionId, 'pairing_start', () => this.startPairingUnsafe(connectionId))
+  }
+
+  private async startPairingUnsafe(connectionId: string): Promise<PairingStateView> {
     const runtime = this.getOrCreateRuntime(connectionId)
     if (runtime.socket && (runtime.status === 'pending' || runtime.status === 'qr_ready')) {
       return toView(runtime)
@@ -248,6 +280,10 @@ class DefaultPairingService {
   }
 
   async cancelPairing(connectionId: string): Promise<PairingStateView> {
+    return this.withPairingLock(connectionId, 'pairing_cancel', () => this.cancelPairingUnsafe(connectionId))
+  }
+
+  private async cancelPairingUnsafe(connectionId: string): Promise<PairingStateView> {
     const runtime = this.getOrCreateRuntime(connectionId)
     if (!runtime.socket && (runtime.status === 'idle' || runtime.status === 'paired')) {
       return toView(runtime)

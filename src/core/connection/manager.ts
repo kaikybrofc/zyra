@@ -10,6 +10,7 @@ import {
   recordConnectionAdminEvent,
   upsertManagedConnection,
   type CreateConnectionAdminEventInput,
+  type ManagedConnectionDesiredState,
   type ManagedConnectionStatus,
   type UpsertManagedConnectionInput,
 } from '../../store/connection-admin-store.js'
@@ -17,6 +18,7 @@ import { enqueueConnectionOutboxEvent } from '../webhooks/outbox-dispatcher.js'
 
 /** Estado da conexão ao longo do seu ciclo de vida em memória. */
 export type ConnectionStatus = 'created' | 'connecting' | 'qr' | 'open' | 'closed' | 'error'
+export type ConnectionDesiredState = ManagedConnectionDesiredState
 
 type ConnectionRuntime = {
   connectionId: string
@@ -25,6 +27,7 @@ type ConnectionRuntime = {
   socketGeneration: number
   lastReconnectAt: number
   status: ConnectionStatus
+  desiredState: ConnectionDesiredState
   qrCode: string | null
   qrCodeAt: number | null
   label: string | null
@@ -73,6 +76,8 @@ export interface ConnectionManager {
 }
 
 type StartupConnectionRow = RowDataPacket & { connection_id: string }
+type ManagedStartupConnectionRow = RowDataPacket & { connection_id: string }
+type ControlMode = 'legacy' | 'managed' | 'hybrid'
 
 const RECONNECT_MIN_DELAY_MS = Math.max(500, Number(process.env.WA_RECONNECT_MIN_DELAY_MS ?? 2500))
 
@@ -102,6 +107,15 @@ const runtimeStatusToManagedStatus: Record<ConnectionStatus, ManagedConnectionSt
   error: 'error',
 }
 
+const observedStatusTransitions: Record<ConnectionStatus, ReadonlySet<ConnectionStatus>> = {
+  created: new Set(['connecting', 'qr', 'open', 'closed', 'error']),
+  connecting: new Set(['qr', 'open', 'closed', 'error']),
+  qr: new Set(['connecting', 'open', 'closed', 'error']),
+  open: new Set(['connecting', 'closed', 'error']),
+  closed: new Set(['connecting', 'qr', 'open', 'error']),
+  error: new Set(['connecting', 'closed']),
+}
+
 const toConnectionInfo = (runtime: ConnectionRuntime): ConnectionInfo => ({
   connectionId: runtime.connectionId,
   label: runtime.label,
@@ -122,6 +136,8 @@ class DefaultConnectionManager implements ConnectionManager {
   private readonly runtimes = new Map<string, ConnectionRuntime>()
 
   private readonly managedSyncByConnection = new Map<string, Promise<void>>()
+
+  private readonly operationLocks = new Map<string, Promise<void>>()
 
   getLogger(): AppLogger {
     if (!this.loggerRef) this.loggerRef = createLogger()
@@ -161,14 +177,175 @@ class DefaultConnectionManager implements ConnectionManager {
     return normalizeConnectionIds(rows.map((row) => row.connection_id))
   }
 
+  private resolveControlMode(): ControlMode {
+    const rawMode = config.connectionControlMode
+    if (rawMode === 'legacy' || rawMode === 'managed' || rawMode === 'hybrid') return rawMode
+    return 'legacy'
+  }
+
+  private async loadManagedRunningConnectionIdsFromMysql(): Promise<string[]> {
+    const pool = getMysqlPool()
+    if (!pool) return []
+    try {
+      const [rows] = await pool.execute<ManagedStartupConnectionRow[]>(
+        `SELECT connection_id
+         FROM managed_connections
+         WHERE enabled = 1
+           AND desired_state = 'running'
+           AND status <> 'deleted'
+         ORDER BY updated_at ASC, connection_id ASC`
+      )
+      return normalizeConnectionIds(rows.map((row) => row.connection_id))
+    } catch (error) {
+      this.getLogger().warn('falha ao carregar conexões de managed_connections para startup', { err: error })
+      return []
+    }
+  }
+
+  private async loadAllManagedConnectionIdsFromMysql(): Promise<string[]> {
+    const pool = getMysqlPool()
+    if (!pool) return []
+    try {
+      const [rows] = await pool.execute<ManagedStartupConnectionRow[]>(
+        `SELECT connection_id FROM managed_connections ORDER BY updated_at ASC, connection_id ASC`
+      )
+      return normalizeConnectionIds(rows.map((row) => row.connection_id))
+    } catch (error) {
+      this.getLogger().warn('falha ao listar managed_connections durante migração híbrida', { err: error })
+      return []
+    }
+  }
+
+  private async migrateLegacySessionsIntoManaged(legacyConnectionIds: string[]): Promise<void> {
+    if (!legacyConnectionIds.length) return
+    const managedIds = await this.loadAllManagedConnectionIdsFromMysql()
+    const managedSet = new Set(managedIds)
+    const toCreate = legacyConnectionIds.filter((connectionId) => !managedSet.has(connectionId))
+    if (!toCreate.length) return
+
+    for (const connectionId of toCreate) {
+      try {
+        await upsertManagedConnection({
+          connectionId,
+          status: 'inactive',
+          desiredState: 'running',
+          enabled: true,
+          pairingState: 'not_required',
+          webhookSource: 'migration.auth_creds',
+          lastError: null,
+        })
+        await recordConnectionAdminEvent({
+          connectionId,
+          eventType: 'connection.migrated.legacy_auth_creds',
+          source: 'manager.migration.hybrid',
+          newState: 'inactive',
+          payload: {
+            desiredState: 'running',
+            from: 'auth_creds',
+          },
+        })
+      } catch (error) {
+        this.getLogger().warn('falha ao migrar conexão legada para managed_connections', {
+          err: error,
+          connectionId,
+        })
+      }
+    }
+
+    this.getLogger().info('migração híbrida concluída', {
+      migrated: toCreate.length,
+      connectionIds: toCreate,
+    })
+  }
+
+  private async withConnectionLock<T>(
+    connectionId: string,
+    operation: string,
+    task: () => Promise<T>
+  ): Promise<T> {
+    const previous = this.operationLocks.get(connectionId) ?? Promise.resolve()
+    let release: () => void = () => undefined
+    const current = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const chain = previous.catch(() => undefined).then(() => current)
+    this.operationLocks.set(connectionId, chain)
+
+    const startedAt = Date.now()
+    await previous.catch(() => undefined)
+    const waitedMs = Date.now() - startedAt
+    if (waitedMs > 0) {
+      this.getLogger().debug('operação aguardou lock da conexão', {
+        connectionId,
+        operation,
+        waitedMs,
+      })
+    }
+
+    try {
+      return await task()
+    } finally {
+      release()
+      if (this.operationLocks.get(connectionId) === chain) {
+        this.operationLocks.delete(connectionId)
+      }
+    }
+  }
+
+  private setDesiredState(runtime: ConnectionRuntime, desiredState: ConnectionDesiredState): void {
+    runtime.desiredState = desiredState
+  }
+
+  private transitionRuntimeStatus(runtime: ConnectionRuntime, nextStatus: ConnectionStatus, reason: string): ConnectionStatus {
+    const previousStatus = runtime.status
+    if (previousStatus === nextStatus) return previousStatus
+
+    const allowed = observedStatusTransitions[previousStatus]
+    if (!allowed?.has(nextStatus)) {
+      this.getLogger().warn('transição de estado observado fora da matriz esperada', {
+        connectionId: runtime.connectionId,
+        previousStatus,
+        nextStatus,
+        reason,
+      })
+    }
+
+    runtime.status = nextStatus
+    return previousStatus
+  }
+
   async resolveStartupConnectionIds(): Promise<string[]> {
-    if (config.connectionIds?.length) {
-      return normalizeConnectionIds(config.connectionIds)
+    const explicit = normalizeConnectionIds(config.connectionIds ?? [])
+    const controlMode = this.resolveControlMode()
+
+    if (controlMode === 'legacy') {
+      if (explicit.length) return explicit
+      if (config.mysqlUrl) {
+        const fromMysql = await this.loadConnectionIdsFromMysql()
+        if (fromMysql.length) return fromMysql
+      }
+      return normalizeConnectionIds([config.connectionId ?? 'default'])
     }
-    if (config.mysqlUrl) {
-      const fromMysql = await this.loadConnectionIdsFromMysql()
-      if (fromMysql.length) return fromMysql
+
+    if (!config.mysqlUrl) {
+      if (controlMode === 'managed') return []
+      if (explicit.length) return explicit
+      return normalizeConnectionIds([config.connectionId ?? 'default'])
     }
+
+    await this.ensureSchemaReady()
+    const managed = await this.loadManagedRunningConnectionIdsFromMysql()
+
+    if (controlMode === 'managed') {
+      return managed
+    }
+
+    const fromLegacyAuth = await this.loadConnectionIdsFromMysql()
+    await this.migrateLegacySessionsIntoManaged(fromLegacyAuth)
+
+    const merged = normalizeConnectionIds([...managed, ...explicit, ...fromLegacyAuth])
+    if (merged.length) return merged
+
     return normalizeConnectionIds([config.connectionId ?? 'default'])
   }
 
@@ -183,6 +360,7 @@ class DefaultConnectionManager implements ConnectionManager {
       socketGeneration: 0,
       lastReconnectAt: 0,
       status: 'created',
+      desiredState: 'running',
       qrCode: null,
       qrCodeAt: null,
       label: null,
@@ -191,7 +369,7 @@ class DefaultConnectionManager implements ConnectionManager {
 
     this.syncManagedConnection(connectionId, {
       status: runtimeStatusToManagedStatus[created.status],
-      desiredState: 'running',
+      desiredState: created.desiredState,
       enabled: true,
       pairingState: 'not_required',
       webhookSource: 'manager.runtime',
@@ -239,11 +417,11 @@ class DefaultConnectionManager implements ConnectionManager {
     if (!runtime) return
     runtime.qrCode = qr
     runtime.qrCodeAt = Date.now()
-    const oldStatus = runtime.status
-    runtime.status = 'qr'
+    const oldStatus = this.transitionRuntimeStatus(runtime, 'qr', 'socket_qr')
 
     this.syncManagedConnection(connectionId, {
       status: runtimeStatusToManagedStatus[runtime.status],
+      desiredState: runtime.desiredState,
       pairingState: 'qr_ready',
       lastSeenAt: Date.now(),
       webhookSource: 'manager.socket.qr',
@@ -266,13 +444,14 @@ class DefaultConnectionManager implements ConnectionManager {
     const runtime = this.runtimes.get(connectionId)
     if (!runtime) return
 
-    const oldStatus = runtime.status
+    let oldStatus = runtime.status
     if (status === 'open') {
-      runtime.status = 'open'
+      oldStatus = this.transitionRuntimeStatus(runtime, 'open', 'socket_open')
       runtime.qrCode = null
       runtime.qrCodeAt = null
       this.syncManagedConnection(connectionId, {
         status: runtimeStatusToManagedStatus[runtime.status],
+        desiredState: runtime.desiredState,
         pairingState: 'not_required',
         lastSeenAt: Date.now(),
         lastConnectedAt: Date.now(),
@@ -280,11 +459,11 @@ class DefaultConnectionManager implements ConnectionManager {
         webhookSource: 'manager.socket.open',
       })
     } else if (status === 'close') {
-      if (runtime.status !== 'closed') {
-        runtime.status = 'connecting'
-      }
+      const nextStatus: ConnectionStatus = runtime.desiredState === 'running' ? 'connecting' : 'closed'
+      oldStatus = this.transitionRuntimeStatus(runtime, nextStatus, 'socket_close')
       this.syncManagedConnection(connectionId, {
         status: runtimeStatusToManagedStatus[runtime.status],
+        desiredState: runtime.desiredState,
         lastSeenAt: Date.now(),
         lastDisconnectedAt: Date.now(),
         webhookSource: 'manager.socket.close',
@@ -299,7 +478,7 @@ class DefaultConnectionManager implements ConnectionManager {
         oldState: oldStatus,
         newState: runtime.status,
       })
-      this.emitStatusChanged(connectionId, oldStatus, runtime.status, 'running', 'socket_update')
+      this.emitStatusChanged(connectionId, oldStatus, runtime.status, runtime.desiredState, 'socket_update')
     }
   }
 
@@ -308,22 +487,28 @@ class DefaultConnectionManager implements ConnectionManager {
   }
 
   async replaceSocket(connectionId: string, reason: string): Promise<void> {
+    return this.withConnectionLock(connectionId, 'replace_socket', () =>
+      this.replaceSocketUnsafe(connectionId, reason)
+    )
+  }
+
+  private async replaceSocketUnsafe(connectionId: string, reason: string): Promise<void> {
     const logger = this.getLogger()
     await this.ensureSchemaReady()
     const runtime = this.getOrCreateRuntime(connectionId)
     const generation = ++runtime.socketGeneration
     const previousSocket = runtime.activeSocket
 
-    const previousStatus = runtime.status
-    runtime.status = 'connecting'
+    this.setDesiredState(runtime, 'running')
+    const previousStatus = this.transitionRuntimeStatus(runtime, 'connecting', `replace_socket:${reason}`)
     this.syncManagedConnection(connectionId, {
       status: runtimeStatusToManagedStatus[runtime.status],
       lastSeenAt: Date.now(),
-      desiredState: 'running',
+      desiredState: runtime.desiredState,
       webhookSource: 'manager.socket.replace',
     })
     if (previousStatus !== runtime.status) {
-      this.emitStatusChanged(connectionId, previousStatus, runtime.status, 'running', reason)
+      this.emitStatusChanged(connectionId, previousStatus, runtime.status, runtime.desiredState, reason)
     }
 
     if (previousSocket) {
@@ -378,10 +563,27 @@ class DefaultConnectionManager implements ConnectionManager {
   }
 
   async scheduleReconnect(connectionId: string, reason: string): Promise<void> {
+    const runtime = this.getOrCreateRuntime(connectionId)
+    if (runtime.reconnectPromise) {
+      this.getLogger().warn('reconexão já em andamento, reaproveitando promise existente', { connectionId, reason })
+      return runtime.reconnectPromise
+    }
+    return this.scheduleReconnectUnsafe(connectionId, reason)
+  }
+
+  private async scheduleReconnectUnsafe(connectionId: string, reason: string): Promise<void> {
     const logger = this.getLogger()
     const runtime = this.getOrCreateRuntime(connectionId)
     if (isShutdownInProgress()) {
       logger.warn('reconexao ignorada: shutdown em andamento', { connectionId, reason })
+      return
+    }
+    if (runtime.desiredState !== 'running') {
+      logger.info('reconexao ignorada: estado desejado não é running', {
+        connectionId,
+        desiredState: runtime.desiredState,
+        reason,
+      })
       return
     }
     if (runtime.reconnectPromise) {
@@ -396,7 +598,7 @@ class DefaultConnectionManager implements ConnectionManager {
         logger.info('aguardando janela mínima antes de reconectar', { connectionId, waitMs, reason })
         await wait(waitMs)
       }
-      await this.replaceSocket(connectionId, reason)
+      await this.replaceSocketUnsafe(connectionId, reason)
       runtime.lastReconnectAt = Date.now()
     })().finally(() => {
       runtime.reconnectPromise = null
@@ -406,45 +608,70 @@ class DefaultConnectionManager implements ConnectionManager {
   }
 
   async connect(connectionId: string, logger: AppLogger): Promise<void> {
+    return this.withConnectionLock(connectionId, 'connect', () =>
+      this.connectUnsafe(connectionId, logger)
+    )
+  }
+
+  private async connectUnsafe(connectionId: string, logger: AppLogger): Promise<void> {
     const runtime = this.runtimes.get(connectionId)
     if (!runtime) {
       logger.warn('connect chamado para connectionId inexistente', { connectionId })
+      return
+    }
+    if (runtime.desiredState === 'deleted') {
+      logger.warn('connect ignorado: conexão marcada como deleted', { connectionId })
       return
     }
     if (runtime.status === 'open' || runtime.status === 'connecting' || runtime.status === 'qr') {
       logger.info('connect ignorado: instância já está em estado ativo', { connectionId, status: runtime.status })
       return
     }
+    this.setDesiredState(runtime, 'running')
+    const oldStatus = this.transitionRuntimeStatus(runtime, 'connecting', 'connect_request')
     this.syncManagedConnection(connectionId, {
-      desiredState: 'running',
-      status: 'connecting',
+      desiredState: runtime.desiredState,
+      status: runtimeStatusToManagedStatus[runtime.status],
       webhookSource: 'manager.connect',
     })
     this.recordAdminEvent({
       connectionId,
       eventType: 'connection.start.requested',
       source: 'manager.connect',
-      oldState: runtime.status,
-      newState: 'connecting',
+      oldState: oldStatus,
+      newState: runtime.status,
     })
-    await this.scheduleReconnect(connectionId, 'api_connect')
+    if (oldStatus !== runtime.status) {
+      this.emitStatusChanged(connectionId, oldStatus, runtime.status, runtime.desiredState, 'connect')
+    }
+    await this.scheduleReconnectUnsafe(connectionId, 'api_connect')
   }
 
   async disconnect(connectionId: string, logger: AppLogger): Promise<void> {
+    return this.withConnectionLock(connectionId, 'disconnect', () =>
+      this.disconnectUnsafe(connectionId, logger, { desiredState: 'stopped' })
+    )
+  }
+
+  private async disconnectUnsafe(
+    connectionId: string,
+    logger: AppLogger,
+    options: { desiredState: ConnectionDesiredState }
+  ): Promise<void> {
     const runtime = this.runtimes.get(connectionId)
     if (!runtime) {
       logger.warn('disconnect chamado para connectionId inexistente', { connectionId })
       return
     }
 
-    const oldStatus = runtime.status
-    runtime.status = 'closed'
+    const oldStatus = this.transitionRuntimeStatus(runtime, 'closed', 'disconnect')
+    this.setDesiredState(runtime, options.desiredState)
     runtime.qrCode = null
     runtime.qrCodeAt = null
 
     this.syncManagedConnection(connectionId, {
-      status: 'closed',
-      desiredState: 'stopped',
+      status: runtimeStatusToManagedStatus[runtime.status],
+      desiredState: runtime.desiredState,
       lastSeenAt: Date.now(),
       lastDisconnectedAt: Date.now(),
       pairingState: 'not_required',
@@ -457,7 +684,9 @@ class DefaultConnectionManager implements ConnectionManager {
       oldState: oldStatus,
       newState: runtime.status,
     })
-    this.emitStatusChanged(connectionId, oldStatus, runtime.status, 'stopped', 'disconnect')
+    if (oldStatus !== runtime.status || runtime.desiredState !== 'running') {
+      this.emitStatusChanged(connectionId, oldStatus, runtime.status, runtime.desiredState, 'disconnect')
+    }
 
     const sock = runtime.activeSocket
     if (!sock) return
@@ -477,31 +706,47 @@ class DefaultConnectionManager implements ConnectionManager {
   }
 
   async restart(connectionId: string, logger: AppLogger): Promise<void> {
+    return this.withConnectionLock(connectionId, 'restart', () =>
+      this.restartUnsafe(connectionId, logger)
+    )
+  }
+
+  private async restartUnsafe(connectionId: string, logger: AppLogger): Promise<void> {
     const runtime = this.runtimes.get(connectionId)
     if (!runtime) {
       logger.warn('restart chamado para connectionId inexistente', { connectionId })
       return
     }
 
+    const before = runtime.status
     this.recordAdminEvent({
       connectionId,
       eventType: 'connection.reconnect.requested',
       source: 'manager.restart',
-      oldState: runtime.status,
+      oldState: before,
       newState: 'connecting',
     })
-    await this.disconnect(connectionId, logger)
-    runtime.status = 'connecting'
+    await this.disconnectUnsafe(connectionId, logger, { desiredState: 'running' })
+    const oldStatus = this.transitionRuntimeStatus(runtime, 'connecting', 'restart')
+    this.setDesiredState(runtime, 'running')
     this.syncManagedConnection(connectionId, {
-      status: 'connecting',
-      desiredState: 'running',
+      status: runtimeStatusToManagedStatus[runtime.status],
+      desiredState: runtime.desiredState,
       webhookSource: 'manager.restart',
     })
-    this.emitStatusChanged(connectionId, 'closed', 'connecting', 'running', 'restart')
-    await this.scheduleReconnect(connectionId, 'api_restart')
+    if (oldStatus !== runtime.status) {
+      this.emitStatusChanged(connectionId, oldStatus, runtime.status, runtime.desiredState, 'restart')
+    }
+    await this.scheduleReconnectUnsafe(connectionId, 'api_restart')
   }
 
   async pause(connectionId: string, logger: AppLogger): Promise<void> {
+    return this.withConnectionLock(connectionId, 'pause', () =>
+      this.pauseUnsafe(connectionId, logger)
+    )
+  }
+
+  private async pauseUnsafe(connectionId: string, logger: AppLogger): Promise<void> {
     const runtime = this.runtimes.get(connectionId)
     if (!runtime) {
       logger.warn('pause chamado para connectionId inexistente', { connectionId })
@@ -509,10 +754,11 @@ class DefaultConnectionManager implements ConnectionManager {
     }
 
     const oldStatus = runtime.status
-    await this.disconnect(connectionId, logger)
+    await this.disconnectUnsafe(connectionId, logger, { desiredState: 'paused' })
+    this.setDesiredState(runtime, 'paused')
     this.syncManagedConnection(connectionId, {
       status: 'paused',
-      desiredState: 'paused',
+      desiredState: runtime.desiredState,
       enabled: true,
       webhookSource: 'manager.pause',
     })
@@ -523,19 +769,28 @@ class DefaultConnectionManager implements ConnectionManager {
       oldState: oldStatus,
       newState: 'paused',
     })
-    this.emitStatusChanged(connectionId, oldStatus, 'paused', 'paused', 'pause')
+    this.emitStatusChanged(connectionId, oldStatus, runtime.status, runtime.desiredState, 'pause')
   }
 
   async resume(connectionId: string, logger: AppLogger): Promise<void> {
+    return this.withConnectionLock(connectionId, 'resume', () =>
+      this.resumeUnsafe(connectionId, logger)
+    )
+  }
+
+  private async resumeUnsafe(connectionId: string, logger: AppLogger): Promise<void> {
     const runtime = this.runtimes.get(connectionId)
     if (!runtime) {
       logger.warn('resume chamado para connectionId inexistente', { connectionId })
       return
     }
 
+    const oldStatus = runtime.status
+    this.setDesiredState(runtime, 'running')
+    const beforeConnect = this.transitionRuntimeStatus(runtime, 'connecting', 'resume')
     this.syncManagedConnection(connectionId, {
       status: runtimeStatusToManagedStatus[runtime.status],
-      desiredState: 'running',
+      desiredState: runtime.desiredState,
       enabled: true,
       webhookSource: 'manager.resume',
     })
@@ -543,20 +798,33 @@ class DefaultConnectionManager implements ConnectionManager {
       connectionId,
       eventType: 'connection.resumed',
       source: 'manager.resume',
-      oldState: runtime.status,
+      oldState: oldStatus,
       newState: 'connecting',
     })
-    this.emitStatusChanged(connectionId, runtime.status, 'connecting', 'running', 'resume')
-    await this.connect(connectionId, logger)
+    if (beforeConnect !== runtime.status) {
+      this.emitStatusChanged(connectionId, beforeConnect, runtime.status, runtime.desiredState, 'resume')
+    }
+    await this.scheduleReconnectUnsafe(connectionId, 'api_resume')
   }
 
   async deleteConnection(connectionId: string, logger: AppLogger): Promise<void> {
-    await this.disconnect(connectionId, logger)
+    return this.withConnectionLock(connectionId, 'delete', () =>
+      this.deleteConnectionUnsafe(connectionId, logger)
+    )
+  }
+
+  private async deleteConnectionUnsafe(connectionId: string, logger: AppLogger): Promise<void> {
+    const runtime = this.runtimes.get(connectionId)
+    if (!runtime) return
+
+    const oldStatus = runtime.status
+    await this.disconnectUnsafe(connectionId, logger, { desiredState: 'deleted' })
+    this.setDesiredState(runtime, 'deleted')
     this.runtimes.delete(connectionId)
 
     this.syncManagedConnection(connectionId, {
       status: 'deleted',
-      desiredState: 'deleted',
+      desiredState: runtime.desiredState,
       enabled: false,
       pairingState: 'not_required',
       webhookSource: 'manager.delete',
@@ -567,7 +835,7 @@ class DefaultConnectionManager implements ConnectionManager {
       source: 'manager.delete',
       newState: 'deleted',
     })
-    this.emitStatusChanged(connectionId, 'closed', 'deleted', 'deleted', 'delete')
+    this.emitStatusChanged(connectionId, oldStatus, 'closed', runtime.desiredState, 'delete')
   }
 
   getOperationalSnapshots() {

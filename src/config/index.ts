@@ -35,6 +35,15 @@ function readCanonicalJidMode(value: string | undefined, fallback: 'pn' | 'lid')
   return fallback
 }
 
+function readConnectionControlMode(value: string | undefined, fallback: 'legacy' | 'managed' | 'hybrid'): 'legacy' | 'managed' | 'hybrid' {
+  if (!value) return fallback
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'legacy' || normalized === 'managed' || normalized === 'hybrid') {
+    return normalized
+  }
+  return fallback
+}
+
 /**
  * Configurações globais da aplicação derivadas das variáveis de ambiente.
  * Centraliza o acesso a parâmetros de conexão, banco de dados, segurança e comportamento do bot.
@@ -90,6 +99,10 @@ export const config = {
   /** Identificador único da conexão do bot (WA_CONNECTION_ID). */
   get connectionId() {
     return process.env.WA_CONNECTION_ID ?? 'default'
+  },
+  /** Modo de controle de conexões no boot (WA_CONNECTION_CONTROL_MODE). */
+  get connectionControlMode() {
+    return readConnectionControlMode(process.env.WA_CONNECTION_CONTROL_MODE, 'hybrid')
   },
   /** Se o bot deve processar as próprias mensagens enviadas (WA_ACCEPT_OWN_MESSAGES). */
   get allowOwnMessages() {

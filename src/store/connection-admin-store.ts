@@ -454,20 +454,22 @@ export const listConnectionAdminEvents = async (
   connectionId: string,
   limit = 100
 ): Promise<ConnectionAdminEventRecord[]> => {
+  const safeLimit = Math.max(1, Math.trunc(limit))
   const pool = getMysqlPool()
   if (!pool) {
     return connectionAdminEvents
       .filter((event) => event.connectionId === connectionId)
-      .slice(-limit)
+      .slice(-safeLimit)
       .reverse()
   }
-  const [rows] = await pool.execute<ConnectionAdminEventRow[]>(
+  // Compatibilidade com ambientes que não aceitam LIMIT ? em prepared statements.
+  const [rows] = await pool.query<ConnectionAdminEventRow[]>(
     `SELECT id, connection_id, event_type, actor, source, old_state, new_state, payload_json, created_at
      FROM connection_admin_events
      WHERE connection_id = ?
      ORDER BY id DESC
-     LIMIT ?`,
-    [connectionId, Math.max(1, Math.trunc(limit))]
+     LIMIT ${safeLimit}`,
+    [connectionId]
   )
   return rows.map(toConnectionAdminEventRecord)
 }
@@ -658,15 +660,16 @@ export const getDueWebhookOutboxEntries = async (limit = 50): Promise<WebhookOut
       .slice(0, safeLimit)
   }
 
-  const [rows] = await pool.execute<WebhookOutboxRow[]>(
+  // Alguns ambientes MySQL/MariaDB falham com prepared statement em LIMIT ? (ER_WRONG_ARGUMENTS).
+  // Como safeLimit já é inteiro sanitizado, interpolamos diretamente para manter compatibilidade.
+  const [rows] = await pool.query<WebhookOutboxRow[]>(
     `SELECT id, webhook_id, connection_id, event_type, target_url, payload_json, status,
             attempt_count, next_attempt_at, last_error, response_status, created_at, updated_at
      FROM webhook_outbox
      WHERE status IN ('pending','failed')
        AND (next_attempt_at IS NULL OR next_attempt_at <= NOW())
      ORDER BY created_at ASC
-     LIMIT ?`,
-    [safeLimit]
+     LIMIT ${safeLimit}`
   )
   const records = rows.map(toWebhookOutboxRecord)
   for (const record of records) {
