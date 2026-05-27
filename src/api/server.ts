@@ -7,6 +7,7 @@ import { handleMessagesRoutes } from './routes/messages.js'
 import { handleGroupsRoutes } from './routes/groups.js'
 import { handleWebhooksRoutes } from './routes/webhooks.js'
 import { handleGlobalWebhooksRoutes } from './routes/webhooks-global.js'
+import { handleConnectionWebhookRoutes } from './routes/connection-webhook.js'
 import { serveDashboard } from './routes/dashboard.js'
 
 /**
@@ -52,6 +53,9 @@ export const startApiServer = ({ logger }: StartApiServerOptions): ApiServerHand
       serveDashboard(req, res)
       return
     }
+
+    // Webhook de controle usa autenticação HMAC própria e não depende de Bearer da API.
+    if (await handleConnectionWebhookRoutes(req, res, pathname, logger)) return
 
     const apiKey = config.apiKey
     if (apiKey) {

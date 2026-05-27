@@ -3,13 +3,42 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 /** Params extraídos de segmentos dinâmicos da rota (ex: :id). */
 export type RouteParams = Record<string, string>
 
+/** Erro lançado quando o corpo excede o limite máximo permitido. */
+export class BodyTooLargeError extends Error {
+  constructor(message = 'request body too large') {
+    super(message)
+    this.name = 'BodyTooLargeError'
+  }
+}
+
 /** Lê o corpo completo de uma requisição HTTP como string UTF-8. */
-export const readBody = (req: IncomingMessage): Promise<string> =>
+export const readBody = (req: IncomingMessage, options?: { maxBytes?: number }): Promise<string> =>
   new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
-    req.on('data', (chunk) => chunks.push(chunk as Buffer))
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')))
-    req.on('error', reject)
+    const maxBytes = options?.maxBytes
+    let total = 0
+    let finished = false
+    req.on('data', (chunk) => {
+      if (finished) return
+      const buf = chunk as Buffer
+      total += buf.length
+      if (typeof maxBytes === 'number' && maxBytes > 0 && total > maxBytes) {
+        finished = true
+        reject(new BodyTooLargeError())
+      } else {
+        chunks.push(buf)
+      }
+    })
+    req.on('end', () => {
+      if (finished) return
+      finished = true
+      resolve(Buffer.concat(chunks).toString('utf-8'))
+    })
+    req.on('error', (error) => {
+      if (finished) return
+      finished = true
+      reject(error)
+    })
   })
 
 /** Faz parse de JSON com retorno null em caso de erro de sintaxe. */

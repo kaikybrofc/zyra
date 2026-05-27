@@ -466,6 +466,60 @@ CREATE TABLE user_devices (
   CONSTRAINT fk_user_devices_conn FOREIGN KEY (connection_id) REFERENCES connections(id),
   CONSTRAINT fk_user_devices_user FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE managed_connections (
+  connection_id VARCHAR(64) NOT NULL,
+  display_name VARCHAR(255) NULL,
+  status ENUM('inactive','starting','connecting','open','closing','closed','pairing','error','paused','deleted') NOT NULL DEFAULT 'inactive',
+  desired_state ENUM('running','stopped','paused','deleted') NOT NULL DEFAULT 'running',
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  pairing_state ENUM('not_required','pending','qr_ready','paired','expired','failed') NOT NULL DEFAULT 'not_required',
+  pairing_code VARCHAR(512) NULL,
+  last_seen_at TIMESTAMP NULL,
+  last_connected_at TIMESTAMP NULL,
+  last_disconnected_at TIMESTAMP NULL,
+  last_disconnect_code INT NULL,
+  last_error TEXT NULL,
+  webhook_source VARCHAR(128) NULL,
+  metadata_json JSON NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (connection_id),
+  INDEX idx_managed_connections_state (desired_state, status),
+  INDEX idx_managed_connections_enabled (enabled, desired_state),
+  CONSTRAINT fk_managed_connections_conn FOREIGN KEY (connection_id) REFERENCES connections(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE connection_admin_events (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  connection_id VARCHAR(64) NOT NULL,
+  event_type VARCHAR(128) NOT NULL,
+  actor VARCHAR(128) NULL,
+  source VARCHAR(128) NULL,
+  old_state VARCHAR(64) NULL,
+  new_state VARCHAR(64) NULL,
+  payload_json JSON NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_connection_admin_events_conn (connection_id, created_at),
+  INDEX idx_connection_admin_events_type (event_type, created_at),
+  CONSTRAINT fk_connection_admin_events_conn FOREIGN KEY (connection_id) REFERENCES connections(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE webhook_commands (
+  command_id VARCHAR(128) NOT NULL,
+  connection_id VARCHAR(64) NOT NULL,
+  delivery_id VARCHAR(128) NULL,
+  action_type VARCHAR(64) NOT NULL,
+  payload_json JSON NOT NULL,
+  status ENUM('received','accepted','rejected','failed') NOT NULL DEFAULT 'received',
+  response_json JSON NULL,
+  received_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  processed_at TIMESTAMP NULL,
+  PRIMARY KEY (command_id),
+  UNIQUE KEY uq_webhook_commands_delivery (delivery_id),
+  INDEX idx_webhook_commands_connection (connection_id, received_at),
+  INDEX idx_webhook_commands_status (status, received_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
 ## Visão geral (como o Zyra usa o banco hoje)

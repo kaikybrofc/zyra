@@ -1508,24 +1508,25 @@ Pode repetir ação destrutiva.
 
 ### Banco
 
-- [ ] criar `managed_connections`
-- [ ] criar `connection_admin_events`
-- [ ] criar `webhook_commands`
+- [x] criar `managed_connections`
+- [x] criar `connection_admin_events`
+- [x] criar `webhook_commands`
 - [ ] criar `webhook_outbox`
 
 ### Core
 
-- [ ] extrair `ConnectionManager`
-- [ ] mover registry de runtimes para o manager
+- [x] criar `connection-admin-store`
+- [x] extrair `ConnectionManager`
+- [x] mover registry de runtimes para o manager
 - [ ] formalizar estados observados e desejados
 - [ ] adicionar lock por `connection_id`
 
 ### HTTP
 
-- [ ] subir servidor HTTP administrativo
-- [ ] implementar autenticação HMAC
-- [ ] implementar parsing seguro do body
-- [ ] implementar validação de payload
+- [x] subir servidor HTTP administrativo
+- [x] implementar autenticação HMAC
+- [x] implementar parsing seguro do body
+- [x] implementar validação de payload
 
 ### Pairing
 
@@ -1536,7 +1537,7 @@ Pode repetir ação destrutiva.
 
 ### Observabilidade
 
-- [ ] persistir eventos administrativos
+- [x] persistir eventos administrativos
 - [ ] expor status consolidado por conexão
 - [ ] emitir callbacks de saída
 

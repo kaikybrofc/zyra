@@ -25,6 +25,24 @@ Authorization: Bearer sua-chave-secreta
 
 Sem o header (ou com valor incorreto), a resposta é `401 Unauthorized`.
 
+### Webhook de Controle de Conexões (HMAC)
+
+O endpoint `POST /webhooks/connections` usa autenticação própria por assinatura HMAC e **não exige** `WA_API_KEY`.
+
+Configure no `.env`:
+
+```env
+WA_WEBHOOK_SHARED_SECRET=troque-este-segredo
+WA_WEBHOOK_MAX_BODY_BYTES=262144
+WA_WEBHOOK_TIMESTAMP_TOLERANCE_MS=300000
+```
+
+Headers obrigatórios:
+
+- `x-zyra-signature`: HMAC SHA-256 de `${timestamp}.${rawBody}`
+- `x-zyra-timestamp`: epoch em segundos ou milissegundos
+- `x-zyra-delivery-id`: id de entrega único no sistema chamador
+
 ---
 
 ## Ciclo de vida de uma instância

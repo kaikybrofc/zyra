@@ -313,6 +313,18 @@ export const config = {
   get webhookTimeoutMs() {
     return readNumber(process.env.WA_WEBHOOK_TIMEOUT_MS, 10_000)
   },
+  /** Segredo compartilhado para autenticar webhooks de entrada via HMAC SHA-256 (WA_WEBHOOK_SHARED_SECRET). */
+  get webhookSharedSecret() {
+    return process.env.WA_WEBHOOK_SHARED_SECRET ?? null
+  },
+  /** Tamanho máximo do corpo de webhook de entrada em bytes (WA_WEBHOOK_MAX_BODY_BYTES). */
+  get webhookMaxBodyBytes() {
+    return readNumber(process.env.WA_WEBHOOK_MAX_BODY_BYTES, 262_144)
+  },
+  /** Janela máxima de tolerância para timestamp do webhook (WA_WEBHOOK_TIMESTAMP_TOLERANCE_MS). */
+  get webhookTimestampToleranceMs() {
+    return readNumber(process.env.WA_WEBHOOK_TIMESTAMP_TOLERANCE_MS, 300_000)
+  },
   /** Número máximo de tentativas de entrega antes de marcar como dead_letter (WA_WEBHOOK_MAX_ATTEMPTS). */
   get webhookMaxAttempts() {
     return readNumber(process.env.WA_WEBHOOK_MAX_ATTEMPTS, 4)

@@ -33,6 +33,7 @@ const handleMessagesRoutesMock = vi.fn(async () => false)
 const handleGroupsRoutesMock = vi.fn(async () => false)
 const handleWebhooksRoutesMock = vi.fn(async () => false)
 const handleGlobalWebhooksRoutesMock = vi.fn(async () => false)
+const handleConnectionWebhookRoutesMock = vi.fn(async () => false)
 
 vi.mock('../src/config/index.js', () => ({ config: mockConfig }))
 vi.mock('node:http', () => ({
@@ -58,6 +59,9 @@ vi.mock('../src/api/routes/webhooks.js', () => ({
 }))
 vi.mock('../src/api/routes/webhooks-global.js', () => ({
   handleGlobalWebhooksRoutes: (...args: unknown[]) => handleGlobalWebhooksRoutesMock(...args),
+}))
+vi.mock('../src/api/routes/connection-webhook.js', () => ({
+  handleConnectionWebhookRoutes: (...args: unknown[]) => handleConnectionWebhookRoutesMock(...args),
 }))
 
 const logger = {
@@ -100,6 +104,7 @@ describe('startApiServer', () => {
     handleGroupsRoutesMock.mockResolvedValue(false)
     handleWebhooksRoutesMock.mockResolvedValue(false)
     handleGlobalWebhooksRoutesMock.mockResolvedValue(false)
+    handleConnectionWebhookRoutesMock.mockResolvedValue(false)
   })
 
   it('sobe servidor na porta e host configurados', async () => {
@@ -166,6 +171,19 @@ describe('startApiServer', () => {
 
     expect(res.statusCode).toBe(401)
     expect(JSON.parse(res.body)).toMatchObject({ error: 'não autorizado' })
+  })
+
+  it('processa webhook de conexões sem exigir Bearer token', async () => {
+    mockConfig.apiKey = 'minha-chave'
+    handleConnectionWebhookRoutesMock.mockResolvedValue(true)
+    const { startApiServer } = await import('../src/api/server.ts')
+    startApiServer({ logger: logger as never })
+
+    const res = createResponse()
+    await serverHandler?.(makeReq('POST', '/webhooks/connections'), res)
+
+    expect(handleConnectionWebhookRoutesMock).toHaveBeenCalled()
+    expect(res.statusCode).not.toBe(401)
   })
 
   it('retorna 401 com token incorreto', async () => {

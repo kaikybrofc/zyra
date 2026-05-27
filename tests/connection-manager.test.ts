@@ -178,6 +178,32 @@ describe('ConnectionManager', () => {
     expect(manager.getConnection('conn-del')).toBeNull()
   })
 
+  it('pause encerra socket e mantém conexão registrada', async () => {
+    const sock = makeSock()
+    createSocketMock.mockResolvedValue(sock)
+
+    const manager = await import('../src/core/connection/manager.ts')
+    manager.createConnection('conn-pause')
+    await manager.connect('conn-pause', logger as never)
+    await manager.pause('conn-pause', logger as never)
+
+    expect(sock.end).toHaveBeenCalled()
+    expect(manager.getConnection('conn-pause')).not.toBeNull()
+    expect(manager.getConnection('conn-pause')?.socketActive).toBe(false)
+  })
+
+  it('resume reconecta instância pausada', async () => {
+    const sock = makeSock()
+    createSocketMock.mockResolvedValue(sock)
+
+    const manager = await import('../src/core/connection/manager.ts')
+    manager.createConnection('conn-resume')
+    await manager.pause('conn-resume', logger as never)
+    await manager.resume('conn-resume', logger as never)
+
+    expect(createSocketMock).toHaveBeenCalledWith('conn-resume', logger)
+  })
+
   it('onQrCode callback chamado pelo registerEvents ao receber QR', async () => {
     const manager = await import('../src/core/connection/manager.ts')
     manager.createConnection('conn-qr-cb')
