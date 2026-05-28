@@ -177,6 +177,31 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
     }
   }
 
+  const hydrateGroupMetadata = async (groupId: string): Promise<GroupMetadata | undefined> => {
+    const inMemory = groups.get(groupId)
+    if (inMemory) return inMemory
+
+    if (redisStore.enabled) {
+      const stored = await redisStore.getGroup(groupId)
+      if (stored) {
+        const normalizedStored = stored.id === groupId ? stored : { ...stored, id: groupId }
+        groups.set(groupId, normalizedStored)
+        return normalizedStored
+      }
+    }
+
+    if (sqlStore.enabled) {
+      const stored = await sqlStore.getGroup(groupId)
+      if (stored) {
+        const normalizedStored = stored.id === groupId ? stored : { ...stored, id: groupId }
+        groups.set(groupId, normalizedStored)
+        return normalizedStored
+      }
+    }
+
+    return undefined
+  }
+
   const bind = (ev: BaileysEventEmitter) => {
     ev.on('messaging-history.set', ({ chats: chatList, contacts: contactList, messages: messageList, lidPnMappings }) => {
       for (const chat of chatList) {
@@ -330,11 +355,11 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
       }
     })
 
-    ev.on('groups.update', (updates) => {
+    ev.on('groups.update', async (updates) => {
       for (const update of updates) {
         const groupId = normalizeJid(update.id)
         if (!groupId) continue
-        const existing = groups.get(groupId)
+        const existing = await hydrateGroupMetadata(groupId)
         if (!existing) continue
         const next = mergeDefined(existing, update)
         const normalizedNext = { ...next, id: groupId }
@@ -695,22 +720,7 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
   const getGroupMetadata = async (jid: string): Promise<GroupMetadata | undefined> => {
     const normalizedJid = normalizeJid(jid)
     if (!normalizedJid) return undefined
-    let group = groups.get(normalizedJid)
-    if (!group && redisStore.enabled) {
-      const stored = await redisStore.getGroup(normalizedJid)
-      if (stored) {
-        group = stored
-        groups.set(normalizedJid, stored)
-      }
-    }
-    if (!group && sqlStore.enabled) {
-      const stored = await sqlStore.getGroup(normalizedJid)
-      if (stored) {
-        group = stored
-        groups.set(normalizedJid, stored)
-      }
-    }
-    return group
+    return hydrateGroupMetadata(normalizedJid)
   }
 
   const bindLidMappingStore = (store: LidMappingStore | undefined) => {
