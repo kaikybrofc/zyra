@@ -7,7 +7,7 @@ import {
   updateWebhookOutboxEntry,
 } from '../../store/connection-admin-store.js'
 import { getActiveWebhooksForEvent, getWebhook, GLOBAL_WEBHOOK_CONNECTION_ID } from '../../webhook/store.js'
-import { validateWebhookUrl } from '../../webhook/url-validation.js'
+import { resolveAllowedWebhookTarget } from '../../webhook/url-validation.js'
 
 const OUTBOX_VERSION = '2026-05-24'
 const WORKER_INTERVAL_MS = 5_000
@@ -85,14 +85,14 @@ const processOutboxEntry = async (entry: Awaited<ReturnType<typeof getDueWebhook
   let responseStatus: number | null = null
   let lastError: string | null = null
 
-  const validatedUrl = validateWebhookUrl(entry.targetUrl)
-  if (!validatedUrl.ok) {
-    lastError = validatedUrl.reason
+  const resolvedTarget = resolveAllowedWebhookTarget(entry.targetUrl)
+  if (!resolvedTarget.ok) {
+    lastError = resolvedTarget.reason
   } else {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), config.webhookTimeoutMs)
     try {
-      const response = await fetch(validatedUrl.parsedUrl.toString(), {
+      const response = await fetch(resolvedTarget.targetUrl, {
         method: 'POST',
         headers,
         body: payloadBody,

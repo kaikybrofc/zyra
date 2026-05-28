@@ -25,6 +25,7 @@ WA_API_KEY=sua-chave-secreta
 |---|---|---|
 | `WA_WEBHOOK_TIMEOUT_MS` | `10000` | Tempo máximo (ms) para aguardar resposta do endpoint receptor |
 | `WA_WEBHOOK_MAX_ATTEMPTS` | `4` | Número máximo de tentativas antes de marcar como `dead_letter` |
+| `WA_WEBHOOK_ALLOWED_TARGETS` | vazio | Lista CSV de URLs permitidas para entrega. A URL cadastrada no webhook precisa existir nesta lista |
 
 Exemplo de configuração completa:
 
@@ -35,7 +36,10 @@ WA_API_KEY=minha-chave
 
 WA_WEBHOOK_TIMEOUT_MS=8000
 WA_WEBHOOK_MAX_ATTEMPTS=4
+WA_WEBHOOK_ALLOWED_TARGETS=https://meu-sistema.com/webhook,https://hooks.meu-sistema.com/zyra
 ```
+
+> Importante: por segurança SSRF, apenas URLs presentes em `WA_WEBHOOK_ALLOWED_TARGETS` podem ser cadastradas e usadas nas entregas.
 
 ---
 

@@ -3,7 +3,7 @@ import { config } from '../config/index.js'
 import type { WebhookRecord, DeliveryRecord } from './types.js'
 import type { WebhookPayload } from './types.js'
 import { createDelivery, updateDelivery } from './store.js'
-import { validateWebhookUrl } from './url-validation.js'
+import { resolveAllowedWebhookTarget } from './url-validation.js'
 
 const RETRY_DELAYS_MS = [
   30 * 1000,        // 1st retry: 30s
@@ -33,16 +33,16 @@ export const attemptDelivery = async (
   let responseBody: string | null = null
   let success = false
 
-  const validatedUrl = validateWebhookUrl(webhook.url)
-  if (!validatedUrl.ok) {
-    responseBody = validatedUrl.reason
+  const resolvedTarget = resolveAllowedWebhookTarget(webhook.url)
+  if (!resolvedTarget.ok) {
+    responseBody = resolvedTarget.reason
   } else {
     const timeoutMs = config.webhookTimeoutMs
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
 
     try {
-      const response = await fetch(validatedUrl.parsedUrl.toString(), {
+      const response = await fetch(resolvedTarget.targetUrl, {
         method: 'POST',
         headers,
         body,

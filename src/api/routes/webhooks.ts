@@ -12,7 +12,7 @@ import {
   getDelivery,
 } from '../../webhook/store.js'
 import { attemptDelivery } from '../../webhook/delivery.js'
-import { validateWebhookUrl } from '../../webhook/url-validation.js'
+import { resolveAllowedWebhookTarget } from '../../webhook/url-validation.js'
 
 type CreateWebhookBody = {
   url: string
@@ -58,14 +58,14 @@ export async function handleWebhooksRoutes(
         sendError(res, 400, 'campo eventsFilter deve ser um array não-vazio')
         return true
       }
-      const validatedUrl = validateWebhookUrl(body.url)
-      if (!validatedUrl.ok) {
-        sendError(res, 400, validatedUrl.reason)
+      const resolvedTarget = resolveAllowedWebhookTarget(body.url)
+      if (!resolvedTarget.ok) {
+        sendError(res, 400, resolvedTarget.reason)
         return true
       }
       try {
         const webhook = await createWebhook(connectionId, {
-          url: validatedUrl.parsedUrl.toString(),
+          url: resolvedTarget.targetUrl,
           eventsFilter: body.eventsFilter,
           secret: body.secret ?? null,
         })
@@ -96,9 +96,9 @@ export async function handleWebhooksRoutes(
       if (!body) { sendError(res, 400, 'corpo da requisição inválido'); return true }
       if (body.url !== undefined) {
         if (typeof body.url !== 'string') { sendError(res, 400, 'campo url inválido'); return true }
-        const validatedUrl = validateWebhookUrl(body.url)
-        if (!validatedUrl.ok) { sendError(res, 400, validatedUrl.reason); return true }
-        body.url = validatedUrl.parsedUrl.toString()
+        const resolvedTarget = resolveAllowedWebhookTarget(body.url)
+        if (!resolvedTarget.ok) { sendError(res, 400, resolvedTarget.reason); return true }
+        body.url = resolvedTarget.targetUrl
       }
       const updated = await updateWebhook(webhookId, connectionId, body)
       if (!updated) { sendError(res, 404, 'webhook não encontrado'); return true }

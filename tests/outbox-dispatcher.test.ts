@@ -7,6 +7,7 @@ const mockConfig = {
   webhookOutboxRetryMaxMs: 300_000,
   webhookTimeoutMs: 10_000,
   webhookMaxAttempts: 4,
+  webhookAllowedTargets: ['https://example.com/hook'],
 }
 
 const getActiveWebhooksForEventMock = vi.fn()

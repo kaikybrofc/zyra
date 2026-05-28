@@ -326,6 +326,14 @@ export const config = {
   get webhookTimeoutMs() {
     return readNumber(process.env.WA_WEBHOOK_TIMEOUT_MS, 10_000)
   },
+  /** Lista CSV de URLs permitidas para entrega de webhook (WA_WEBHOOK_ALLOWED_TARGETS). */
+  get webhookAllowedTargets() {
+    const raw = process.env.WA_WEBHOOK_ALLOWED_TARGETS ?? ''
+    return raw
+      .split(',')
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0)
+  },
   /** Segredo compartilhado para autenticar webhooks de entrada via HMAC SHA-256 (WA_WEBHOOK_SHARED_SECRET). */
   get webhookSharedSecret() {
     return process.env.WA_WEBHOOK_SHARED_SECRET ?? null

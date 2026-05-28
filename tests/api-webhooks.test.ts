@@ -26,6 +26,13 @@ const listDeliveriesMock = vi.fn()
 const retryDeliveryMock = vi.fn()
 const getDeliveryMock = vi.fn()
 const attemptDeliveryMock = vi.fn()
+const mockConfig = {
+  webhookAllowedTargets: ['https://x.com/', 'https://new.com/'],
+}
+
+vi.mock('../src/config/index.js', () => ({
+  config: mockConfig,
+}))
 
 vi.mock('../src/webhook/store.js', () => ({
   createWebhook: (...a: unknown[]) => createWebhookMock(...a),

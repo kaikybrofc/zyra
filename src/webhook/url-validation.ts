@@ -1,4 +1,5 @@
 import { BlockList, isIP } from 'node:net'
+import { config } from '../config/index.js'
 
 const blockedAddressList = new BlockList()
 
@@ -95,4 +96,47 @@ export const validateWebhookUrl = (value: string): WebhookUrlValidationResult =>
   }
 
   return { ok: true, parsedUrl }
+}
+
+export type WebhookTargetResolution =
+  | { ok: true; targetUrl: string; parsedUrl: URL }
+  | { ok: false; reason: string }
+
+/**
+ * Resolve um destino seguro de webhook a partir de uma allowlist de servidor.
+ * O input do usuário apenas seleciona uma URL já permitida.
+ */
+export const resolveAllowedWebhookTarget = (value: string): WebhookTargetResolution => {
+  const validated = validateWebhookUrl(value)
+  if (!validated.ok) {
+    return validated
+  }
+
+  const normalizedRequested = validated.parsedUrl.toString()
+  const allowedTargets = config.webhookAllowedTargets
+    .map((candidate) => validateWebhookUrl(candidate))
+    .filter((candidate): candidate is WebhookUrlValidationSuccess => candidate.ok)
+    .map((candidate) => candidate.parsedUrl)
+
+  if (!allowedTargets.length) {
+    return {
+      ok: false,
+      reason: 'nenhum destino autorizado configurado. defina WA_WEBHOOK_ALLOWED_TARGETS',
+    }
+  }
+
+  for (const allowedTarget of allowedTargets) {
+    if (allowedTarget.toString() === normalizedRequested) {
+      return {
+        ok: true,
+        targetUrl: allowedTarget.toString(),
+        parsedUrl: allowedTarget,
+      }
+    }
+  }
+
+  return {
+    ok: false,
+    reason: 'url não autorizada. ajuste WA_WEBHOOK_ALLOWED_TARGETS',
+  }
 }
