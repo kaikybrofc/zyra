@@ -136,6 +136,27 @@
 
     .card-sub { color: var(--muted); font-size: 12px; margin-top: 3px; font-family: sans-serif }
 
+    .muted-note { color: var(--muted); font-size: 12px; margin-bottom: 12px; line-height: 1.5 }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 8px;
+    }
+    .meta-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+    }
+    .meta-k {
+      color: var(--muted);
+      font-size: 11px;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .meta-v { font-family: monospace; font-size: 13px; word-break: break-word }
+
     /* ── Badges ─────────────────────────────────────────────────── */
     .badge {
       padding: 2px 8px; border-radius: 20px;
@@ -235,6 +256,49 @@
 
     .wh-actions { display: flex; gap: 6px; padding: 0 12px 10px; flex-wrap: wrap }
 
+    /* ── Connection details ─────────────────────────────────────── */
+    .details-section {
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      padding: 12px 16px;
+    }
+    .details-block { margin-top: 10px }
+    .endpoint-list {
+      margin-top: 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .endpoint-row {
+      display: grid;
+      grid-template-columns: 90px 1fr;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .endpoint-row:last-child { border-bottom: none }
+    .endpoint-method { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; color: var(--blue) }
+    .endpoint-main { min-width: 0 }
+    .endpoint-path {
+      font-family: monospace;
+      font-size: 12px;
+      color: var(--text);
+      word-break: break-all;
+    }
+    .endpoint-note {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .endpoint-tags {
+      margin-top: 6px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
     /* ── Deliveries ─────────────────────────────────────────────── */
     .deliveries-section {
       background: var(--bg); border-top: 1px solid var(--border); padding: 8px 12px;
@@ -322,6 +386,7 @@
 <nav class="tabs">
   <button class="tab-btn active" onclick="switchTab('instances')">Instâncias</button>
   <button class="tab-btn" onclick="switchTab('global-webhooks')">Webhooks Globais</button>
+  <button class="tab-btn" onclick="switchTab('runtime')">API & Webhook</button>
 </nav>
 
 <!-- Main -->
@@ -347,6 +412,18 @@
       O payload inclui <code>connectionId</code> para identificar a origem.
     </p>
     <div id="global-webhooks-list"><div class="empty"><div class="spinner"></div></div></div>
+  </section>
+
+  <!-- Tab: Runtime/API -->
+  <section id="tab-runtime" class="tab-content">
+    <div class="section-hdr">
+      <h2>API & Webhook</h2>
+      <button class="btn-ghost" onclick="loadRuntime()">Atualizar</button>
+    </div>
+    <p class="section-desc">
+      Visão operacional deste processo: perfil de runtime, workers ativos e configuração da API para uso do dashboard e automações.
+    </p>
+    <div id="runtime-panel"><div class="empty"><div class="spinner"></div></div></div>
   </section>
 
 </main>
@@ -433,8 +510,11 @@ const S = {
   apiKey: null,
   instances: [],
   globalWebhooks: [],
+  runtime: null,
+  connectionDetails: {},
   instanceWebhooks: {},    // { [connId]: WebhookRecord[] }
   deliveries: {},          // { [webhookId]: DeliveryRecord[] }
+  expandedDetails: new Set(),   // connIds with details panel open
   expandedWebhooks: new Set(),   // connIds with webhook panel open
   expandedDeliveries: new Set(), // webhookIds with deliveries panel open
   qrTimer: null,
@@ -505,9 +585,10 @@ function switchTab(name) {
   document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'))
   document.querySelectorAll('.tab-btn').forEach(e => e.classList.remove('active'))
   document.getElementById(`tab-${name}`).classList.add('active')
-  const idx = ['instances', 'global-webhooks'].indexOf(name)
+  const idx = ['instances', 'global-webhooks', 'runtime'].indexOf(name)
   document.querySelectorAll('.tab-btn')[idx]?.classList.add('active')
   if (name === 'global-webhooks') loadGlobalWebhooks()
+  if (name === 'runtime') loadRuntime()
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -551,11 +632,19 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
 }
 
+function formatDateTime(ts) {
+  if (!ts) return '—'
+  return new Date(ts).toLocaleString('pt-BR')
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Load all
 // ────────────────────────────────────────────────────────────────────────────
 async function loadAll() {
-  await Promise.allSettled([loadInstances(), loadGlobalWebhooks()])
+  await Promise.allSettled([loadInstances(), loadGlobalWebhooks(), loadRuntime()])
+  if (S.expandedDetails.size > 0) {
+    await Promise.allSettled([...S.expandedDetails].map((id) => loadConnectionDetails(id, { silent: true })))
+  }
   // Refresh webhook data for any panels already expanded
   if (S.expandedWebhooks.size > 0) {
     await Promise.allSettled([...S.expandedWebhooks].map(loadInstanceWebhooks))
@@ -563,6 +652,113 @@ async function loadAll() {
   }
   document.getElementById('last-updated').textContent =
     `atualizado ${new Date().toLocaleTimeString('pt-BR')}`
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Runtime panel
+// ────────────────────────────────────────────────────────────────────────────
+function runtimeStatusBadge(enabled, on, off = 'desligado') {
+  return `<span class="badge ${enabled ? 'badge-green' : 'badge-muted'}">${enabled ? on : off}</span>`
+}
+
+function canUseWebhookConnectionFlow() {
+  return S.runtime?.capabilities?.connectionWebhookIngress === true
+}
+
+async function loadRuntime() {
+  try {
+    S.runtime = await apiJson('GET', '/system/runtime')
+    renderRuntimePanel()
+    renderInstances()
+  } catch (e) {
+    if (e.message !== '401') {
+      S.runtime = null
+      renderRuntimePanel()
+      console.error(e)
+    }
+  }
+}
+
+function renderRuntimePanel() {
+  const el = document.getElementById('runtime-panel')
+  const r = S.runtime
+  if (!r) {
+    el.innerHTML = '<div class="empty">Não foi possível carregar o status operacional.</div>'
+    return
+  }
+  const managesConnections = !!r?.capabilities?.managesConnections
+  const profile = esc(r.profile ?? 'desconhecido')
+  const processName = esc(r?.process?.pm2?.appName ?? '—')
+  const processId = esc(r?.process?.pm2?.processId ?? '—')
+  const uptime = esc(String(r?.process?.uptimeSec ?? 0) + 's')
+  const hostPort = `${esc(r?.api?.host ?? '0.0.0.0')}:${esc(String(r?.api?.port ?? '—'))}`
+  const allowedTargets = esc(String(r?.webhook?.allowedTargetsCount ?? 0))
+  const maxAttempts = esc(String(r?.webhook?.maxAttempts ?? 0))
+  const timeout = esc(String(r?.webhook?.timeoutMs ?? 0) + 'ms')
+  const auth = runtimeStatusBadge(!!r?.api?.authRequired, 'obrigatória', 'desativada')
+  const retry = runtimeStatusBadge(!!r?.webhook?.retryWorkerEnabled, 'ativo')
+  const outbox = runtimeStatusBadge(!!r?.webhook?.outboxWorkerEnabled, 'ativo')
+  const ingress = runtimeStatusBadge(!!r?.capabilities?.connectionWebhookIngress, 'habilitado')
+  const connMode = runtimeStatusBadge(managesConnections, 'ativo', 'somente leitura')
+
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-header">
+        <div style="flex:1;min-width:0">
+          <div class="card-title">Runtime Profile: ${profile}</div>
+          <div class="card-sub">Processo PM2: ${processName} #${processId}</div>
+        </div>
+        ${runtimeStatusBadge(!!r?.capabilities?.servesApi, 'API on')}
+      </div>
+      <div style="padding:0 16px 14px">
+        <div class="meta-grid">
+          <div class="meta-item">
+            <div class="meta-k">Uptime</div>
+            <div class="meta-v">${uptime}</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-k">API</div>
+            <div class="meta-v">${hostPort}</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-k">Auth Bearer</div>
+            <div class="meta-v">${auth}</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-k">Conexões no processo</div>
+            <div class="meta-v">${connMode}</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-k">Retry Worker</div>
+            <div class="meta-v">${retry}</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-k">Outbox Worker</div>
+            <div class="meta-v">${outbox}</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-k">Webhook de Conexão</div>
+            <div class="meta-v">${ingress}</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-k">Timeout webhook</div>
+            <div class="meta-v">${timeout}</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-k">Max tentativas</div>
+            <div class="meta-v">${maxAttempts}</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-k">Targets permitidos</div>
+            <div class="meta-v">${allowedTargets}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    ${managesConnections
+      ? ''
+      : '<p class="muted-note">Este runtime está em modo API/Webhook. Operações de socket (conectar, reiniciar, QR e pairing) ficam desativadas no dashboard.</p>'}
+  `
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -580,16 +776,26 @@ async function loadInstances() {
 
 function renderInstances() {
   const el = document.getElementById('instances-list')
+  const managesConnections = S.runtime?.capabilities?.managesConnections !== false
+  const webhookFlow = canUseWebhookConnectionFlow()
   if (!S.instances.length) {
     el.innerHTML = '<div class="empty">Nenhuma instância criada.<br>Clique em <strong>+ Nova Instância</strong> para começar.</div>'
     return
   }
-  el.innerHTML = S.instances.map(renderInstanceCard).join('')
+  const note = managesConnections
+    ? ''
+    : webhookFlow
+      ? '<p class="muted-note">Modo API/Webhook ativo: use o botão de conexão via webhook para gerar QR neste dashboard.</p>'
+      : '<p class="muted-note">Modo API/Webhook ativo: o dashboard lista instâncias e webhooks, mas ações de conexão em tempo real ficam indisponíveis neste processo.</p>'
+  el.innerHTML = note + S.instances.map(renderInstanceCard).join('')
 }
 
 function renderInstanceCard(inst) {
   const id = esc(inst.connectionId)
   const st = inst.status ?? 'undefined'
+  const canDirectManage = S.runtime?.capabilities?.managesConnections !== false
+  const canWebhookManage = canUseWebhookConnectionFlow()
+  const detailsExpanded = S.expandedDetails.has(inst.connectionId)
   const whExpanded = S.expandedWebhooks.has(inst.connectionId)
   const whs = S.instanceWebhooks[inst.connectionId]
   const whCount = whs ? ` (${whs.length})` : ''
@@ -606,35 +812,303 @@ function renderInstanceCard(inst) {
     </div>
     <div class="actions">
       ${st !== 'open'
-        ? `<button class="btn-green btn-sm" onclick="connectInstance('${id}')">Conectar</button>`
-        : `<button class="btn-ghost btn-sm" onclick="disconnectInstance('${id}')">Desconectar</button>`}
-      <button class="btn-ghost btn-sm" onclick="restartInstance('${id}')">Reiniciar</button>
+        ? `<button class="btn-green btn-sm" onclick="connectInstance('${id}')"
+            ${canDirectManage || canWebhookManage ? '' : 'disabled'}>
+            ${canDirectManage ? 'Conectar' : 'Conectar (Webhook)'}
+          </button>`
+        : `<button class="btn-ghost btn-sm" onclick="disconnectInstance('${id}')" ${canDirectManage ? '' : 'disabled'}>Desconectar</button>`}
+      <button class="btn-ghost btn-sm" onclick="restartInstance('${id}')" ${canDirectManage ? '' : 'disabled'}>Reiniciar</button>
       <button class="btn-ghost btn-sm" onclick="openEditInstance('${id}','${esc(inst.label ?? '')}')">Editar</button>
       <div class="actions-sep"></div>
+      <button class="btn-ghost btn-sm" onclick="toggleConnectionDetails('${id}')">
+        ${detailsExpanded ? '▲' : '▶'} Detalhes & Endpoints
+      </button>
       <button class="btn-ghost btn-sm" onclick="toggleInstanceWebhooks('${id}')">
         ${whExpanded ? '▲' : '▶'} Webhooks${whCount}
       </button>
       <button class="btn-red btn-sm" onclick="deleteInstance('${id}')">Deletar</button>
     </div>
+    ${detailsExpanded ? renderConnectionDetailsSection(inst.connectionId) : ''}
     ${whExpanded ? renderInstanceWebhooksSection(inst.connectionId) : ''}
   </div>`
+}
+
+function buildConnectionEndpoints(connId) {
+  const id = encodeURIComponent(connId)
+  const base = `/connections/${id}`
+  const direct = S.runtime?.capabilities?.managesConnections !== false
+  const webhookFlow = canUseWebhookConnectionFlow()
+
+  return [
+    { method: 'GET', path: `${base}`, note: 'Detalhes completos da conexão', available: true },
+    { method: 'GET', path: `${base}/status`, note: 'Status resumido', available: true },
+    { method: 'GET', path: `${base}/qr`, note: 'QR atual (quando disponível)', available: true },
+    {
+      method: 'POST',
+      path: `${base}/connect`,
+      note: direct ? 'Conexão direta via manager' : 'Requer processo com bootstrap habilitado',
+      available: direct,
+    },
+    {
+      method: 'POST',
+      path: `${base}/webhook/start`,
+      note: webhookFlow ? 'Conexão via comando webhook assinado' : 'Requer WA_WEBHOOK_SHARED_SECRET',
+      available: webhookFlow,
+    },
+    {
+      method: 'POST',
+      path: `${base}/disconnect`,
+      note: direct ? 'Desconecta sessão ativa' : 'Requer processo com bootstrap habilitado',
+      available: direct,
+    },
+    {
+      method: 'POST',
+      path: `${base}/restart`,
+      note: direct ? 'Reinicia sessão' : 'Requer processo com bootstrap habilitado',
+      available: direct,
+    },
+    {
+      method: 'POST',
+      path: `${base}/pairing/start`,
+      note: direct ? 'Inicia pairing remoto' : 'Requer processo com bootstrap habilitado',
+      available: direct,
+    },
+    {
+      method: 'POST',
+      path: `${base}/pairing/cancel`,
+      note: direct ? 'Cancela pairing remoto' : 'Requer processo com bootstrap habilitado',
+      available: direct,
+    },
+    {
+      method: 'GET',
+      path: `${base}/pairing`,
+      note: direct ? 'Estado atual do pairing' : 'Requer processo com bootstrap habilitado',
+      available: direct,
+    },
+    {
+      method: 'POST',
+      path: `${base}/messages/send`,
+      note: 'Envia mensagem (instância precisa estar open)',
+      available: true,
+    },
+    {
+      method: 'GET',
+      path: `${base}/groups`,
+      note: 'Lista grupos (instância precisa estar open)',
+      available: true,
+    },
+    {
+      method: 'GET',
+      path: `${base}/webhooks`,
+      note: 'Lista webhooks da conexão',
+      available: true,
+    },
+    {
+      method: 'POST',
+      path: `${base}/webhooks`,
+      note: 'Cria webhook da conexão',
+      available: true,
+    },
+    {
+      method: 'GET',
+      path: `${base}/webhooks/:webhookId`,
+      note: 'Detalha webhook específico',
+      available: true,
+    },
+    {
+      method: 'PATCH',
+      path: `${base}/webhooks/:webhookId`,
+      note: 'Atualiza webhook específico',
+      available: true,
+    },
+    {
+      method: 'DELETE',
+      path: `${base}/webhooks/:webhookId`,
+      note: 'Remove webhook específico',
+      available: true,
+    },
+    {
+      method: 'GET',
+      path: `${base}/webhooks/:webhookId/deliveries`,
+      note: 'Lista entregas do webhook',
+      available: true,
+    },
+    {
+      method: 'POST',
+      path: `${base}/webhooks/:webhookId/deliveries/:deliveryId/retry`,
+      note: 'Reenvia entrega específica',
+      available: true,
+    },
+  ]
+}
+
+function renderConnectionEndpoints(connId) {
+  const origin = window.location.origin
+  return buildConnectionEndpoints(connId).map((endpoint) => `
+    <div class="endpoint-row">
+      <div class="endpoint-method">${endpoint.method}</div>
+      <div class="endpoint-main">
+        <div class="endpoint-path">${esc(origin + endpoint.path)}</div>
+        <div class="endpoint-note">${esc(endpoint.note)}</div>
+        <div class="endpoint-tags">
+          <span class="badge ${endpoint.available ? 'badge-green' : 'badge-muted'}">
+            ${endpoint.available ? 'disponível' : 'indisponível'}
+          </span>
+        </div>
+      </div>
+    </div>
+  `).join('')
+}
+
+function renderConnectionDetailsSection(connId) {
+  const details = S.connectionDetails[connId]
+  if (!details?.loaded) {
+    return `
+      <div class="details-section">
+        <div class="nested-hdr">
+          <span>Detalhes & Endpoints</span>
+          <button class="btn-ghost btn-sm" onclick="refreshConnectionDetails('${esc(connId)}')">Atualizar</button>
+        </div>
+        <div style="color:var(--muted);font-size:12px;padding:8px 0">
+          <span class="spinner"></span> Carregando detalhes da conexão...
+        </div>
+      </div>
+    `
+  }
+
+  const info = details.info ?? {}
+  const pairing = details.pairing
+  return `
+    <div class="details-section">
+      <div class="nested-hdr">
+        <span>Detalhes & Endpoints</span>
+        <button class="btn-ghost btn-sm" onclick="refreshConnectionDetails('${esc(connId)}')">Atualizar</button>
+      </div>
+      ${details.error
+        ? `<div style="color:var(--yellow);font-size:12px;padding:4px 0">${esc(details.error)}</div>`
+        : ''}
+      <div class="details-block">
+        <div class="meta-grid">
+          <div class="meta-item"><div class="meta-k">Connection ID</div><div class="meta-v">${esc(info.connectionId ?? connId)}</div></div>
+          <div class="meta-item"><div class="meta-k">Label</div><div class="meta-v">${esc(info.label ?? '—')}</div></div>
+          <div class="meta-item"><div class="meta-k">Status</div><div class="meta-v">${esc(info.status ?? '—')}</div></div>
+          <div class="meta-item"><div class="meta-k">Socket Ativo</div><div class="meta-v">${info.socketActive ? 'sim' : 'não'}</div></div>
+          <div class="meta-item"><div class="meta-k">Reconnect em andamento</div><div class="meta-v">${info.reconnectInFlight ? 'sim' : 'não'}</div></div>
+          <div class="meta-item"><div class="meta-k">Socket Generation</div><div class="meta-v">${esc(String(info.socketGeneration ?? '—'))}</div></div>
+          <div class="meta-item"><div class="meta-k">Último reconnect</div><div class="meta-v">${formatDateTime(info.lastReconnectAt)}</div></div>
+          <div class="meta-item"><div class="meta-k">Pairing</div><div class="meta-v">${esc(pairing?.status ?? details.pairingUnavailableReason ?? '—')}</div></div>
+          <div class="meta-item"><div class="meta-k">Webhooks vinculados</div><div class="meta-v">${esc(String(details.webhooksCount ?? 0))}</div></div>
+          <div class="meta-item"><div class="meta-k">Atualizado em</div><div class="meta-v">${formatDateTime(details.loadedAt)}</div></div>
+        </div>
+      </div>
+      <div class="details-block">
+        <div style="color:var(--muted);font-size:12px;margin-bottom:6px">Endpoints desta conexão</div>
+        <div class="endpoint-list">
+          ${renderConnectionEndpoints(connId)}
+        </div>
+      </div>
+    </div>
+  `
+}
+
+async function toggleConnectionDetails(connId) {
+  if (S.expandedDetails.has(connId)) {
+    S.expandedDetails.delete(connId)
+    renderInstances()
+    return
+  }
+  S.expandedDetails.add(connId)
+  renderInstances()
+  await loadConnectionDetails(connId)
+  renderInstances()
+}
+
+async function refreshConnectionDetails(connId) {
+  await loadConnectionDetails(connId, { force: true })
+  renderInstances()
+}
+
+async function loadConnectionDetails(connId, options = {}) {
+  const force = options.force === true
+  const silent = options.silent === true
+  if (!force && S.connectionDetails[connId]?.loaded) return
+
+  const details = {
+    loaded: false,
+    loadedAt: Date.now(),
+    info: null,
+    status: null,
+    pairing: null,
+    pairingUnavailableReason: null,
+    webhooksCount: 0,
+    error: null,
+  }
+
+  try {
+    details.info = await apiJson('GET', `/connections/${connId}`)
+  } catch (e) {
+    details.error = e.message || 'Falha ao carregar conexão'
+  }
+
+  try {
+    details.status = await apiJson('GET', `/connections/${connId}/status`)
+  } catch {}
+
+  const direct = S.runtime?.capabilities?.managesConnections !== false
+  if (direct) {
+    try {
+      details.pairing = await apiJson('GET', `/connections/${connId}/pairing`)
+    } catch {
+      details.pairingUnavailableReason = 'indisponível'
+    }
+  } else {
+    details.pairingUnavailableReason = 'somente no processo de conexões'
+  }
+
+  try {
+    const webhooks = await apiJson('GET', `/connections/${connId}/webhooks`)
+    details.webhooksCount = Array.isArray(webhooks) ? webhooks.length : 0
+  } catch {}
+
+  details.loaded = true
+  details.loadedAt = Date.now()
+  S.connectionDetails[connId] = details
+
+  if (!silent && details.error) {
+    toast(`Detalhes de ${connId}: ${details.error}`, 'error')
+  }
 }
 
 async function createInstance() {
   const id = document.getElementById('new-conn-id').value.trim()
   const label = document.getElementById('new-conn-label').value.trim()
   if (!id) { toast('Connection ID é obrigatório', 'error'); return }
+  const shouldAutoStartViaWebhook =
+    S.runtime?.capabilities?.managesConnections === false &&
+    canUseWebhookConnectionFlow()
+
   try {
     await apiJson('POST', '/connections', { connectionId: id, label: label || undefined })
     toast(`Instância "${id}" criada`, 'success')
     closeModal('create-instance-modal')
     document.getElementById('new-conn-id').value = ''
     document.getElementById('new-conn-label').value = ''
+    if (shouldAutoStartViaWebhook) {
+      await connectInstanceViaWebhook(id, { label: label || null, silentToast: true })
+    }
     await loadInstances()
   } catch (e) { toast(e.message, 'error') }
 }
 
 async function connectInstance(id) {
+  if (S.runtime?.capabilities?.managesConnections === false) {
+    if (!canUseWebhookConnectionFlow()) {
+      toast('Este processo não executa bootstrap de conexões', 'error')
+      return
+    }
+    await connectInstanceViaWebhook(id)
+    return
+  }
   try {
     await apiJson('POST', `/connections/${id}/connect`)
     toast(`Conectando ${id}...`, 'info')
@@ -643,7 +1117,30 @@ async function connectInstance(id) {
   } catch (e) { toast(e.message, 'error') }
 }
 
+async function connectInstanceViaWebhook(id, options = {}) {
+  const { label = null, silentToast = false } = options
+  try {
+    const response = await apiJson('POST', `/connections/${id}/webhook/start`, { label })
+    if (!silentToast) {
+      const accepted = response?.accepted === true
+      toast(
+        accepted
+          ? `Comando enviado via webhook para ${id}`
+          : `Webhook respondeu sem aceite para ${id}`,
+        accepted ? 'success' : 'info'
+      )
+    }
+    openQrModal(id)
+  } catch (e) {
+    toast(e.message, 'error')
+  }
+}
+
 async function disconnectInstance(id) {
+  if (S.runtime?.capabilities?.managesConnections === false) {
+    toast('Este processo não executa bootstrap de conexões', 'error')
+    return
+  }
   if (!confirm(`Desconectar ${id}?`)) return
   try {
     await apiJson('POST', `/connections/${id}/disconnect`)
@@ -653,6 +1150,10 @@ async function disconnectInstance(id) {
 }
 
 async function restartInstance(id) {
+  if (S.runtime?.capabilities?.managesConnections === false) {
+    toast('Este processo não executa bootstrap de conexões', 'error')
+    return
+  }
   try {
     await apiJson('POST', `/connections/${id}/restart`)
     toast(`${id} reiniciando...`, 'info')
@@ -665,6 +1166,8 @@ async function deleteInstance(id) {
   try {
     await api('DELETE', `/connections/${id}`)
     toast(`${id} deletado`, 'success')
+    S.expandedDetails.delete(id)
+    delete S.connectionDetails[id]
     S.expandedWebhooks.delete(id)
     delete S.instanceWebhooks[id]
     await loadInstances()

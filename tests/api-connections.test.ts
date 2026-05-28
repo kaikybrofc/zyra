@@ -57,6 +57,18 @@ const logger = {
   trace: vi.fn(),
 }
 
+const mockConfig = {
+  bootstrapConnectionsEnabled: true,
+  webhookSharedSecret: 'test-secret' as string | null,
+  apiHost: '127.0.0.1',
+  apiPort: 3000,
+  webhookTimeoutMs: 5000,
+}
+
+vi.mock('../src/config/index.js', () => ({
+  config: mockConfig,
+}))
+
 vi.mock('../src/core/connection/manager.js', () => ({
   createConnection: (...args: unknown[]) => createConnectionMock(...args),
   listConnections: (...args: unknown[]) => listConnectionsMock(...args),
@@ -112,8 +124,14 @@ describe('handleConnectionsRoutes', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
+    vi.unstubAllGlobals()
     listConnectionsMock.mockReturnValue([])
     getConnectionMock.mockReturnValue(null)
+    mockConfig.bootstrapConnectionsEnabled = true
+    mockConfig.webhookSharedSecret = 'test-secret'
+    mockConfig.apiHost = '127.0.0.1'
+    mockConfig.apiPort = 3000
+    mockConfig.webhookTimeoutMs = 5000
   })
 
   it('GET /connections retorna lista vazia', async () => {
@@ -314,6 +332,63 @@ describe('handleConnectionsRoutes', () => {
 
     expect(res.statusCode).toBe(200)
     expect(cancelPairingMock).toHaveBeenCalledWith('sess-pairing')
+  })
+
+  it('POST /connections/:id/webhook/start envia comando assinado para ingress de webhook', async () => {
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-webhook' }))
+    const fetchMock = vi.fn(async () => ({
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          ok: true,
+          accepted: true,
+          action: 'start',
+          connection_id: 'sess-webhook',
+        }),
+    }))
+    vi.stubGlobal('fetch', fetchMock as never)
+
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(
+      makeReq('POST', '/connections/sess-webhook/webhook/start', JSON.stringify({ label: 'Bot X' })) as never,
+      res as never,
+      '/connections/sess-webhook/webhook/start',
+      logger as never
+    )
+
+    expect(res.statusCode).toBe(200)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [url, options] = fetchMock.mock.calls[0] as [string, Record<string, unknown>]
+    expect(url).toBe('http://127.0.0.1:3000/webhooks/connections')
+    expect(options['method']).toBe('POST')
+    expect(options['headers']).toMatchObject({
+      'content-type': 'application/json',
+    })
+    const payload = JSON.parse(res.body) as { accepted?: boolean }
+    expect(payload.accepted).toBe(true)
+  })
+
+  it('POST /connections/:id/webhook/start retorna 503 quando segredo do webhook não está configurado', async () => {
+    mockConfig.webhookSharedSecret = null
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-no-secret' }))
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock as never)
+
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(
+      makeReq('POST', '/connections/sess-no-secret/webhook/start') as never,
+      res as never,
+      '/connections/sess-no-secret/webhook/start',
+      logger as never
+    )
+
+    expect(res.statusCode).toBe(503)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(JSON.parse(res.body)).toMatchObject({
+      error: expect.stringContaining('WA_WEBHOOK_SHARED_SECRET'),
+    })
   })
 
   it('retorna false para rota não reconhecida', async () => {

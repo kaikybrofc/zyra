@@ -21,8 +21,9 @@ let webhookOutboxWorkerHandle: { stop: () => void } | null = null
  * Responsabilidades:
  * 1) Inicia servidor de métricas anti-ban (quando habilitado)
  * 2) Inicia servidor HTTP da API REST (quando habilitado)
- * 3) Inicia worker de retry de webhooks
- * 4) Executa o bootstrap do ConnectionManager (resolve ids + conecta)
+ * 3) Inicia worker de retry de webhooks (quando habilitado)
+ * 4) Inicia worker de outbox de webhooks (quando habilitado)
+ * 5) Executa bootstrap do ConnectionManager (quando habilitado)
  *
  * @throws Error Quando nenhuma conexão inicial puder ser resolvida.
  */
@@ -41,7 +42,7 @@ export async function start(): Promise<void> {
     apiServerHandle = startApiServer({ logger })
   }
 
-  if (!webhookWorkerHandle) {
+  if (!webhookWorkerHandle && config.webhookRetryWorkerEnabled) {
     webhookWorkerHandle = startWebhookRetryWorker(logger)
   }
 
@@ -49,5 +50,9 @@ export async function start(): Promise<void> {
     webhookOutboxWorkerHandle = startWebhookOutboxWorker(logger)
   }
 
-  await bootstrapConnections()
+  if (config.bootstrapConnectionsEnabled) {
+    await bootstrapConnections()
+  } else {
+    logger.info('bootstrap de conexões desabilitado para este processo')
+  }
 }

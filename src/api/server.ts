@@ -8,6 +8,7 @@ import { handleGroupsRoutes } from './routes/groups.js'
 import { handleWebhooksRoutes } from './routes/webhooks.js'
 import { handleGlobalWebhooksRoutes } from './routes/webhooks-global.js'
 import { handleConnectionWebhookRoutes } from './routes/connection-webhook.js'
+import { handleRuntimeRoutes } from './routes/runtime.js'
 import { serveDashboard } from './routes/dashboard.js'
 
 /**
@@ -43,8 +44,10 @@ type ApiServerHandle = {
  * - `GET    /connections/:id/pairing`        — consultar estado do pairing
  * - `GET    /connections/:id/status`         — verificar status
  * - `GET    /connections/:id/qr`             — obter QR code atual
+ * - `POST   /connections/:id/webhook/start`  — iniciar conexão via webhook assinado
  * - `POST   /connections/:id/messages/send`  — enviar mensagem
  * - `GET    /connections/:id/groups`         — listar grupos
+ * - `GET    /system/runtime`                  — status operacional do processo
  * - `POST   /webhooks/connections`           — ingress de comando assinado (HMAC)
  */
 export const startApiServer = ({ logger }: StartApiServerOptions): ApiServerHandle => {
@@ -76,6 +79,7 @@ export const startApiServer = ({ logger }: StartApiServerOptions): ApiServerHand
       if (await handleConnectionsRoutes(req, res, pathname, logger)) return
       if (await handleMessagesRoutes(req, res, pathname, logger)) return
       if (await handleGroupsRoutes(req, res, pathname, logger)) return
+      if (await handleRuntimeRoutes(req, res, pathname)) return
       if (await handleGlobalWebhooksRoutes(req, res, pathname, logger)) return
       if (await handleWebhooksRoutes(req, res, pathname, logger)) return
 

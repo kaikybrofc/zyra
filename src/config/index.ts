@@ -310,6 +310,10 @@ export const config = {
   get apiEnabled() {
     return readBoolean(process.env.WA_API_ENABLED, false)
   },
+  /** Controla se este processo deve executar bootstrap do ConnectionManager (WA_BOOTSTRAP_CONNECTIONS_ENABLED). */
+  get bootstrapConnectionsEnabled() {
+    return readBoolean(process.env.WA_BOOTSTRAP_CONNECTIONS_ENABLED, true)
+  },
   /** Porta do servidor HTTP da API REST (WA_API_PORT). */
   get apiPort() {
     return readNumber(process.env.WA_API_PORT, 3000)
@@ -349,6 +353,10 @@ export const config = {
   /** Número máximo de tentativas de entrega antes de marcar como dead_letter (WA_WEBHOOK_MAX_ATTEMPTS). */
   get webhookMaxAttempts() {
     return readNumber(process.env.WA_WEBHOOK_MAX_ATTEMPTS, 4)
+  },
+  /** Habilita worker legado de retry para webhook_deliveries (WA_WEBHOOK_RETRY_ENABLED). */
+  get webhookRetryWorkerEnabled() {
+    return readBoolean(process.env.WA_WEBHOOK_RETRY_ENABLED, true)
   },
   /** Habilita callbacks assíncronos por outbox para eventos de conexão (WA_WEBHOOK_OUTBOX_ENABLED). */
   get webhookOutboxEnabled() {
