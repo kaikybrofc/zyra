@@ -294,7 +294,153 @@ curl -s -X POST \
 
 ---
 
+## Webhooks globais
+
+Webhooks globais recebem eventos de **todas as conexões** do processo, sem precisar ser cadastrados por instância.
+
+### Criar webhook global
+
+```bash
+curl -s -X POST http://localhost:3000/webhooks \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sua-chave-secreta" \
+  -d '{
+    "url": "https://meu-sistema.com/webhook",
+    "eventsFilter": ["*"],
+    "secret": "meu-segredo-hmac"
+  }' | jq
+```
+
+A estrutura de resposta e os campos aceitos são idênticos aos webhooks por conexão.
+
+### Gerenciar webhooks globais
+
+```bash
+# Listar
+curl -s http://localhost:3000/webhooks \
+  -H "Authorization: Bearer sua-chave-secreta" | jq
+
+# Buscar por ID
+curl -s http://localhost:3000/webhooks/wh_abc123 \
+  -H "Authorization: Bearer sua-chave-secreta" | jq
+
+# Atualizar
+curl -s -X PATCH http://localhost:3000/webhooks/wh_abc123 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sua-chave-secreta" \
+  -d '{"active": false}' | jq
+
+# Deletar
+curl -s -X DELETE http://localhost:3000/webhooks/wh_abc123 \
+  -H "Authorization: Bearer sua-chave-secreta"
+# 204 No Content
+
+# Histórico de entregas
+curl -s http://localhost:3000/webhooks/wh_abc123/deliveries \
+  -H "Authorization: Bearer sua-chave-secreta" | jq
+
+# Retentar entrega
+curl -s -X POST http://localhost:3000/webhooks/wh_abc123/deliveries/del_xyz789/retry \
+  -H "Authorization: Bearer sua-chave-secreta" | jq
+```
+
+---
+
+## Ingress de comandos de conexão (`POST /webhooks/connections`)
+
+Este endpoint recebe comandos administrativos autenticados por HMAC para gerenciar conexões remotamente. É o mecanismo usado internamente pelo dashboard e pelo endpoint `POST /connections/:id/webhook/start`.
+
+### Estrutura do comando
+
+```json
+{
+  "event": "connection.command",
+  "version": "2026-05-27",
+  "command_id": "uuid-unico",
+  "sent_at": "2026-05-29T18:00:00.000Z",
+  "connection": {
+    "id": "minha-sessao",
+    "display_name": "Bot Principal"
+  },
+  "action": {
+    "type": "start",
+    "reason": "motivo-opcional"
+  },
+  "options": {
+    "force": false
+  },
+  "metadata": {
+    "source": "meu-sistema",
+    "issued_at": 1748000000000
+  }
+}
+```
+
+### Ações disponíveis (`action.type`)
+
+| Ação | Efeito |
+|------|--------|
+| `register` | Cria a conexão sem iniciar socket; aplica `display_name` se fornecido |
+| `start` | Cria a conexão se não existir e inicia o socket (gera QR) |
+| `reconnect` | Reinicia o socket (equivale a disconnect + connect) |
+| `disconnect` | Encerra o socket sem remover a instância |
+| `pause` | Pausa o processamento da conexão |
+| `resume` | Retoma uma conexão pausada |
+| `delete_soft` | Remove a instância do manager (socket encerrado antes) |
+| `delete_hard` | Idem ao `delete_soft` (comportamento idêntico atualmente) |
+| `sync_status` | No-op — apenas devolve o estado atual da conexão |
+| `pairing_start` | Inicia o fluxo de pairing remoto |
+| `pairing_cancel` | Cancela o pairing em andamento |
+
+### Resposta de sucesso
+
+```json
+{
+  "ok": true,
+  "command_id": "uuid-unico",
+  "connection_id": "minha-sessao",
+  "accepted": true,
+  "action": "start",
+  "current_state": "connecting",
+  "desired_state": "running"
+}
+```
+
+**Valores possíveis de `desired_state`:**
+
+| Ação | `desired_state` |
+|------|----------------|
+| `pause` | `paused` |
+| `disconnect`, `pairing_cancel` | `stopped` |
+| `delete_soft`, `delete_hard` | `deleted` |
+| demais | `running` |
+
+### Deduplicação de comandos
+
+O ingress persiste cada `command_id` recebido. Se o mesmo `command_id` chegar novamente:
+
+- Se o comando já foi processado: responde `200` com o resultado original mais `"duplicate": true`.
+- Se ainda está em processamento: responde `409` com `"reason": "comando já recebido e ainda em processamento"`.
+
+Isso garante segurança em retentativas do lado do chamador.
+
+### Erros do ingress
+
+| Código | Motivo |
+|--------|--------|
+| `400` | `event` não é `connection.command`, `command_id` ou `connection.id` ausentes |
+| `401` | Headers HMAC ausentes, timestamp inválido ou fora da janela, assinatura incorreta |
+| `405` | Método diferente de `POST` |
+| `413` | Payload maior que `WA_WEBHOOK_MAX_BODY_BYTES` |
+| `415` | `Content-Type` não é `application/json` |
+| `422` | `action.type` desconhecido |
+| `503` | `WA_WEBHOOK_SHARED_SECRET` não configurado |
+
+---
+
 ## Referência rápida de endpoints
+
+### Webhooks por conexão
 
 | Método | Rota | Descrição |
 |---|---|---|
@@ -305,3 +451,21 @@ curl -s -X POST \
 | `DELETE` | `/connections/:id/webhooks/:wid` | Remove um webhook |
 | `GET` | `/connections/:id/webhooks/:wid/deliveries` | Histórico de entregas |
 | `POST` | `/connections/:id/webhooks/:wid/deliveries/:did/retry` | Reprocessa uma entrega |
+
+### Webhooks globais
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `GET` | `/webhooks` | Lista todos os webhooks globais |
+| `POST` | `/webhooks` | Cria um webhook global |
+| `GET` | `/webhooks/:wid` | Busca um webhook global |
+| `PATCH` | `/webhooks/:wid` | Atualiza um webhook global |
+| `DELETE` | `/webhooks/:wid` | Remove um webhook global |
+| `GET` | `/webhooks/:wid/deliveries` | Histórico de entregas do webhook global |
+| `POST` | `/webhooks/:wid/deliveries/:did/retry` | Reprocessa uma entrega global |
+
+### Ingress de comandos
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `POST` | `/webhooks/connections` | Recebe comandos administrativos de conexão via HMAC |

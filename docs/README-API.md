@@ -312,6 +312,36 @@ curl -s -X DELETE http://localhost:3000/connections/minha-sessao \
 
 ---
 
+### Iniciar conexão via webhook (dashboard)
+
+Cria ou atualiza a instância e despacha um comando `start` para o ingress de webhook interno. Útil quando o processo atual não gerencia conexões diretamente (`WA_BOOTSTRAP_CONNECTIONS_ENABLED=false`).
+
+```bash
+curl -s -X POST http://localhost:3000/connections/minha-sessao/webhook/start \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sua-chave-secreta" \
+  -d '{"label": "Bot Principal"}' | jq
+```
+
+O campo `label` é opcional. A resposta espelha o retorno do ingress de webhook:
+
+```json
+{
+  "ok": true,
+  "command_id": "uuid-gerado",
+  "connection_id": "minha-sessao",
+  "accepted": true,
+  "action": "start",
+  "current_state": "connecting",
+  "desired_state": "running"
+}
+```
+
+**Resposta `503`:** `WA_WEBHOOK_SHARED_SECRET` não configurado.
+**Resposta `502`:** falha ao acionar o ingress interno.
+
+---
+
 ### Enviar mensagem de texto
 
 A instância precisa estar com `status: "open"`.
@@ -466,6 +496,78 @@ curl -s http://localhost:3000/connections/minha-sessao/groups \
 ```
 
 **Resposta `409`:** instância não está `open`.
+
+---
+
+### Informações do runtime
+
+Retorna metadados operacionais do processo atual: perfil de execução, capacidades habilitadas e estado do processo.
+
+```bash
+curl -s http://localhost:3000/system/runtime \
+  -H "Authorization: Bearer sua-chave-secreta" | jq
+```
+
+**Resposta `200`:**
+```json
+{
+  "now": 1748000000000,
+  "profile": "full",
+  "capabilities": {
+    "managesConnections": true,
+    "servesApi": true,
+    "managesWebhookRetry": true,
+    "managesWebhookOutbox": true,
+    "connectionWebhookIngress": true
+  },
+  "api": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 3000,
+    "authRequired": true
+  },
+  "webhook": {
+    "retryWorkerEnabled": true,
+    "outboxWorkerEnabled": true,
+    "timeoutMs": 10000,
+    "maxAttempts": 4,
+    "allowedTargetsCount": 2
+  },
+  "process": {
+    "pid": 12345,
+    "uptimeSec": 3600,
+    "nodeVersion": "v20.0.0",
+    "platform": "linux",
+    "pm2": {
+      "appName": "zyra",
+      "processId": "0"
+    }
+  }
+}
+```
+
+**Perfis possíveis de `profile`:**
+
+| Perfil | Condição |
+|--------|----------|
+| `full` | `WA_BOOTSTRAP_CONNECTIONS_ENABLED=true` e `WA_API_ENABLED=true` |
+| `connections-only` | Apenas `WA_BOOTSTRAP_CONNECTIONS_ENABLED=true` |
+| `api-webhook` | Apenas `WA_API_ENABLED=true` (sem gerenciar conexões localmente) |
+| `stateless` | Nenhum dos dois habilitado |
+
+---
+
+## Modo managed (multi-processo)
+
+Quando `WA_BOOTSTRAP_CONNECTIONS_ENABLED=false`, o processo atual não gerencia sockets diretamente. Nesse modo:
+
+- `POST /connections` persiste a instância no banco como `inactive` com `desiredState: running`.
+- `PATCH /connections/:id` e `DELETE /connections/:id` operam sobre o registro persistido.
+- `GET /connections` e `GET /connections/:id` fazem fallback para o banco quando a instância não está na memória local.
+- `POST /connections/:id/connect`, `/disconnect`, `/restart` e endpoints de pairing retornam `409` com a mensagem `operação indisponível neste processo`.
+- Use `POST /connections/:id/webhook/start` para acionar o início de conexão via ingress de webhook, que será processado pelo processo que gerencia conexões.
+
+Endpoints que sempre funcionam independente do modo: `GET /connections`, `GET /connections/:id`, `GET /connections/:id/status`, `POST /connections`, `PATCH /connections/:id`, `DELETE /connections/:id`, `GET /system/runtime`.
 
 ---
 
