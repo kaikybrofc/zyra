@@ -1508,43 +1508,44 @@ Pode repetir ação destrutiva.
 
 ### Banco
 
-- [ ] criar `managed_connections`
-- [ ] criar `connection_admin_events`
-- [ ] criar `webhook_commands`
-- [ ] criar `webhook_outbox`
+- [x] criar `managed_connections`
+- [x] criar `connection_admin_events`
+- [x] criar `webhook_commands`
+- [x] criar `webhook_outbox`
 
 ### Core
 
-- [ ] extrair `ConnectionManager`
-- [ ] mover registry de runtimes para o manager
-- [ ] formalizar estados observados e desejados
-- [ ] adicionar lock por `connection_id`
+- [x] criar `connection-admin-store`
+- [x] extrair `ConnectionManager`
+- [x] mover registry de runtimes para o manager
+- [x] formalizar estados observados e desejados
+- [x] adicionar lock por `connection_id`
 
 ### HTTP
 
-- [ ] subir servidor HTTP administrativo
-- [ ] implementar autenticação HMAC
-- [ ] implementar parsing seguro do body
-- [ ] implementar validação de payload
+- [x] subir servidor HTTP administrativo
+- [x] implementar autenticação HMAC
+- [x] implementar parsing seguro do body
+- [x] implementar validação de payload
 
 ### Pairing
 
-- [ ] extrair `PairingService`
-- [ ] capturar QR sem terminal
-- [ ] expor QR por endpoint/callback
-- [ ] concluir pairing sem restart do PM2
+- [x] extrair `PairingService`
+- [x] capturar QR sem terminal
+- [x] expor QR por endpoint/callback
+- [x] concluir pairing sem restart do PM2
 
 ### Observabilidade
 
-- [ ] persistir eventos administrativos
-- [ ] expor status consolidado por conexão
-- [ ] emitir callbacks de saída
+- [x] persistir eventos administrativos
+- [x] expor status consolidado por conexão
+- [x] emitir callbacks de saída
 
 ### Compatibilidade
 
-- [ ] adicionar modo `hybrid`
-- [ ] migrar sessões legadas de `auth_creds`
-- [ ] manter CLI funcionando como fallback
+- [x] adicionar modo `hybrid`
+- [x] migrar sessões legadas de `auth_creds`
+- [x] manter CLI funcionando como fallback
 
 ---
 

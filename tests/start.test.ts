@@ -6,6 +6,10 @@ const mockConfig = {
   mysqlUrl: null as string | null,
   antibanEnabled: false,
   antibanMetricsEnabled: false,
+  webhookRetryWorkerEnabled: true,
+  webhookOutboxEnabled: true,
+  bootstrapConnectionsEnabled: true,
+  apiEnabled: false,
 }
 
 const createSocketMock = vi.fn()
@@ -15,6 +19,9 @@ const registerEventsMock = vi.fn()
 const initMysqlSchemaMock = vi.fn(async () => undefined)
 const getMysqlPoolMock = vi.fn(() => null)
 const startAntiBanMetricsServerMock = vi.fn(() => ({ stop: vi.fn(async () => undefined) }))
+const startWebhookRetryWorkerMock = vi.fn(() => ({ stop: vi.fn() }))
+const startWebhookOutboxWorkerMock = vi.fn(() => ({ stop: vi.fn() }))
+const enqueueConnectionOutboxEventMock = vi.fn(async () => undefined)
 const logger = {
   info: vi.fn(),
   warn: vi.fn(),
@@ -44,6 +51,13 @@ vi.mock('../src/observability/logger.js', () => ({
 vi.mock('../src/observability/antiban-metrics.js', () => ({
   startAntiBanMetricsServer: (...args: unknown[]) => startAntiBanMetricsServerMock(...args),
 }))
+vi.mock('../src/webhook/retry-worker.js', () => ({
+  startWebhookRetryWorker: (...args: unknown[]) => startWebhookRetryWorkerMock(...args),
+}))
+vi.mock('../src/core/webhooks/outbox-dispatcher.js', () => ({
+  startWebhookOutboxWorker: (...args: unknown[]) => startWebhookOutboxWorkerMock(...args),
+  enqueueConnectionOutboxEvent: (...args: unknown[]) => enqueueConnectionOutboxEventMock(...args),
+}))
 
 describe('startup multi-connection', () => {
   afterEach(() => {
@@ -58,6 +72,13 @@ describe('startup multi-connection', () => {
     mockConfig.mysqlUrl = null
     mockConfig.antibanEnabled = false
     mockConfig.antibanMetricsEnabled = false
+    mockConfig.webhookRetryWorkerEnabled = true
+    mockConfig.webhookOutboxEnabled = true
+    mockConfig.bootstrapConnectionsEnabled = true
+    mockConfig.apiEnabled = false
+    startWebhookRetryWorkerMock.mockReturnValue({ stop: vi.fn() })
+    startWebhookOutboxWorkerMock.mockReturnValue({ stop: vi.fn() })
+    enqueueConnectionOutboxEventMock.mockResolvedValue(undefined)
     createSocketMock.mockImplementation(async (connectionId: string) => ({
       ev: { removeAllListeners: vi.fn() },
       end: vi.fn(async () => undefined),
@@ -269,5 +290,26 @@ describe('startup multi-connection', () => {
     const options = startAntiBanMetricsServerMock.mock.calls[0]?.[0] as { getOperationalSnapshots: () => Array<{ connectionId: string }> }
     const snapshots = options.getOperationalSnapshots()
     expect(snapshots.map((snapshot) => snapshot.connectionId)).toEqual(['conn-a', 'conn-b'])
+  })
+
+  it('não executa bootstrap de conexões quando desabilitado', async () => {
+    mockConfig.bootstrapConnectionsEnabled = false
+
+    const { start } = await import('../src/bootstrap/start.ts')
+    await start()
+
+    expect(createSocketMock).not.toHaveBeenCalled()
+  })
+
+  it('respeita as flags dos workers de webhook', async () => {
+    mockConfig.connectionIds = ['conn-a']
+    mockConfig.webhookRetryWorkerEnabled = false
+    mockConfig.webhookOutboxEnabled = false
+
+    const { start } = await import('../src/bootstrap/start.ts')
+    await start()
+
+    expect(startWebhookRetryWorkerMock).not.toHaveBeenCalled()
+    expect(startWebhookOutboxWorkerMock).not.toHaveBeenCalled()
   })
 })

@@ -6,6 +6,8 @@ import { renderQrInTerminal } from './qr-terminal.js'
 import { handleIncomingMessages } from '../router/index.js'
 import { createSqlStore } from '../store/sql-store.js'
 import { getMessageText, getNormalizedMessage } from '../utils/message.js'
+import { dispatchWebhookEvent, WEBHOOK_SUPPORTED_EVENTS } from '../webhook/dispatcher.js'
+import { enqueueConnectionOutboxEvent } from '../core/webhooks/outbox-dispatcher.js'
 
 /**
  * Opções de inicialização para o registro de eventos.
@@ -19,6 +21,12 @@ type RegisterOptions = {
   reconnect: () => Promise<void>
   /** Identificador único da conexão (usado para logs e banco de dados). */
   connectionId: string
+  /** Callback chamado sempre que um novo QR code é recebido do Baileys. */
+  onQrCode?: (qr: string) => void
+  /** Callback chamado quando a conexão é estabelecida com sucesso. */
+  onConnectionOpen?: () => void
+  /** Callback chamado quando a conexão é encerrada. */
+  onConnectionClose?: () => void
 }
 
 /**
@@ -101,7 +109,7 @@ type EventHandler<K extends keyof BaileysEventMap> = (data: BaileysEventMap[K]) 
  *
  * @param options Dependências e callbacks do ciclo de vida da conexão.
  */
-export function registerEvents({ sock, logger, reconnect, connectionId }: RegisterOptions): void {
+export function registerEvents({ sock, logger, reconnect, connectionId, onQrCode, onConnectionOpen, onConnectionClose }: RegisterOptions): void {
   /** Socket com capability opcional de flush imediato de credenciais. */
   const socketWithCredsFlush = sock as SocketWithCredsFlush
   /** Socket com capability opcional de consulta de metadados de newsletter. */
@@ -502,8 +510,9 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
     'connection.update': (update) => {
       const { connection, lastDisconnect, qr, receivedPendingNotifications, isNewLogin } = update
 
-      if (qr && config.printQRInTerminal) {
-        renderQrInTerminal(logger, qr, connectionId)
+      if (qr) {
+        if (config.printQRInTerminal) renderQrInTerminal(logger, qr, connectionId)
+        onQrCode?.(qr)
       }
 
       logger.info('connection.update', {
@@ -525,6 +534,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
       )
 
       if (connection === 'close') {
+        onConnectionClose?.()
         const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut
         const restartRequired = statusCode === DisconnectReason.restartRequired
@@ -535,6 +545,18 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
             statusCode,
             connectionId,
             recommendation: 'verifique reachout timelock/tctoken e reduza alcance para novos contatos temporariamente',
+          })
+        }
+        if (statusCode === DisconnectReason.loggedOut) {
+          void enqueueConnectionOutboxEvent(connectionId, 'connection.auth.logged_out', {
+            statusCode,
+            shouldReconnect: false,
+          })
+        } else if (statusCode) {
+          void enqueueConnectionOutboxEvent(connectionId, 'connection.error', {
+            statusCode,
+            restartRequired,
+            shouldReconnect,
           })
         }
 
@@ -551,6 +573,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
           })()
         }
       } else if (connection === 'open') {
+        onConnectionOpen?.()
         logger.info('conexão aberta')
         if (isNewLogin && !restartedAfterNewLogin) {
           restartedAfterNewLogin = true
@@ -988,6 +1011,9 @@ export function registerEvents({ sock, logger, reconnect, connectionId }: Regist
         await handler(data as never)
       } else {
         logEvent(event, {})
+      }
+      if (WEBHOOK_SUPPORTED_EVENTS.has(event)) {
+        void dispatchWebhookEvent(connectionId, event, data)
       }
     })
   }

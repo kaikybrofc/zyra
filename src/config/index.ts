@@ -35,6 +35,15 @@ function readCanonicalJidMode(value: string | undefined, fallback: 'pn' | 'lid')
   return fallback
 }
 
+function readConnectionControlMode(value: string | undefined, fallback: 'legacy' | 'managed' | 'hybrid'): 'legacy' | 'managed' | 'hybrid' {
+  if (!value) return fallback
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'legacy' || normalized === 'managed' || normalized === 'hybrid') {
+    return normalized
+  }
+  return fallback
+}
+
 /**
  * Configurações globais da aplicação derivadas das variáveis de ambiente.
  * Centraliza o acesso a parâmetros de conexão, banco de dados, segurança e comportamento do bot.
@@ -90,6 +99,10 @@ export const config = {
   /** Identificador único da conexão do bot (WA_CONNECTION_ID). */
   get connectionId() {
     return process.env.WA_CONNECTION_ID ?? 'default'
+  },
+  /** Modo de controle de conexões no boot (WA_CONNECTION_CONTROL_MODE). */
+  get connectionControlMode() {
+    return readConnectionControlMode(process.env.WA_CONNECTION_CONTROL_MODE, 'hybrid')
   },
   /** Se o bot deve processar as próprias mensagens enviadas (WA_ACCEPT_OWN_MESSAGES). */
   get allowOwnMessages() {
@@ -292,5 +305,77 @@ export const config = {
   /** Bind host for health check server (WA_HEALTH_HOST). */
   get healthHost() {
     return process.env.WA_HEALTH_HOST ?? '0.0.0.0'
+  },
+  /** Habilita servidor HTTP da API REST (WA_API_ENABLED). */
+  get apiEnabled() {
+    return readBoolean(process.env.WA_API_ENABLED, false)
+  },
+  /** Controla se este processo deve executar bootstrap do ConnectionManager (WA_BOOTSTRAP_CONNECTIONS_ENABLED). */
+  get bootstrapConnectionsEnabled() {
+    return readBoolean(process.env.WA_BOOTSTRAP_CONNECTIONS_ENABLED, true)
+  },
+  /** Porta do servidor HTTP da API REST (WA_API_PORT). */
+  get apiPort() {
+    return readNumber(process.env.WA_API_PORT, 3000)
+  },
+  /** Host de bind do servidor HTTP da API REST (WA_API_HOST). */
+  get apiHost() {
+    return process.env.WA_API_HOST ?? '0.0.0.0'
+  },
+  /** Chave de autenticação da API REST — se definida, exige Bearer token (WA_API_KEY). */
+  get apiKey() {
+    return process.env.WA_API_KEY ?? null
+  },
+  /** Timeout em ms para requisições de webhook (WA_WEBHOOK_TIMEOUT_MS). */
+  get webhookTimeoutMs() {
+    return readNumber(process.env.WA_WEBHOOK_TIMEOUT_MS, 10_000)
+  },
+  /** Lista CSV de URLs permitidas para entrega de webhook (WA_WEBHOOK_ALLOWED_TARGETS). */
+  get webhookAllowedTargets() {
+    const raw = process.env.WA_WEBHOOK_ALLOWED_TARGETS ?? ''
+    return raw
+      .split(',')
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0)
+  },
+  /** Segredo compartilhado para autenticar webhooks de entrada via HMAC SHA-256 (WA_WEBHOOK_SHARED_SECRET). */
+  get webhookSharedSecret() {
+    return process.env.WA_WEBHOOK_SHARED_SECRET ?? null
+  },
+  /** Tamanho máximo do corpo de webhook de entrada em bytes (WA_WEBHOOK_MAX_BODY_BYTES). */
+  get webhookMaxBodyBytes() {
+    return readNumber(process.env.WA_WEBHOOK_MAX_BODY_BYTES, 262_144)
+  },
+  /** Janela máxima de tolerância para timestamp do webhook (WA_WEBHOOK_TIMESTAMP_TOLERANCE_MS). */
+  get webhookTimestampToleranceMs() {
+    return readNumber(process.env.WA_WEBHOOK_TIMESTAMP_TOLERANCE_MS, 300_000)
+  },
+  /** Token opcional adicional para ações de hard delete no webhook (WA_WEBHOOK_HARD_DELETE_TOKEN). */
+  get webhookHardDeleteToken() {
+    return process.env.WA_WEBHOOK_HARD_DELETE_TOKEN ?? null
+  },
+  /** Número máximo de tentativas de entrega antes de marcar como dead_letter (WA_WEBHOOK_MAX_ATTEMPTS). */
+  get webhookMaxAttempts() {
+    return readNumber(process.env.WA_WEBHOOK_MAX_ATTEMPTS, 4)
+  },
+  /** Habilita worker legado de retry para webhook_deliveries (WA_WEBHOOK_RETRY_ENABLED). */
+  get webhookRetryWorkerEnabled() {
+    return readBoolean(process.env.WA_WEBHOOK_RETRY_ENABLED, true)
+  },
+  /** Habilita callbacks assíncronos por outbox para eventos de conexão (WA_WEBHOOK_OUTBOX_ENABLED). */
+  get webhookOutboxEnabled() {
+    return readBoolean(process.env.WA_WEBHOOK_OUTBOX_ENABLED, true)
+  },
+  /** Tamanho máximo de lote processado por ciclo do worker de outbox (WA_WEBHOOK_OUTBOX_BATCH_SIZE). */
+  get webhookOutboxBatchSize() {
+    return readNumber(process.env.WA_WEBHOOK_OUTBOX_BATCH_SIZE, 50)
+  },
+  /** Backoff base em ms para retentativas do outbox (WA_WEBHOOK_OUTBOX_RETRY_BASE_MS). */
+  get webhookOutboxRetryBaseMs() {
+    return readNumber(process.env.WA_WEBHOOK_OUTBOX_RETRY_BASE_MS, 5_000)
+  },
+  /** Backoff máximo em ms para retentativas do outbox (WA_WEBHOOK_OUTBOX_RETRY_MAX_MS). */
+  get webhookOutboxRetryMaxMs() {
+    return readNumber(process.env.WA_WEBHOOK_OUTBOX_RETRY_MAX_MS, 300_000)
   },
 }

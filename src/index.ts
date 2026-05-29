@@ -10,6 +10,7 @@ type ValidationResult = {
 
 const LOG_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error', 'fatal'])
 const BOOLEAN_VALUES = new Set(['true', 'false'])
+const CONNECTION_CONTROL_MODES = new Set(['legacy', 'managed', 'hybrid'])
 
 /**
  * Realiza validações básicas de ambiente e configuração antes da inicialização (boot).
@@ -64,6 +65,15 @@ const validateEnvironment = (): ValidationResult => {
     }
   }
 
+  const ensureEnum = (key: string, values: Set<string>) => {
+    const raw = process.env[key]
+    if (!raw) return
+    const normalized = raw.trim().toLowerCase()
+    if (!values.has(normalized)) {
+      errors.push(`${key} inválido ("${raw}"). Valores aceitos: ${Array.from(values).join(', ')}.`)
+    }
+  }
+
   const ensureDeprecated = (oldKey: string, newKey: string) => {
     if (process.env[oldKey] !== undefined) {
       warnings.push(`${oldKey} is deprecated — use ${newKey} instead.`)
@@ -91,6 +101,10 @@ const validateEnvironment = (): ValidationResult => {
   ensureBoolean('WA_ANTIBAN_METRICS_ENABLED')
   ensureBoolean('WA_BACKFILL_ONCE')
   ensureBoolean('WA_HEALTH_ENABLED')
+  ensureBoolean('WA_API_ENABLED')
+  ensureBoolean('WA_BOOTSTRAP_CONNECTIONS_ENABLED')
+  ensureBoolean('WA_WEBHOOK_RETRY_ENABLED')
+  ensureBoolean('WA_WEBHOOK_OUTBOX_ENABLED')
 
   const mysqlUrl = process.env.MYSQL_URL ?? process.env.WA_DB_URL
   ensureUrl('MYSQL_URL', mysqlUrl, {
@@ -105,6 +119,7 @@ const validateEnvironment = (): ValidationResult => {
 
   ensurePort('WA_HEALTH_PORT')
   ensurePort('WA_ANTIBAN_METRICS_PORT')
+  ensurePort('WA_API_PORT')
 
   ensurePositiveNumber('WA_SHUTDOWN_TIMEOUT_MS')
   ensurePositiveNumber('WA_CREDS_DEBOUNCE_MS')
@@ -120,6 +135,7 @@ const validateEnvironment = (): ValidationResult => {
   ensurePositiveNumber('WA_RECONNECT_MAX_DELAY_MS')
   ensurePositiveNumber('WA_RECONNECT_MAX_ATTEMPTS')
   ensurePositiveNumber('WA_VERSION_CACHE_TTL_MS')
+  ensureEnum('WA_CONNECTION_CONTROL_MODE', CONNECTION_CONTROL_MODES)
 
   if (config.connectionIds) {
     const hasInvalidConnectionIds = config.connectionIds.some((connectionId) => !connectionId.trim())
