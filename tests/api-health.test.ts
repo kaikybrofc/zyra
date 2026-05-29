@@ -1,11 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
-type FakeRequest = {
-  method?: string
-  url?: string
-}
-
 type FakeResponse = {
   statusCode: number
   headers: Record<string, string>
