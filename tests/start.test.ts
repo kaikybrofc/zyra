@@ -65,6 +65,8 @@ describe('startup multi-connection', () => {
   })
 
   beforeEach(() => {
+    // Evita vazamento de fake timers de outros testes/arquivos.
+    vi.useRealTimers()
     vi.resetModules()
     vi.clearAllMocks()
     mockConfig.connectionIds = null

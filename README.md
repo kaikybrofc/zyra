@@ -17,6 +17,7 @@ O projeto foi desenhado para manter sessões resilientes, auditar eventos do Wha
 - [Instalação](#instalação)
 - [Configuração](#configuração)
 - [Como Executar](#como-executar)
+- [API REST e Webhooks](#api-rest-e-webhooks)
 - [Comandos de Desenvolvimento](#comandos-de-desenvolvimento)
 - [Docker](#docker)
 - [Produção com PM2](#produção-com-pm2)
@@ -27,11 +28,12 @@ O projeto foi desenhado para manter sessões resilientes, auditar eventos do Wha
 
 ## Visão Geral
 
-O Zyra combina quatro responsabilidades principais em uma única plataforma:
+O Zyra combina cinco responsabilidades principais em uma única plataforma:
 
 - conexão e autenticação de sessões WhatsApp via Baileys
 - persistência de estado e auditoria em MySQL, Redis e disco
 - execução de comandos desacoplados do transporte
+- API REST e dashboard para operações remotas e automação externa
 - suporte operacional para produção, incluindo backfill, logs estruturados e métricas do antiban
 
 A aplicação suporta tanto uso local simples quanto cenários distribuídos com múltiplas instâncias compartilhando infraestrutura.
@@ -47,6 +49,7 @@ A aplicação suporta tanto uso local simples quanto cenários distribuídos com
 - **Backfill contínuo** para completar colunas derivadas e reparar consistência histórica
 - **Proteção antiban** com warm-up persistente, detecção de sessão surda e endpoint de métricas
 - **Suporte a newsletters/canais** com snapshot, eventos, participantes e refresh de mídia
+- **API REST operacional** com health checks, runtime profile, dashboard web e gerenciamento remoto de conexões
 
 ## Arquitetura
 
@@ -152,6 +155,12 @@ Variáveis centrais:
 - `WA_COMMAND_PREFIX`: prefixo de comandos
 - `WA_ANTIBAN_ENABLED`: ativa proteção antiban
 - `WA_MEDIA_AUTO_DOWNLOAD`: baixa mídias recebidas para disco
+- `WA_API_ENABLED`: habilita o servidor HTTP da API REST
+- `WA_API_HOST` e `WA_API_PORT`: host/porta de bind da API
+- `WA_API_KEY`: exige `Authorization: Bearer <chave>` quando definida
+- `WA_BOOTSTRAP_CONNECTIONS_ENABLED`: define se este processo também gerencia sockets/conexões
+- `WA_WEBHOOK_SHARED_SECRET`: ativa autenticação HMAC do ingress `POST /webhooks/connections`
+- `WA_WEBHOOK_ALLOWED_TARGETS`: lista CSV de URLs permitidas para webhooks de saída
 
 ### Estratégia de startup das conexões
 
@@ -226,6 +235,68 @@ WA_REDIS_URL=redis://127.0.0.1:6379
 ```
 
 Esse modo é útil quando as sessões já foram persistidas no MySQL e você quer que o bootstrap descubra automaticamente quais conexões devem subir.
+
+## API REST e Webhooks
+
+### Habilitação básica
+
+```env
+WA_API_ENABLED=true
+WA_API_HOST=0.0.0.0
+WA_API_PORT=3000
+# WA_API_KEY=sua-chave-secreta
+```
+
+Quando `WA_API_KEY` estiver definida, os endpoints protegidos exigem:
+
+```http
+Authorization: Bearer sua-chave-secreta
+```
+
+Exceções: `GET /health/*` e `POST /webhooks/connections` usam fluxo operacional próprio e não dependem de `WA_API_KEY`.
+
+### Endpoints principais
+
+| Método | Rota | Uso |
+|---|---|---|
+| `GET` | `/dashboard` | Interface web para operações de conexão/webhook |
+| `GET` | `/system/runtime` | Perfil do processo (`full`, `connections-only`, `api-webhook`, `stateless`) |
+| `GET` | `/health/live` | Liveness para orquestradores |
+| `GET` | `/health/ready` | Readiness de MySQL/Redis/control-plane |
+| `GET` | `/health/connections` | Resumo dos estados por `connection_id` |
+| `POST` | `/connections` | Criar instância |
+| `POST` | `/connections/:id/connect` | Iniciar conexão (gera QR) |
+| `GET` | `/connections/:id/qr` | Ler QR atual |
+| `GET` | `/connections/:id/status` | Estado resumido (`created`, `connecting`, `qr`, `open`, `closed`, `error`) |
+| `POST` | `/connections/:id/messages/send` | Enviar texto/mídia |
+| `GET` | `/connections/:id/groups` | Listar grupos da instância |
+| `POST` | `/connections/:id/webhooks` | Cadastrar webhook da instância |
+| `POST` | `/webhooks` | Cadastrar webhook global (todas as instâncias) |
+| `POST` | `/webhooks/connections` | Ingress assinado por HMAC para comandos de conexão |
+
+### Modo managed (API separada do processo de conexões)
+
+Com `WA_BOOTSTRAP_CONNECTIONS_ENABLED=false`, o processo atende API/webhooks, mas não controla sockets locais.
+
+Nesse modo:
+
+- `POST /connections/:id/connect`, `disconnect`, `restart` e endpoints de pairing retornam `409`
+- `POST /connections/:id/webhook/start` passa a ser o caminho recomendado para iniciar conexão
+- `GET /connections`, `GET /connections/:id` e `GET /system/runtime` continuam disponíveis
+
+### Segurança do ingress de conexões
+
+O endpoint `POST /webhooks/connections` usa assinatura HMAC SHA-256 sobre `${timestamp}.${rawBody}`.
+
+Variáveis relacionadas:
+
+```env
+WA_WEBHOOK_SHARED_SECRET=troque-este-segredo
+WA_WEBHOOK_MAX_BODY_BYTES=262144
+WA_WEBHOOK_TIMESTAMP_TOLERANCE_MS=300000
+```
+
+Para payloads completos, exemplos `curl` e coleção Postman, veja a seção [Documentação](#documentação).
 
 ## Comandos de Desenvolvimento
 
@@ -304,12 +375,14 @@ Observações:
 - as métricas do antiban ficam expostas na porta `9108`
 - o serviço `zyra` pode subir uma única sessão com `WA_CONNECTION_ID` ou várias sessões com `WA_CONNECTION_IDS`
 - sem `WA_CONNECTION_IDS`, a stack pode descobrir conexões já persistidas em `auth_creds` quando `MYSQL_URL` estiver configurado
+- para expor a API REST via Docker, habilite `WA_API_ENABLED=true` e publique a porta `3000:3000`
 
 ## Produção com PM2
 
-O ecossistema PM2 sobe dois processos:
+O ecossistema PM2 sobe três processos:
 
-- `zyra`
+- `zyra` (conexões/sockets)
+- `zyra-api-webhook` (API REST, dashboard e workers de webhook)
 - `zyra-backfill`
 
 Comandos principais:
@@ -336,6 +409,7 @@ npm run pm2:startup
 Notas operacionais:
 
 - o processo `zyra` pode manter múltiplas sessões ativas ao mesmo tempo
+- o processo `zyra-api-webhook` roda com `WA_BOOTSTRAP_CONNECTIONS_ENABLED=false` e atua como control-plane HTTP
 - prefira `WA_CONNECTION_IDS` quando quiser controle explícito do conjunto de sessões
 - prefira descoberta via MySQL quando `auth_creds` já for a fonte de verdade das sessões persistidas
 - para parear uma nova conta via QR no terminal, use `npm run session:pair -- --connection <id>`
@@ -386,6 +460,9 @@ WA_BACKFILL_ONCE=true npm run db:backfill
 ### Guias complementares
 
 - [Arquitetura de comandos e visão técnica](docs/README-COMMANDS.md)
+- [Guia da API REST (endpoints, payloads e fluxo completo)](docs/README-API.md)
+- [Guia de Webhooks (filtros, assinaturas e retentativas)](docs/README-WEBHOOKS.md)
+- [Coleção Postman da API](docs/zyra-api.postman_collection.json)
 
 ## Contribuidores
 
