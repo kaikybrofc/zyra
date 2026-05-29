@@ -19,6 +19,8 @@ import {
   listManagedConnections,
   upsertManagedConnection,
   type ManagedConnectionRecord,
+  type ManagedConnectionPairingState,
+  type ManagedConnectionStatus,
 } from '../../store/connection-admin-store.js'
 import { readBody, parseJson, sendJson, sendError, matchRoute } from '../http.js'
 
@@ -33,6 +35,26 @@ type WebhookCommandResponse = {
   current_state?: string | null
   desired_state?: 'running' | 'stopped' | 'paused' | 'deleted'
   reason?: string
+}
+
+type ConnectionAdminStatusView = {
+  connection_id: string
+  display_name: string | null
+  enabled: boolean
+  desired_state: 'running' | 'stopped' | 'paused' | 'deleted'
+  status: ManagedConnectionStatus
+  pairing_state: ManagedConnectionPairingState
+  socket_generation: number
+  reconnect_in_flight: boolean
+  socket_active: boolean
+  last_connected_at: string | null
+  last_disconnected_at: string | null
+  last_disconnect_code: number | null
+  last_error: string | null
+}
+
+type ConnectionWithAdmin = ConnectionInfo & {
+  admin: ConnectionAdminStatusView
 }
 
 const signWebhookCommand = (secret: string, timestamp: string, body: string): string => {
@@ -146,6 +168,74 @@ const mapManagedStatusToRuntime = (record: ManagedConnectionRecord): ConnectionI
   return 'closed'
 }
 
+const toIso = (value: number | null | undefined): string | null => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null
+  return new Date(value).toISOString()
+}
+
+const mapRuntimeStatusToManaged = (
+  status: ConnectionInfo['status'],
+  desiredState: ConnectionAdminStatusView['desired_state']
+): ManagedConnectionStatus => {
+  if (status === 'created') {
+    if (desiredState === 'deleted') return 'deleted'
+    if (desiredState === 'paused') return 'paused'
+    return 'inactive'
+  }
+  if (status === 'connecting') return 'connecting'
+  if (status === 'qr') return 'pairing'
+  if (status === 'open') return 'open'
+  if (status === 'error') return 'error'
+  if (desiredState === 'deleted') return 'deleted'
+  if (desiredState === 'paused') return 'paused'
+  return 'closed'
+}
+
+const buildAdminStatus = (
+  runtime: ConnectionInfo | null,
+  managed: ManagedConnectionRecord | null
+): ConnectionAdminStatusView => {
+  const connectionId = runtime?.connectionId ?? managed?.connectionId ?? ''
+  const desiredState = managed?.desiredState ?? 'running'
+  const runtimeStatus = runtime?.status ?? null
+  const resolvedStatus = runtimeStatus
+    ? mapRuntimeStatusToManaged(runtimeStatus, desiredState)
+    : (managed?.status ?? 'closed')
+  const pairingState =
+    runtimeStatus === 'qr'
+      ? 'qr_ready'
+      : (managed?.pairingState ?? 'not_required')
+  const socketActive = runtime?.socketActive ?? managed?.status === 'open'
+
+  return {
+    connection_id: connectionId,
+    display_name: runtime?.label ?? managed?.displayName ?? null,
+    enabled: managed?.enabled ?? true,
+    desired_state: desiredState,
+    status: resolvedStatus,
+    pairing_state: pairingState,
+    socket_generation: runtime?.socketGeneration ?? 0,
+    reconnect_in_flight: runtime?.reconnectInFlight ?? false,
+    socket_active: socketActive,
+    last_connected_at: toIso(managed?.lastConnectedAt ?? runtime?.lastReconnectAt ?? null),
+    last_disconnected_at: toIso(managed?.lastDisconnectedAt ?? null),
+    last_disconnect_code: managed?.lastDisconnectCode ?? null,
+    last_error: managed?.lastError ?? null,
+  }
+}
+
+const buildConnectionWithAdmin = (
+  runtime: ConnectionInfo | null,
+  managed: ManagedConnectionRecord | null
+): ConnectionWithAdmin | null => {
+  const base = runtime ?? (managed ? managedRecordToConnectionInfo(managed) : null)
+  if (!base) return null
+  return {
+    ...base,
+    admin: buildAdminStatus(runtime, managed),
+  }
+}
+
 const managedRecordToConnectionInfo = (record: ManagedConnectionRecord): ConnectionInfo => ({
   connectionId: record.connectionId,
   label: record.displayName,
@@ -158,36 +248,49 @@ const managedRecordToConnectionInfo = (record: ManagedConnectionRecord): Connect
   qrCodeAt: null,
 })
 
-const listConnectionsWithManagedFallback = async (logger: AppLogger): Promise<ConnectionInfo[]> => {
-  const merged = new Map<string, ConnectionInfo>()
-  for (const info of listConnections()) {
-    merged.set(info.connectionId, info)
-  }
+const listConnectionsWithManagedFallback = async (logger: AppLogger): Promise<ConnectionWithAdmin[]> => {
+  const runtimeMap = new Map<string, ConnectionInfo>()
+  for (const info of listConnections()) runtimeMap.set(info.connectionId, info)
 
+  const managedMap = new Map<string, ManagedConnectionRecord>()
   try {
     const managed = await listManagedConnections()
-    for (const record of managed) {
-      if (!merged.has(record.connectionId)) {
-        merged.set(record.connectionId, managedRecordToConnectionInfo(record))
-      }
-    }
+    for (const record of managed) managedMap.set(record.connectionId, record)
   } catch (error) {
     logger.warn('falha ao listar conexões managed para fallback da API', { err: error })
   }
 
-  return Array.from(merged.values()).sort((a, b) => a.connectionId.localeCompare(b.connectionId))
+  const connectionIds = new Set<string>([...runtimeMap.keys(), ...managedMap.keys()])
+  const merged: ConnectionWithAdmin[] = []
+  for (const connectionId of connectionIds) {
+    const entry = buildConnectionWithAdmin(runtimeMap.get(connectionId) ?? null, managedMap.get(connectionId) ?? null)
+    if (entry) merged.push(entry)
+  }
+
+  return merged.sort((a, b) => a.connectionId.localeCompare(b.connectionId))
 }
 
 const getConnectionWithManagedFallback = async (
   connectionId: string,
   logger: AppLogger
-): Promise<ConnectionInfo | null> => {
+): Promise<ConnectionWithAdmin | null> => {
   const runtime = getConnection(connectionId)
-  if (runtime) return runtime
+  if (runtime) {
+    let managed: ManagedConnectionRecord | null = null
+    try {
+      managed = await getManagedConnection(connectionId)
+    } catch (error) {
+      logger.warn('falha ao consultar conexão managed para enriquecer resposta da API', {
+        err: error,
+        connectionId,
+      })
+    }
+    return buildConnectionWithAdmin(runtime, managed)
+  }
   try {
     const managed = await getManagedConnection(connectionId)
     if (!managed) return null
-    return managedRecordToConnectionInfo(managed)
+    return buildConnectionWithAdmin(null, managed)
   } catch (error) {
     logger.warn('falha ao consultar conexão managed para fallback da API', {
       err: error,
@@ -242,7 +345,7 @@ export async function handleConnectionsRoutes(
         pairingState: 'not_required',
         webhookSource: 'api.dashboard',
       })
-      sendJson(res, 201, managedRecordToConnectionInfo(created))
+      sendJson(res, 201, buildConnectionWithAdmin(null, created))
       return true
     }
 
@@ -250,9 +353,9 @@ export async function handleConnectionsRoutes(
       sendError(res, 409, 'connectionId já existe')
       return true
     }
-    const created = createConnection(id)
+    createConnection(id)
     if (label !== null) setConnectionLabel(id, label)
-    sendJson(res, 201, getConnection(id) ?? created)
+    sendJson(res, 201, await getConnectionWithManagedFallback(id, logger))
     return true
   }
 
@@ -278,13 +381,13 @@ export async function handleConnectionsRoutes(
         connectionId: id,
         displayName: label,
       })
-      sendJson(res, 200, managedRecordToConnectionInfo(updated))
+      sendJson(res, 200, buildConnectionWithAdmin(null, updated))
       return true
     }
 
     if (!getConnection(id)) { sendError(res, 404, 'conexão não encontrada'); return true }
     if (body && 'label' in body) setConnectionLabel(id, label)
-    sendJson(res, 200, getConnection(id))
+    sendJson(res, 200, await getConnectionWithManagedFallback(id, logger))
     return true
   }
 
@@ -314,14 +417,14 @@ export async function handleConnectionsRoutes(
     return true
   }
 
-  // POST /connections/:id/connect
-  const connectMatch = matchRoute('/connections/:id/connect', pathname)
+  // POST /connections/:id/connect || /connections/:id/start
+  const connectMatch = matchRoute('/connections/:id/connect', pathname) ?? matchRoute('/connections/:id/start', pathname)
   if (method === 'POST' && connectMatch) {
     const id = connectMatch.params['id'] ?? ''
     if (!managerCanExecuteRuntimeActions()) { sendError(res, 409, MANAGER_DISABLED_ERROR); return true }
     if (!getConnection(id)) { sendError(res, 404, 'conexão não encontrada'); return true }
     await connect(id, logger)
-    sendJson(res, 200, getConnection(id))
+    sendJson(res, 200, await getConnectionWithManagedFallback(id, logger))
     return true
   }
 
@@ -368,14 +471,14 @@ export async function handleConnectionsRoutes(
     return true
   }
 
-  // POST /connections/:id/restart
-  const restartMatch = matchRoute('/connections/:id/restart', pathname)
+  // POST /connections/:id/restart || /connections/:id/reconnect
+  const restartMatch = matchRoute('/connections/:id/restart', pathname) ?? matchRoute('/connections/:id/reconnect', pathname)
   if (method === 'POST' && restartMatch) {
     const id = restartMatch.params['id'] ?? ''
     if (!managerCanExecuteRuntimeActions()) { sendError(res, 409, MANAGER_DISABLED_ERROR); return true }
     if (!getConnection(id)) { sendError(res, 404, 'conexão não encontrada'); return true }
     await restart(id, logger)
-    sendJson(res, 200, getConnection(id))
+    sendJson(res, 200, await getConnectionWithManagedFallback(id, logger))
     return true
   }
 
@@ -419,7 +522,14 @@ export async function handleConnectionsRoutes(
   if (method === 'GET' && statusMatch) {
     const info = await getConnectionWithManagedFallback(statusMatch.params['id'] ?? '', logger)
     if (!info) { sendError(res, 404, 'conexão não encontrada'); return true }
-    sendJson(res, 200, { connectionId: info.connectionId, status: info.status, socketActive: info.socketActive })
+    sendJson(res, 200, {
+      ...info.admin,
+      connectionId: info.connectionId,
+      status: info.status,
+      socketActive: info.socketActive,
+      reconnectInFlight: info.reconnectInFlight,
+      admin: info.admin,
+    })
     return true
   }
 

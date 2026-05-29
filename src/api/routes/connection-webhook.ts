@@ -11,6 +11,7 @@ import {
   pause,
   resume,
   deleteConnection,
+  hardDeleteConnection,
   setConnectionLabel,
 } from '../../core/connection/manager.js'
 import { startPairing, cancelPairing } from '../../core/connection/pairing-service.js'
@@ -70,6 +71,10 @@ type CommandResponse = {
   desired_state: 'running' | 'stopped' | 'paused' | 'deleted'
   reason?: string
 }
+
+type HardDeleteGuardResult =
+  | { ok: true }
+  | { ok: false; httpStatus: number; reason: string }
 
 const COMMAND_ACTIONS: ReadonlySet<string> = new Set([
   'register',
@@ -146,6 +151,29 @@ const invalidResponse = (
   reason,
 })
 
+const validateHardDeleteGuard = (input: {
+  forceFlag: boolean
+  hardDeleteConfirmHeader: string
+  hardDeleteTokenHeader: string
+}): HardDeleteGuardResult => {
+  if (!input.forceFlag) {
+    return { ok: false, httpStatus: 422, reason: 'delete_hard requer options.force=true' }
+  }
+
+  const configuredToken = config.webhookHardDeleteToken?.trim() ?? ''
+  if (configuredToken) {
+    if (input.hardDeleteTokenHeader !== configuredToken) {
+      return { ok: false, httpStatus: 403, reason: 'token adicional de hard delete inválido' }
+    }
+    return { ok: true }
+  }
+
+  if (input.hardDeleteConfirmHeader !== 'true') {
+    return { ok: false, httpStatus: 422, reason: 'delete_hard requer header x-zyra-hard-delete-confirm=true' }
+  }
+  return { ok: true }
+}
+
 const finalizeAndReply = async (
   commandId: string,
   response: CommandResponse,
@@ -189,6 +217,8 @@ export async function handleConnectionWebhookRoutes(
   const timestampHeader = String(req.headers['x-zyra-timestamp'] ?? '').trim()
   const signatureHeader = String(req.headers['x-zyra-signature'] ?? '').trim()
   const deliveryId = String(req.headers['x-zyra-delivery-id'] ?? '').trim()
+  const hardDeleteConfirmHeader = String(req.headers['x-zyra-hard-delete-confirm'] ?? '').trim().toLowerCase()
+  const hardDeleteTokenHeader = String(req.headers['x-zyra-hard-delete-token'] ?? '').trim()
 
   if (!timestampHeader || !signatureHeader || !deliveryId) {
     sendError(res, 401, 'headers de autenticação do webhook ausentes')
@@ -327,13 +357,25 @@ export async function handleConnectionWebhookRoutes(
     } else if (actionType === 'pairing_cancel') {
       ensureConnectionExists(connectionId)
       await cancelPairing(connectionId)
-    } else if (actionType === 'delete_soft' || actionType === 'delete_hard') {
+    } else if (actionType === 'delete_soft') {
       if (!getConnection(connectionId)) {
         const response: CommandResponse = invalidResponse(commandId, connectionId, action, 'conexão não encontrada')
         await finalizeAndReply(commandId, response, { status: 'rejected', httpStatus: 404 }, res)
         return true
       }
       await deleteConnection(connectionId, logger)
+    } else if (actionType === 'delete_hard') {
+      const guard = validateHardDeleteGuard({
+        forceFlag: payload.options?.force === true,
+        hardDeleteConfirmHeader,
+        hardDeleteTokenHeader,
+      })
+      if (!guard.ok) {
+        const rejected = invalidResponse(commandId, connectionId, action, guard.reason)
+        await finalizeAndReply(commandId, rejected, { status: 'rejected', httpStatus: guard.httpStatus }, res)
+        return true
+      }
+      await hardDeleteConnection(connectionId, logger)
     } else if (actionType === 'sync_status') {
       // no-op, apenas devolve status atual
     }

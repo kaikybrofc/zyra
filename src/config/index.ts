@@ -350,6 +350,10 @@ export const config = {
   get webhookTimestampToleranceMs() {
     return readNumber(process.env.WA_WEBHOOK_TIMESTAMP_TOLERANCE_MS, 300_000)
   },
+  /** Token opcional adicional para ações de hard delete no webhook (WA_WEBHOOK_HARD_DELETE_TOKEN). */
+  get webhookHardDeleteToken() {
+    return process.env.WA_WEBHOOK_HARD_DELETE_TOKEN ?? null
+  },
   /** Número máximo de tentativas de entrega antes de marcar como dead_letter (WA_WEBHOOK_MAX_ATTEMPTS). */
   get webhookMaxAttempts() {
     return readNumber(process.env.WA_WEBHOOK_MAX_ATTEMPTS, 4)

@@ -15,6 +15,7 @@ import {
   type UpsertManagedConnectionInput,
 } from '../../store/connection-admin-store.js'
 import { enqueueConnectionOutboxEvent } from '../webhooks/outbox-dispatcher.js'
+import { hardDeleteSessionArtifacts } from './session-cleanup.js'
 
 /** Estado da conexão ao longo do seu ciclo de vida em memória. */
 export type ConnectionStatus = 'created' | 'connecting' | 'qr' | 'open' | 'closed' | 'error'
@@ -65,6 +66,7 @@ export interface ConnectionManager {
   pause(connectionId: string, logger: AppLogger): Promise<void>
   resume(connectionId: string, logger: AppLogger): Promise<void>
   deleteConnection(connectionId: string, logger: AppLogger): Promise<void>
+  hardDeleteConnection(connectionId: string, logger: AppLogger): Promise<void>
   getOperationalSnapshots(): Array<{
     connectionId: string
     socketActive: boolean
@@ -838,6 +840,57 @@ class DefaultConnectionManager implements ConnectionManager {
     this.emitStatusChanged(connectionId, oldStatus, 'closed', runtime.desiredState, 'delete')
   }
 
+  async hardDeleteConnection(connectionId: string, logger: AppLogger): Promise<void> {
+    return this.withConnectionLock(connectionId, 'hard_delete', () =>
+      this.hardDeleteConnectionUnsafe(connectionId, logger)
+    )
+  }
+
+  private async hardDeleteConnectionUnsafe(connectionId: string, logger: AppLogger): Promise<void> {
+    await this.ensureSchemaReady()
+    const runtime = this.runtimes.get(connectionId)
+    const previousStatus = runtime?.status ?? null
+
+    if (runtime) {
+      await this.deleteConnectionUnsafe(connectionId, logger)
+    } else {
+      this.syncManagedConnection(connectionId, {
+        status: 'deleted',
+        desiredState: 'deleted',
+        enabled: false,
+        pairingState: 'not_required',
+        webhookSource: 'manager.hard_delete',
+      })
+    }
+
+    const cleanup = await hardDeleteSessionArtifacts(connectionId, logger)
+    const cleanupOk = cleanup.errors.length === 0
+    const cleanupError = cleanupOk ? null : cleanup.errors.join(' | ')
+
+    this.syncManagedConnection(connectionId, {
+      status: 'deleted',
+      desiredState: 'deleted',
+      enabled: false,
+      pairingState: 'not_required',
+      lastError: cleanupError,
+      webhookSource: 'manager.hard_delete.cleanup',
+    })
+    this.recordAdminEvent({
+      connectionId,
+      eventType: cleanupOk ? 'connection.hard_deleted' : 'connection.hard_delete.partial',
+      source: 'manager.hard_delete',
+      oldState: previousStatus,
+      newState: 'deleted',
+      payload: cleanup,
+    })
+    this.emitOutbox(connectionId, cleanupOk ? 'connection.deleted.hard' : 'connection.deleted.hard.partial', {
+      previous: previousStatus,
+      current: 'deleted',
+      desired: 'deleted',
+      cleanup,
+    })
+  }
+
   getOperationalSnapshots() {
     return Array.from(this.runtimes.values()).map((runtime) => ({
       connectionId: runtime.connectionId,
@@ -992,6 +1045,10 @@ export const resume = (connectionId: string, logger: AppLogger): Promise<void> =
 /** Remove uma instância do manager, desconectando-a se ativa. */
 export const deleteConnection = (connectionId: string, logger: AppLogger): Promise<void> =>
   connectionManager.deleteConnection(connectionId, logger)
+
+/** Remove uma instância e limpa credenciais/sessão persistidas (hard delete). */
+export const hardDeleteConnection = (connectionId: string, logger: AppLogger): Promise<void> =>
+  connectionManager.hardDeleteConnection(connectionId, logger)
 
 /** Retorna os snapshots operacionais para o servidor de métricas do antiban. */
 export const getOperationalSnapshots = () => connectionManager.getOperationalSnapshots()

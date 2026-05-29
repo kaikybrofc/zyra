@@ -62,6 +62,9 @@ const resumeMock = vi.fn(async (connectionId: string) => {
 const deleteConnectionMock = vi.fn(async (connectionId: string) => {
   connections.delete(connectionId)
 })
+const hardDeleteConnectionMock = vi.fn(async (connectionId: string) => {
+  connections.delete(connectionId)
+})
 const setConnectionLabelMock = vi.fn((connectionId: string, label: string | null) => {
   const current = connections.get(connectionId) ?? { connectionId, status: 'created', label: null }
   current.label = label
@@ -102,6 +105,7 @@ vi.mock('../src/core/connection/manager.js', () => ({
   pause: (...args: unknown[]) => pauseMock(...args),
   resume: (...args: unknown[]) => resumeMock(...args),
   deleteConnection: (...args: unknown[]) => deleteConnectionMock(...args),
+  hardDeleteConnection: (...args: unknown[]) => hardDeleteConnectionMock(...args),
   setConnectionLabel: (...args: unknown[]) => setConnectionLabelMock(...args),
 }))
 vi.mock('../src/core/connection/pairing-service.js', () => ({
@@ -369,5 +373,59 @@ describe('handleConnectionWebhookRoutes', () => {
     )
 
     expect(res.statusCode).toBe(413)
+  })
+
+  it('rejeita delete_hard sem options.force=true', async () => {
+    const timestamp = String(Date.now())
+    const body = JSON.stringify({
+      event: 'connection.command',
+      command_id: 'cmd-delete-hard-sem-force',
+      connection: { id: 'conn-hd-1' },
+      action: { type: 'delete_hard' },
+    })
+    const signature = signBody(timestamp, body)
+    const res = makeRes()
+
+    await handleConnectionWebhookRoutes(
+      makeReq(body, {
+        'x-zyra-timestamp': timestamp,
+        'x-zyra-delivery-id': 'delivery-delete-hard-sem-force',
+        'x-zyra-signature': signature,
+      }) as never,
+      res as never,
+      '/webhooks/connections',
+      logger as never
+    )
+
+    expect(res.statusCode).toBe(422)
+    expect(hardDeleteConnectionMock).not.toHaveBeenCalled()
+  })
+
+  it('aceita delete_hard com confirmação extra', async () => {
+    const timestamp = String(Date.now())
+    const body = JSON.stringify({
+      event: 'connection.command',
+      command_id: 'cmd-delete-hard-ok',
+      connection: { id: 'conn-hd-2' },
+      action: { type: 'delete_hard' },
+      options: { force: true },
+    })
+    const signature = signBody(timestamp, body)
+    const res = makeRes()
+
+    await handleConnectionWebhookRoutes(
+      makeReq(body, {
+        'x-zyra-timestamp': timestamp,
+        'x-zyra-delivery-id': 'delivery-delete-hard-ok',
+        'x-zyra-signature': signature,
+        'x-zyra-hard-delete-confirm': 'true',
+      }) as never,
+      res as never,
+      '/webhooks/connections',
+      logger as never
+    )
+
+    expect(res.statusCode).toBe(200)
+    expect(hardDeleteConnectionMock).toHaveBeenCalledWith('conn-hd-2', logger)
   })
 })

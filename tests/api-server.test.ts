@@ -34,6 +34,7 @@ const handleGroupsRoutesMock = vi.fn(async () => false)
 const handleWebhooksRoutesMock = vi.fn(async () => false)
 const handleGlobalWebhooksRoutesMock = vi.fn(async () => false)
 const handleConnectionWebhookRoutesMock = vi.fn(async () => false)
+const handleHealthRoutesMock = vi.fn(async () => false)
 
 vi.mock('../src/config/index.js', () => ({ config: mockConfig }))
 vi.mock('node:http', () => ({
@@ -62,6 +63,9 @@ vi.mock('../src/api/routes/webhooks-global.js', () => ({
 }))
 vi.mock('../src/api/routes/connection-webhook.js', () => ({
   handleConnectionWebhookRoutes: (...args: unknown[]) => handleConnectionWebhookRoutesMock(...args),
+}))
+vi.mock('../src/api/routes/health.js', () => ({
+  handleHealthRoutes: (...args: unknown[]) => handleHealthRoutesMock(...args),
 }))
 
 const logger = {
@@ -105,6 +109,7 @@ describe('startApiServer', () => {
     handleWebhooksRoutesMock.mockResolvedValue(false)
     handleGlobalWebhooksRoutesMock.mockResolvedValue(false)
     handleConnectionWebhookRoutesMock.mockResolvedValue(false)
+    handleHealthRoutesMock.mockResolvedValue(false)
   })
 
   it('sobe servidor na porta e host configurados', async () => {
@@ -183,6 +188,19 @@ describe('startApiServer', () => {
     await serverHandler?.(makeReq('POST', '/webhooks/connections'), res)
 
     expect(handleConnectionWebhookRoutesMock).toHaveBeenCalled()
+    expect(res.statusCode).not.toBe(401)
+  })
+
+  it('processa health sem exigir Bearer token', async () => {
+    mockConfig.apiKey = 'minha-chave'
+    handleHealthRoutesMock.mockResolvedValue(true)
+    const { startApiServer } = await import('../src/api/server.ts')
+    startApiServer({ logger: logger as never })
+
+    const res = createResponse()
+    await serverHandler?.(makeReq('GET', '/health/live'), res)
+
+    expect(handleHealthRoutesMock).toHaveBeenCalled()
     expect(res.statusCode).not.toBe(401)
   })
 

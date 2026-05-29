@@ -9,6 +9,7 @@ import { handleWebhooksRoutes } from './routes/webhooks.js'
 import { handleGlobalWebhooksRoutes } from './routes/webhooks-global.js'
 import { handleConnectionWebhookRoutes } from './routes/connection-webhook.js'
 import { handleRuntimeRoutes } from './routes/runtime.js'
+import { handleHealthRoutes } from './routes/health.js'
 import { serveDashboard } from './routes/dashboard.js'
 
 /**
@@ -37,8 +38,10 @@ type ApiServerHandle = {
  * - `PATCH  /connections/:id`                — atualizar label
  * - `DELETE /connections/:id`                — deletar instância
  * - `POST   /connections/:id/connect`        — conectar (gera QR)
+ * - `POST   /connections/:id/start`          — alias de conectar
  * - `POST   /connections/:id/disconnect`     — desconectar
  * - `POST   /connections/:id/restart`        — reiniciar conexão
+ * - `POST   /connections/:id/reconnect`      — alias de reiniciar conexão
  * - `POST   /connections/:id/pairing/start`  — iniciar pairing remoto
  * - `POST   /connections/:id/pairing/cancel` — cancelar pairing remoto
  * - `GET    /connections/:id/pairing`        — consultar estado do pairing
@@ -48,6 +51,9 @@ type ApiServerHandle = {
  * - `POST   /connections/:id/messages/send`  — enviar mensagem
  * - `GET    /connections/:id/groups`         — listar grupos
  * - `GET    /system/runtime`                  — status operacional do processo
+ * - `GET    /health/live`                    — liveness do processo
+ * - `GET    /health/ready`                   — readiness (infra/control-plane)
+ * - `GET    /health/connections`             — resumo de estados por conexão
  * - `POST   /webhooks/connections`           — ingress de comando assinado (HMAC)
  */
 export const startApiServer = ({ logger }: StartApiServerOptions): ApiServerHandle => {
@@ -63,6 +69,8 @@ export const startApiServer = ({ logger }: StartApiServerOptions): ApiServerHand
 
     // Webhook de controle usa autenticação HMAC própria e não depende de Bearer da API.
     if (await handleConnectionWebhookRoutes(req, res, pathname, logger)) return
+    // Health checks operacionais para orquestradores (liveness/readiness).
+    if (await handleHealthRoutes(req, res, pathname, logger)) return
 
     const apiKey = config.apiKey
     if (apiKey) {

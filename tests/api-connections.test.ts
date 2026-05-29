@@ -237,6 +237,16 @@ describe('handleConnectionsRoutes', () => {
     expect(connectMock).toHaveBeenCalledWith('sess-conn', logger)
   })
 
+  it('POST /connections/:id/start funciona como alias de connect', async () => {
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-start', status: 'connecting' }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('POST', '/connections/sess-start/start') as never, res as never, '/connections/sess-start/start', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(connectMock).toHaveBeenCalledWith('sess-start', logger)
+  })
+
   it('POST /connections/:id/disconnect chama disconnect', async () => {
     getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-disc', status: 'closed' }))
     const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
@@ -255,6 +265,16 @@ describe('handleConnectionsRoutes', () => {
 
     expect(res.statusCode).toBe(200)
     expect(restartMock).toHaveBeenCalledWith('sess-rest', logger)
+  })
+
+  it('POST /connections/:id/reconnect funciona como alias de restart', async () => {
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-reconn', status: 'connecting' }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('POST', '/connections/sess-reconn/reconnect') as never, res as never, '/connections/sess-reconn/reconnect', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(restartMock).toHaveBeenCalledWith('sess-reconn', logger)
   })
 
   it('GET /connections/:id/status retorna status resumido', async () => {
