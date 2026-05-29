@@ -2,7 +2,7 @@ import { mkdir, rm } from 'node:fs/promises'
 import { loadEnv } from '../../bootstrap/env.js'
 import { config } from '../../config/index.js'
 import { createLogger } from '../../observability/logger.js'
-import { getRedisClient } from '../redis/client.js'
+import { closeRedisClient, getRedisClient } from '../redis/client.js'
 import { getLegacyRedisNamespace, getRedisNamespace } from '../redis/prefix.js'
 import { resolveAuthDir } from '../auth/auth-dir.js'
 import { ensureMysqlConnection } from './connection.js'
@@ -12,6 +12,11 @@ loadEnv()
 const logger = createLogger()
 const DEFAULT_TIMEOUT_MS = Number(process.env.WA_DELETE_SESSION_TIMEOUT_MS ?? 15000)
 const REDIS_SCAN_MAX_MS = Number(process.env.WA_DELETE_SESSION_REDIS_MAX_MS ?? 60000)
+
+const isUnknownMysqlDatabaseError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false
+  return (error as { code?: unknown }).code === 'ER_BAD_DB_ERROR'
+}
 
 const parseConnectionId = (argv: string[]): string | null => {
   for (let index = 0; index < argv.length; index++) {
@@ -94,7 +99,11 @@ async function main() {
       await withTimeout('mysql.signal_keys', pool.execute(`DELETE FROM signal_keys WHERE connection_id = ?`, [connectionId]))
       logger.info('sessao apagada no MySQL', { connectionId })
     } catch (error) {
-      logger.warn('falha ao apagar sessao no MySQL', { err: error })
+      if (isUnknownMysqlDatabaseError(error)) {
+        logger.info('banco MySQL nao encontrado, pulando limpeza de sessao no banco', { connectionId })
+      } else {
+        logger.warn('falha ao apagar sessao no MySQL', { err: error })
+      }
     } finally {
       await pool.end().catch(() => undefined)
     }
@@ -104,9 +113,8 @@ async function main() {
 
   if (config.redisUrl) {
     logger.info('apagando sessao no Redis')
-    let client: Awaited<ReturnType<typeof getRedisClient>> | null = null
     try {
-      client = await withTimeout('redis.connect', getRedisClient())
+      const client = await withTimeout('redis.connect', getRedisClient())
       const redisPrefix = getRedisNamespace(connectionId)
       const legacyPrefix = getLegacyRedisNamespace(connectionId)
       const prefixes = [redisPrefix, legacyPrefix].filter(Boolean) as string[]
@@ -119,9 +127,9 @@ async function main() {
     } catch (error) {
       logger.warn('falha ao apagar sessao no Redis', { err: error })
     } finally {
-      if (client) {
-        await client.quit().catch(() => undefined)
-      }
+      await closeRedisClient().catch((error) => {
+        logger.debug('falha ao encerrar cliente Redis apos delete-session', { err: error })
+      })
     }
   } else {
     logger.info('REDIS_URL nao configurada, pulando limpeza no Redis')

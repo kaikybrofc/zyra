@@ -88,6 +88,7 @@ describe('delete-session command', () => {
       expect(getLegacyRedisNamespaceMock).toHaveBeenCalledWith('conn-a')
       expect(resolveAuthDirMock).toHaveBeenCalledWith('conn-a')
       expect(rmMock).toHaveBeenCalledWith('/auth/conn-a', { recursive: true, force: true })
+      expect(closeRedisClientMock).toHaveBeenCalled()
     })
 
     process.argv = argv

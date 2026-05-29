@@ -12,6 +12,14 @@ let redisConnectPromise: Promise<AppRedisClient> | null = null
 let redisClosePromise: Promise<void> | null = null
 let shutdownHooksRegistered = false
 
+const isClientClosedError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false
+  const name = (error as { name?: unknown }).name
+  if (name === 'ClientClosedError') return true
+  const message = (error as { message?: unknown }).message
+  return typeof message === 'string' && message.toLowerCase().includes('client is closed')
+}
+
 const wait = (ms: number) =>
   new Promise<void>((resolve) => {
     setTimeout(resolve, ms)
@@ -118,14 +126,15 @@ export async function closeRedisClient(): Promise<void> {
   const client = redisClient
   redisClosePromise = (async () => {
     try {
-      if (client.isOpen) {
-        await client.quit()
-      } else {
-        await client.disconnect()
-      }
+      if (!client.isOpen) return
+      await client.quit()
     } catch (error) {
-      console.error('falha ao encerrar cliente Redis, desconectando a conexao', error)
-      await client.disconnect().catch(() => undefined)
+      if (!isClientClosedError(error)) {
+        console.error('falha ao encerrar cliente Redis, desconectando a conexao', error)
+      }
+      if (client.isOpen) {
+        await client.disconnect().catch(() => undefined)
+      }
     } finally {
       if (redisClient === client) {
         redisClient = null
