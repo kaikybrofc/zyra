@@ -14,6 +14,7 @@
 - [Comandos](Comandos)
 - [Comandos - Referência](Comandos-Referencia)
 - [Eventos](Eventos)
+- [API e Webhooks](API-e-Webhooks)
 
 ### Dados
 

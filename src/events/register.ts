@@ -118,6 +118,10 @@ export function registerEvents({ sock, logger, reconnect, connectionId, onQrCode
   const sqlStore = createSqlStore(connectionId)
   /** Evita loop de restart após primeiro login (estabilização do estado inicial). */
   let restartedAfterNewLogin = false
+  /** Evita spam de QR no terminal durante o mesmo ciclo de conexão. */
+  let qrRenderedInCurrentCycle = false
+  /** Contador de QR suprimidos no terminal para observabilidade. */
+  let suppressedTerminalQrCount = 0
   /** Cache de sincronização de metadados de newsletters com TTL e dedupe de chamadas concorrentes. */
   const newsletterMetadataSync = new Map<string, { nextAttemptAt: number; inFlight?: Promise<void> }>()
   /** TTL de sucesso para sync de metadados de newsletter. */
@@ -511,8 +515,27 @@ export function registerEvents({ sock, logger, reconnect, connectionId, onQrCode
       const { connection, lastDisconnect, qr, receivedPendingNotifications, isNewLogin } = update
 
       if (qr) {
-        if (config.printQRInTerminal) renderQrInTerminal(logger, qr, connectionId)
+        if (config.printQRInTerminal) {
+          if (!qrRenderedInCurrentCycle) {
+            renderQrInTerminal(logger, qr, connectionId)
+            qrRenderedInCurrentCycle = true
+            suppressedTerminalQrCount = 0
+          } else {
+            suppressedTerminalQrCount += 1
+            if (suppressedTerminalQrCount === 1 || suppressedTerminalQrCount % 10 === 0) {
+              logger.info('novo QR recebido; impressão no terminal suprimida até concluir a chamada atual', {
+                connectionId,
+                suppressedCount: suppressedTerminalQrCount,
+              })
+            }
+          }
+        }
         onQrCode?.(qr)
+      }
+
+      if (connection === 'open' || connection === 'close') {
+        qrRenderedInCurrentCycle = false
+        suppressedTerminalQrCount = 0
       }
 
       logger.info('connection.update', {
