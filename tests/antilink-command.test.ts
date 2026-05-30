@@ -83,12 +83,7 @@ describe('antilink command', () => {
 
     await antilinkCommand.execute(ctx as never)
 
-    expect(ctx.reply).toHaveBeenCalledWith(
-      'ℹ️ Status do antilink: *ATIVADO*\n' +
-        'ℹ️ Convite do próprio grupo: *PERMITIDO*\n' +
-        'ℹ️ Whitelist: exemplo.com\n' +
-        'Uso: !antilink on|off | !antilink allow add|remove|list dominio.com | !antilink invite on|off'
-    )
+    expect(ctx.reply).toHaveBeenCalledWith('ℹ️ Status do antilink: *ATIVADO*\n' + 'ℹ️ Convite do próprio grupo: *PERMITIDO*\n' + 'ℹ️ Whitelist: exemplo.com\n' + 'Uso: !antilink on|off | !antilink allow add|remove|list dominio.com | !antilink invite on|off')
   })
 
   it('gerencia whitelist: add, list, remove e validacao', async () => {

@@ -57,11 +57,9 @@ const buildDeafSessionConfig = (logger: AppLogger, connectionId: string) => {
   }
 }
 
-export const resolveAntiBanStateDir = (connectionId: string): string =>
-  path.resolve(process.cwd(), config.antibanStateDir, assertValidConnectionId(connectionId))
+export const resolveAntiBanStateDir = (connectionId: string): string => path.resolve(process.cwd(), config.antibanStateDir, assertValidConnectionId(connectionId))
 
-const resolveStateAdapter = (connectionId: string): FileStateAdapter =>
-  new FileStateAdapter(resolveAntiBanStateDir(connectionId))
+const resolveStateAdapter = (connectionId: string): FileStateAdapter => new FileStateAdapter(resolveAntiBanStateDir(connectionId))
 
 const isInvalidPersistedWarmUpStateError = (error: unknown): boolean => {
   if (!(error instanceof SyntaxError)) return false
@@ -84,13 +82,15 @@ export function createAntiBanConfig(_logger: AppLogger, _connectionId: string): 
 }
 
 const attachAntiBanRuntimeExtensions = (sock: SocketWithAntiBan, logger: AppLogger, connectionId: string): void => {
-  const antiban = sock.antiban as {
-    rateLimiter?: { config?: Record<string, unknown> }
-    health?: { config?: Record<string, unknown> }
-    timelock?: { config?: Record<string, unknown> }
-    lidResolverModule?: unknown
-    jidCanonicalizerModule?: unknown
-  } | undefined
+  const antiban = sock.antiban as
+    | {
+        rateLimiter?: { config?: Record<string, unknown> }
+        health?: { config?: Record<string, unknown> }
+        timelock?: { config?: Record<string, unknown> }
+        lidResolverModule?: unknown
+        jidCanonicalizerModule?: unknown
+      }
+    | undefined
 
   if (!antiban) return
 
@@ -215,19 +215,9 @@ export async function saveAntiBanWarmUpState(sock: SocketWithAntiBan, connection
  * @param warmUpState Estado de aquecimento inicial opcional.
  * @returns O socket protegido ou o original se o Anti-Ban estiver desativado.
  */
-export function wrapSocketWithAntiBan<T extends Record<string, unknown>>(
-  sock: T,
-  logger: AppLogger,
-  connectionId: string,
-  warmUpState?: WarmUpState
-): T & Partial<WrappedSocket> {
+export function wrapSocketWithAntiBan<T extends Record<string, unknown>>(sock: T, logger: AppLogger, connectionId: string, warmUpState?: WarmUpState): T & Partial<WrappedSocket> {
   if (!config.antibanEnabled) return sock as T & Partial<WrappedSocket>
-  const wrapped = wrapSocket(
-    sock as unknown as Parameters<typeof wrapSocket>[0],
-    createAntiBanConfig(logger, connectionId),
-    warmUpState,
-    { deafSession: buildDeafSessionConfig(logger, connectionId) }
-  )
+  const wrapped = wrapSocket(sock as unknown as Parameters<typeof wrapSocket>[0], createAntiBanConfig(logger, connectionId), warmUpState, { deafSession: buildDeafSessionConfig(logger, connectionId) })
   attachAntiBanRuntimeExtensions(wrapped as unknown as SocketWithAntiBan, logger, connectionId)
   logger.info('antiban ativado no socket', { connectionId })
   return wrapped as unknown as T & Partial<WrappedSocket>

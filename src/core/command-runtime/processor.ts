@@ -23,49 +23,11 @@ const ANSI_RED = '\x1b[31m'
 const REACHOUT_TIMELOCK_STATUS_CODE = 463
 const ANTIBAN_BLOCKED_MESSAGE = '[baileys-antiban] Message blocked'
 const ANTIBAN_SEND_MAX_ATTEMPTS = 3
-const NON_LINK_FILE_EXTENSIONS = new Set([
-  'json',
-  'txt',
-  'md',
-  'log',
-  'csv',
-  'xml',
-  'yaml',
-  'yml',
-  'pdf',
-  'doc',
-  'docx',
-  'xls',
-  'xlsx',
-  'ppt',
-  'pptx',
-  'zip',
-  'rar',
-  '7z',
-  'tar',
-  'gz',
-])
+const NON_LINK_FILE_EXTENSIONS = new Set(['json', 'txt', 'md', 'log', 'csv', 'xml', 'yaml', 'yml', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip', 'rar', '7z', 'tar', 'gz'])
 const INTERNAL_WHATSAPP_HOSTS = new Set(['whatsapp.net', 'cdn.whatsapp.net'])
 const PLAY_COMMAND_ANTILINK_BYPASS_COMMANDS = new Set(['play', 'playvid'])
-const PLAY_COMMAND_ANTILINK_BYPASS_HOSTS = new Set([
-  'youtube.com',
-  'www.youtube.com',
-  'm.youtube.com',
-  'music.youtube.com',
-  'youtu.be',
-])
-const MEDIA_TYPES = new Set([
-  'imageMessage',
-  'videoMessage',
-  'audioMessage',
-  'documentMessage',
-  'stickerMessage',
-  'ptvMessage',
-  'contactMessage',
-  'contactsArrayMessage',
-  'locationMessage',
-  'liveLocationMessage',
-])
+const PLAY_COMMAND_ANTILINK_BYPASS_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtu.be'])
+const MEDIA_TYPES = new Set(['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage', 'ptvMessage', 'contactMessage', 'contactsArrayMessage', 'locationMessage', 'liveLocationMessage'])
 
 /**
  * Envelope de comando recebido, contendo dados extraídos e normalizados da mensagem.
@@ -142,7 +104,7 @@ const isPlayCommandYoutubeBypass = (context: IncomingCommandEnvelope, links: str
 }
 
 const getErrorStatusCode = (error: unknown): number | null => {
-  const candidate = (error as { output?: { statusCode?: unknown }; statusCode?: unknown } | null | undefined)
+  const candidate = error as { output?: { statusCode?: unknown }; statusCode?: unknown } | null | undefined
   const raw = candidate?.output?.statusCode ?? candidate?.statusCode
   return typeof raw === 'number' && Number.isFinite(raw) ? raw : null
 }
@@ -196,12 +158,7 @@ const resolveUnwrappedSocket = (sock: WASocket): WASocket => {
   return prototype
 }
 
-const sendModerationMessage = async (
-  sock: WASocket,
-  chatId: string,
-  content: Parameters<WASocket['sendMessage']>[1],
-  options?: Parameters<WASocket['sendMessage']>[2]
-) => {
+const sendModerationMessage = async (sock: WASocket, chatId: string, content: Parameters<WASocket['sendMessage']>[1], options?: Parameters<WASocket['sendMessage']>[2]) => {
   const rawSock = resolveUnwrappedSocket(sock)
   if (options === undefined) {
     return rawSock.sendMessage(chatId, content)
@@ -266,10 +223,7 @@ const extractQuotedStanzaIdFromMessage = (message: proto.IWebMessageInfo): strin
  * @param message Mensagem recebida.
  * @returns O envelope estruturado ou null se a mensagem deve ser ignorada.
  */
-export const buildIncomingCommandEnvelope = (
-  sock: WASocket,
-  message: proto.IWebMessageInfo
-): IncomingCommandEnvelope | null => {
+export const buildIncomingCommandEnvelope = (sock: WASocket, message: proto.IWebMessageInfo): IncomingCommandEnvelope | null => {
   if (!message.message || !message.key) return null
   if (message.key.fromMe && !config.allowOwnMessages) return null
 
@@ -313,21 +267,7 @@ const logIncomingMessage = async (context: IncomingCommandEnvelope, logger: AppL
   const compactText = text ? text.replace(/\s+/g, ' ').trim() : null
   const hasMedia = messageType ? MEDIA_TYPES.has(messageType) : false
   const hasLink = Boolean(context.text && hasDetectableLink(context.text))
-  const logParts = [
-    `chatId=${context.chatId}`,
-    `messageId=${messageKey.id ?? ''}`,
-    `fromMe=${messageKey.fromMe ?? ''}`,
-    `sender=${context.sender}`,
-    `pushName=${context.message.pushName ?? ''}`,
-    `isGroup=${context.isGroup}`,
-    `messageType=${messageType ? colorize(messageType, ANSI_MAGENTA) : ''}`,
-    `hasMedia=${hasMedia}`,
-    `text=${compactText ? JSON.stringify(compactText) : ''}`,
-    `hasLink=${colorize(String(hasLink), hasLink ? ANSI_RED : ANSI_GRAY)}`,
-    `isCommand=${colorize(String(Boolean(context.commandName)), context.commandName ? ANSI_GREEN : ANSI_GRAY)}`,
-    `commandName=${context.commandName ? colorize(context.commandName, ANSI_CYAN) : ''}`,
-    `timestamp=${timestampIso ?? ''}`,
-  ]
+  const logParts = [`chatId=${context.chatId}`, `messageId=${messageKey.id ?? ''}`, `fromMe=${messageKey.fromMe ?? ''}`, `sender=${context.sender}`, `pushName=${context.message.pushName ?? ''}`, `isGroup=${context.isGroup}`, `messageType=${messageType ? colorize(messageType, ANSI_MAGENTA) : ''}`, `hasMedia=${hasMedia}`, `text=${compactText ? JSON.stringify(compactText) : ''}`, `hasLink=${colorize(String(hasLink), hasLink ? ANSI_RED : ANSI_GRAY)}`, `isCommand=${colorize(String(Boolean(context.commandName)), context.commandName ? ANSI_GREEN : ANSI_GRAY)}`, `commandName=${context.commandName ? colorize(context.commandName, ANSI_CYAN) : ''}`, `timestamp=${timestampIso ?? ''}`]
   const title = colorize('mensagem recebida', `${ANSI_BOLD}${hasLink ? ANSI_RED : ANSI_CYAN}`)
   logger.info(`\n\n${title} | ${logParts.join(' ')}`)
 }
@@ -338,13 +278,7 @@ const logIncomingMessage = async (context: IncomingCommandEnvelope, logger: AppL
  * @param logger Logger para telemetria de falhas de envio.
  * @returns Contexto pronto para execução de comandos.
  */
-const createRuntimeContext = (
-  context: IncomingCommandEnvelope,
-  logger: AppLogger,
-  sqlStore: SqlStore,
-  getRecentStickerMessage: (chatId: string) => WAMessage | null,
-  getRecentMessageById: (chatId: string, messageId: string) => WAMessage | null
-): CommandContext => {
+const createRuntimeContext = (context: IncomingCommandEnvelope, logger: AppLogger, sqlStore: SqlStore, getRecentStickerMessage: (chatId: string) => WAMessage | null, getRecentMessageById: (chatId: string, messageId: string) => WAMessage | null): CommandContext => {
   const admin = createCommandAdminActions({
     sock: context.sock,
     chatId: context.chatId,
@@ -364,9 +298,7 @@ const createRuntimeContext = (
     })
     if (!stored || stored.mediaType !== 'stickerMessage') return null
     try {
-      const absolutePath = path.isAbsolute(stored.localPath)
-        ? stored.localPath
-        : path.resolve(process.cwd(), stored.localPath)
+      const absolutePath = path.isAbsolute(stored.localPath) ? stored.localPath : path.resolve(process.cwd(), stored.localPath)
       const buffer = await fs.readFile(absolutePath)
       if (!buffer.length) return null
       return { buffer, mediaType: 'sticker' }
@@ -518,12 +450,7 @@ const createRuntimeContext = (
  * @param durationMs Duração total da execução em milissegundos.
  * @param success Indica sucesso (`true`) ou falha (`false`) da execução.
  */
-const recordCommandExecution = (
-  sqlStore: SqlStore,
-  context: IncomingCommandEnvelope,
-  durationMs: number,
-  success: boolean
-): void => {
+const recordCommandExecution = (sqlStore: SqlStore, context: IncomingCommandEnvelope, durationMs: number, success: boolean): void => {
   if (!sqlStore.enabled || !context.commandName) return
 
   const messageKey = context.message.key
@@ -859,8 +786,7 @@ export function createCommandProcessor({ logger, sqlStore }: CreateCommandProces
     const removeFromLinkedCommunityGroups = async () => {
       const communityJid = (metadata as GroupWithLinkedParent | null | undefined)?.linkedParent ?? null
       if (!communityJid) return { communityJid: null as string | null, cascadedGroups: [] as string[] }
-      const fetchAll = (context.sock as { groupFetchAllParticipating?: () => Promise<Record<string, GroupWithLinkedParent>> })
-        .groupFetchAllParticipating
+      const fetchAll = (context.sock as { groupFetchAllParticipating?: () => Promise<Record<string, GroupWithLinkedParent>> }).groupFetchAllParticipating
       if (typeof fetchAll !== 'function') return { communityJid, cascadedGroups: [] as string[] }
 
       try {

@@ -5,13 +5,7 @@ import type { AppLogger } from '../../observability/logger.js'
 import { listConnections, type ConnectionInfo } from '../../core/connection/manager.js'
 import { getMysqlPool } from '../../core/db/mysql.js'
 import { getRedisClient } from '../../core/redis/client.js'
-import {
-  listManagedConnections,
-  type ManagedConnectionDesiredState,
-  type ManagedConnectionPairingState,
-  type ManagedConnectionRecord,
-  type ManagedConnectionStatus,
-} from '../../store/connection-admin-store.js'
+import { listManagedConnections, type ManagedConnectionDesiredState, type ManagedConnectionPairingState, type ManagedConnectionRecord, type ManagedConnectionStatus } from '../../store/connection-admin-store.js'
 import { matchRoute, sendJson } from '../http.js'
 
 const CHECK_TIMEOUT_MS = Math.max(250, Number(process.env.WA_HEALTH_CHECK_TIMEOUT_MS ?? 3_000))
@@ -40,10 +34,7 @@ const withTimeout = async <T>(label: string, promise: Promise<T>, timeoutMs = CH
   }
 }
 
-const mapRuntimeStatusToManaged = (
-  status: ConnectionInfo['status'],
-  desiredState: ManagedConnectionDesiredState
-): ManagedConnectionStatus => {
+const mapRuntimeStatusToManaged = (status: ConnectionInfo['status'], desiredState: ManagedConnectionDesiredState): ManagedConnectionStatus => {
   if (status === 'created') {
     if (desiredState === 'deleted') return 'deleted'
     if (desiredState === 'paused') return 'paused'
@@ -58,19 +49,12 @@ const mapRuntimeStatusToManaged = (
   return 'closed'
 }
 
-const toSnapshot = (
-  runtime: ConnectionInfo | null,
-  managed: ManagedConnectionRecord | null
-): ConnectionHealthSnapshot | null => {
+const toSnapshot = (runtime: ConnectionInfo | null, managed: ManagedConnectionRecord | null): ConnectionHealthSnapshot | null => {
   const connectionId = runtime?.connectionId ?? managed?.connectionId
   if (!connectionId) return null
   const desiredState = managed?.desiredState ?? 'running'
-  const status = runtime
-    ? mapRuntimeStatusToManaged(runtime.status, desiredState)
-    : (managed?.status ?? 'closed')
-  const pairingState = runtime?.status === 'qr'
-    ? 'qr_ready'
-    : (managed?.pairingState ?? 'not_required')
+  const status = runtime ? mapRuntimeStatusToManaged(runtime.status, desiredState) : (managed?.status ?? 'closed')
+  const pairingState = runtime?.status === 'qr' ? 'qr_ready' : (managed?.pairingState ?? 'not_required')
 
   return {
     connection_id: connectionId,
@@ -142,18 +126,9 @@ const checkRedisReady = async () => {
 /**
  * Endpoints de liveness/readiness e resumo de estado por conexão.
  */
-export async function handleHealthRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  pathname: string,
-  logger: AppLogger
-): Promise<boolean> {
+export async function handleHealthRoutes(req: IncomingMessage, res: ServerResponse, pathname: string, logger: AppLogger): Promise<boolean> {
   const method = req.method ?? 'GET'
-  const isHealthRoute = Boolean(
-    matchRoute('/health/live', pathname) ||
-      matchRoute('/health/ready', pathname) ||
-      matchRoute('/health/connections', pathname)
-  )
+  const isHealthRoute = Boolean(matchRoute('/health/live', pathname) || matchRoute('/health/ready', pathname) || matchRoute('/health/connections', pathname))
   if (!isHealthRoute) return false
   if (!config.healthEnabled) return false
   if (method !== 'GET') return false

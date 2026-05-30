@@ -1,9 +1,7 @@
 const MAX_CONNECTION_ID_LENGTH = 80
 const CONNECTION_ID_PATTERN = /^[A-Za-z0-9._-]+$/
 
-export type ConnectionIdValidationResult =
-  | { ok: true; value: string }
-  | { ok: false; reason: string }
+export type ConnectionIdValidationResult = { ok: true; value: string } | { ok: false; reason: string }
 
 /**
  * Valida e normaliza connection_id para uso seguro em runtime, disco e persistência.

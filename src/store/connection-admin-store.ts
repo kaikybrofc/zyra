@@ -2,27 +2,11 @@ import type { OkPacket, RowDataPacket } from 'mysql2/promise'
 import { ensureMysqlConnection } from '../core/db/connection.js'
 import { getMysqlPool } from '../core/db/mysql.js'
 
-export type ManagedConnectionStatus =
-  | 'inactive'
-  | 'starting'
-  | 'connecting'
-  | 'open'
-  | 'closing'
-  | 'closed'
-  | 'pairing'
-  | 'error'
-  | 'paused'
-  | 'deleted'
+export type ManagedConnectionStatus = 'inactive' | 'starting' | 'connecting' | 'open' | 'closing' | 'closed' | 'pairing' | 'error' | 'paused' | 'deleted'
 
 export type ManagedConnectionDesiredState = 'running' | 'stopped' | 'paused' | 'deleted'
 
-export type ManagedConnectionPairingState =
-  | 'not_required'
-  | 'pending'
-  | 'qr_ready'
-  | 'paired'
-  | 'expired'
-  | 'failed'
+export type ManagedConnectionPairingState = 'not_required' | 'pending' | 'qr_ready' | 'paired' | 'expired' | 'failed'
 
 export type ManagedConnectionRecord = {
   connectionId: string
@@ -278,10 +262,7 @@ const asSqlDate = (value: number | null): Date | null => {
   return new Date(value)
 }
 
-const buildManagedRecord = (
-  existing: ManagedConnectionRecord | null,
-  input: UpsertManagedConnectionInput
-): ManagedConnectionRecord => {
+const buildManagedRecord = (existing: ManagedConnectionRecord | null, input: UpsertManagedConnectionInput): ManagedConnectionRecord => {
   const now = Date.now()
   return {
     connectionId: input.connectionId,
@@ -293,14 +274,8 @@ const buildManagedRecord = (
     pairingCode: input.pairingCode !== undefined ? input.pairingCode : (existing?.pairingCode ?? null),
     lastSeenAt: input.lastSeenAt !== undefined ? input.lastSeenAt : (existing?.lastSeenAt ?? null),
     lastConnectedAt: input.lastConnectedAt !== undefined ? input.lastConnectedAt : (existing?.lastConnectedAt ?? null),
-    lastDisconnectedAt:
-      input.lastDisconnectedAt !== undefined
-        ? input.lastDisconnectedAt
-        : (existing?.lastDisconnectedAt ?? null),
-    lastDisconnectCode:
-      input.lastDisconnectCode !== undefined
-        ? input.lastDisconnectCode
-        : (existing?.lastDisconnectCode ?? null),
+    lastDisconnectedAt: input.lastDisconnectedAt !== undefined ? input.lastDisconnectedAt : (existing?.lastDisconnectedAt ?? null),
+    lastDisconnectCode: input.lastDisconnectCode !== undefined ? input.lastDisconnectCode : (existing?.lastDisconnectCode ?? null),
     lastError: input.lastError !== undefined ? input.lastError : (existing?.lastError ?? null),
     webhookSource: input.webhookSource !== undefined ? input.webhookSource : (existing?.webhookSource ?? null),
     metadata: input.metadata !== undefined ? input.metadata : (existing?.metadata ?? null),
@@ -351,9 +326,7 @@ export const listManagedConnections = async (): Promise<ManagedConnectionRecord[
   return records
 }
 
-export const upsertManagedConnection = async (
-  input: UpsertManagedConnectionInput
-): Promise<ManagedConnectionRecord> => {
+export const upsertManagedConnection = async (input: UpsertManagedConnectionInput): Promise<ManagedConnectionRecord> => {
   const existing = await getManagedConnection(input.connectionId)
   const record = buildManagedRecord(existing, input)
   managedConnections.set(record.connectionId, record)
@@ -387,29 +360,12 @@ export const upsertManagedConnection = async (
         webhook_source = VALUES(webhook_source),
         metadata_json = VALUES(metadata_json),
         updated_at = NOW()`,
-    [
-      record.connectionId,
-      record.displayName,
-      record.status,
-      record.desiredState,
-      record.enabled ? 1 : 0,
-      record.pairingState,
-      record.pairingCode,
-      asSqlDate(record.lastSeenAt),
-      asSqlDate(record.lastConnectedAt),
-      asSqlDate(record.lastDisconnectedAt),
-      record.lastDisconnectCode,
-      record.lastError,
-      record.webhookSource,
-      JSON.stringify(record.metadata ?? null),
-    ]
+    [record.connectionId, record.displayName, record.status, record.desiredState, record.enabled ? 1 : 0, record.pairingState, record.pairingCode, asSqlDate(record.lastSeenAt), asSqlDate(record.lastConnectedAt), asSqlDate(record.lastDisconnectedAt), record.lastDisconnectCode, record.lastError, record.webhookSource, JSON.stringify(record.metadata ?? null)]
   )
   return record
 }
 
-export const recordConnectionAdminEvent = async (
-  input: CreateConnectionAdminEventInput
-): Promise<ConnectionAdminEventRecord> => {
+export const recordConnectionAdminEvent = async (input: CreateConnectionAdminEventInput): Promise<ConnectionAdminEventRecord> => {
   const record: ConnectionAdminEventRecord = {
     id: nextEventId++,
     connectionId: input.connectionId,
@@ -434,15 +390,7 @@ export const recordConnectionAdminEvent = async (
        connection_id, event_type, actor, source, old_state, new_state, payload_json, created_at
      )
      VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-    [
-      record.connectionId,
-      record.eventType,
-      record.actor,
-      record.source,
-      record.oldState,
-      record.newState,
-      JSON.stringify(record.payload ?? null),
-    ]
+    [record.connectionId, record.eventType, record.actor, record.source, record.oldState, record.newState, JSON.stringify(record.payload ?? null)]
   )
   if (typeof result.insertId === 'number' && result.insertId > 0) {
     record.id = result.insertId
@@ -450,10 +398,7 @@ export const recordConnectionAdminEvent = async (
   return record
 }
 
-export const listConnectionAdminEvents = async (
-  connectionId: string,
-  limit = 100
-): Promise<ConnectionAdminEventRecord[]> => {
+export const listConnectionAdminEvents = async (connectionId: string, limit = 100): Promise<ConnectionAdminEventRecord[]> => {
   const safeLimit = Math.max(1, Math.trunc(limit))
   const pool = getMysqlPool()
   if (!pool) {
@@ -493,9 +438,7 @@ export const getWebhookCommand = async (commandId: string): Promise<WebhookComma
   return record
 }
 
-export const getWebhookCommandByDeliveryId = async (
-  deliveryId: string
-): Promise<WebhookCommandRecord | null> => {
+export const getWebhookCommandByDeliveryId = async (deliveryId: string): Promise<WebhookCommandRecord | null> => {
   if (!deliveryId) return null
   const pool = getMysqlPool()
   if (!pool) {
@@ -518,9 +461,7 @@ export const getWebhookCommandByDeliveryId = async (
   return record
 }
 
-export const saveWebhookCommandReceived = async (
-  input: CreateWebhookCommandInput
-): Promise<{ created: boolean; record: WebhookCommandRecord }> => {
+export const saveWebhookCommandReceived = async (input: CreateWebhookCommandInput): Promise<{ created: boolean; record: WebhookCommandRecord }> => {
   const now = Date.now()
   const existing = await getWebhookCommand(input.commandId)
   if (existing) {
@@ -550,13 +491,7 @@ export const saveWebhookCommandReceived = async (
        command_id, connection_id, delivery_id, action_type, payload_json, status, response_json, received_at, processed_at
      )
      VALUES (?, ?, ?, ?, ?, 'received', NULL, NOW(), NULL)`,
-    [
-      input.commandId,
-      input.connectionId,
-      input.deliveryId ?? null,
-      input.actionType,
-      JSON.stringify(input.payload ?? null),
-    ]
+    [input.commandId, input.connectionId, input.deliveryId ?? null, input.actionType, JSON.stringify(input.payload ?? null)]
   )
 
   if ((insertResult.affectedRows ?? 0) === 0) {
@@ -572,10 +507,7 @@ export const saveWebhookCommandReceived = async (
   return { created: true, record }
 }
 
-export const finishWebhookCommand = async (
-  commandId: string,
-  patch: { status: Exclude<WebhookCommandStatus, 'received'>; response: unknown }
-): Promise<WebhookCommandRecord | null> => {
+export const finishWebhookCommand = async (commandId: string, patch: { status: Exclude<WebhookCommandStatus, 'received'>; response: unknown }): Promise<WebhookCommandRecord | null> => {
   const existing = await getWebhookCommand(commandId)
   if (!existing) return null
 
@@ -601,9 +533,7 @@ export const finishWebhookCommand = async (
   return updated
 }
 
-export const createWebhookOutboxEntry = async (
-  input: CreateWebhookOutboxInput
-): Promise<WebhookOutboxRecord> => {
+export const createWebhookOutboxEntry = async (input: CreateWebhookOutboxInput): Promise<WebhookOutboxRecord> => {
   const now = Date.now()
   const record: WebhookOutboxRecord = {
     id: input.id,
@@ -633,14 +563,7 @@ export const createWebhookOutboxEntry = async (
        status, attempt_count, next_attempt_at, last_error, response_status, created_at, updated_at
      )
      VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, NOW(), NULL, NULL, NOW(), NOW())`,
-    [
-      record.id,
-      record.webhookId,
-      record.connectionId,
-      record.eventType,
-      record.targetUrl,
-      JSON.stringify(record.payload ?? null),
-    ]
+    [record.id, record.webhookId, record.connectionId, record.eventType, record.targetUrl, JSON.stringify(record.payload ?? null)]
   )
   return record
 }
@@ -651,11 +574,7 @@ export const getDueWebhookOutboxEntries = async (limit = 50): Promise<WebhookOut
   if (!pool) {
     const now = Date.now()
     return Array.from(webhookOutbox.values())
-      .filter(
-        (entry) =>
-          (entry.status === 'pending' || entry.status === 'failed') &&
-          (entry.nextAttemptAt === null || entry.nextAttemptAt <= now)
-      )
+      .filter((entry) => (entry.status === 'pending' || entry.status === 'failed') && (entry.nextAttemptAt === null || entry.nextAttemptAt <= now))
       .sort((a, b) => a.createdAt - b.createdAt)
       .slice(0, safeLimit)
   }
@@ -717,14 +636,7 @@ export const updateWebhookOutboxEntry = async (
      SET status = ?, attempt_count = ?, next_attempt_at = ?,
          last_error = ?, response_status = ?, updated_at = NOW()
      WHERE id = ?`,
-    [
-      patch.status,
-      patch.attemptCount,
-      asSqlDate(patch.nextAttemptAt),
-      patch.lastError,
-      patch.responseStatus,
-      id,
-    ]
+    [patch.status, patch.attemptCount, asSqlDate(patch.nextAttemptAt), patch.lastError, patch.responseStatus, id]
   )
 
   const [rows] = await pool.execute<WebhookOutboxRow[]>(

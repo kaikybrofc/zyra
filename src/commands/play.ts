@@ -1,12 +1,6 @@
 import type { AnyMessageContent } from 'baileys'
 import type { Command } from './types.js'
-import {
-  formatDurationMs,
-  isLikelyTransientPlayStreamError,
-  refreshTrackIfNeeded,
-  resolvePlayInput,
-  type ResolvedPlayTrack,
-} from '../utils/play-resolver.js'
+import { formatDurationMs, isLikelyTransientPlayStreamError, refreshTrackIfNeeded, resolvePlayInput, type ResolvedPlayTrack } from '../utils/play-resolver.js'
 import { createLogger } from '../observability/logger.js'
 
 const logger = createLogger()
@@ -36,13 +30,7 @@ async function fetchAudioBuffer(track: ResolvedPlayTrack): Promise<Buffer> {
 
 async function buildNowPlayingPayload(track: ResolvedPlayTrack): Promise<AnyMessageContent> {
   const duration = formatDurationMs(track.durationMs)
-  const lines = [
-    `🎵 ${track.title}`,
-    track.uploaderName ? `Artista/Canal: ${track.uploaderName}` : null,
-    duration ? `Duração: ${duration}` : null,
-    `ID: ${track.identifier}`,
-    track.webpageUrl,
-  ].filter((value): value is string => Boolean(value))
+  const lines = [`🎵 ${track.title}`, track.uploaderName ? `Artista/Canal: ${track.uploaderName}` : null, duration ? `Duração: ${duration}` : null, `ID: ${track.identifier}`, track.webpageUrl].filter((value): value is string => Boolean(value))
 
   const text = lines.join('\n')
   if (!track.thumbnailUrl) {

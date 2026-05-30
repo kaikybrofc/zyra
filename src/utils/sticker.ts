@@ -171,8 +171,7 @@ function isDownloadableMedia(value: unknown): value is DownloadableMedia {
  */
 function looksLikeWebp(buffer: Buffer): boolean {
   if (buffer.length < 12) return false
-  return buffer.subarray(0, 4).toString('ascii') === 'RIFF'
-    && buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+  return buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP'
 }
 
 /**
@@ -225,14 +224,7 @@ function createExifBuffer(packName: string, packAuthor: string): Buffer {
     'sticker-pack-publisher': packAuthor,
   }
 
-  const exifAttr = Buffer.from([
-    0x49, 0x49, 0x2a, 0x00,
-    0x08, 0x00, 0x00, 0x00,
-    0x01, 0x00, 0x41, 0x57,
-    0x07, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x16, 0x00,
-    0x00, 0x00,
-  ])
+  const exifAttr = Buffer.from([0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x41, 0x57, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00])
   const jsonBuffer = Buffer.from(JSON.stringify(exifData), 'utf8')
   const exifBuffer = Buffer.concat([exifAttr, jsonBuffer])
   exifBuffer.writeUIntLE(jsonBuffer.length, 14, 4)
@@ -265,10 +257,7 @@ async function addStickerMetadata(webpPath: string, packName: string, packAuthor
  * - `ffmpeg`
  * - `webpmux`
  */
-export async function createStickerFromMedia(
-  source: StickerSourceMedia,
-  options: { packName?: string; packAuthor?: string } = {}
-): Promise<Buffer> {
+export async function createStickerFromMedia(source: StickerSourceMedia, options: { packName?: string; packAuthor?: string } = {}): Promise<Buffer> {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zyra-sticker-'))
   const inputPath = path.join(tempDir, `input.${source.mediaType === 'image' ? 'jpg' : source.mediaType === 'video' ? 'mp4' : 'webp'}`)
   const webpPath = path.join(tempDir, 'sticker.webp')

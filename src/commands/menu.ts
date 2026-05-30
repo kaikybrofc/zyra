@@ -12,10 +12,7 @@ export const createMenuCommand = (getCommands: CommandsProvider): Command => ({
   async execute(ctx) {
     const prefix = config.commandPrefix || '!'
     const availableCommands = Object.values(getCommands()).sort((a, b) => a.name.localeCompare(b.name))
-    const lines = [
-      '📚 Comandos disponíveis:',
-      ...availableCommands.map((command) => `- ${prefix}${command.name} — ${command.description}`),
-    ]
+    const lines = ['📚 Comandos disponíveis:', ...availableCommands.map((command) => `- ${prefix}${command.name} — ${command.description}`)]
 
     await ctx.reply(lines.join('\n'))
   },

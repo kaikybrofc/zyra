@@ -24,8 +24,8 @@ describe('webhook store', () => {
 
   describe('createWebhook', () => {
     it('cria webhook e retorna o registro', async () => {
-      executeMock.mockResolvedValueOnce([[]])  // load SELECT
-      executeMock.mockResolvedValueOnce([{ affectedRows: 1 }])  // INSERT
+      executeMock.mockResolvedValueOnce([[]]) // load SELECT
+      executeMock.mockResolvedValueOnce([{ affectedRows: 1 }]) // INSERT
 
       const wh = await store.createWebhook('conn1', {
         url: 'https://example.com/hook',
@@ -118,9 +118,9 @@ describe('webhook store', () => {
 
     it('remove o webhook existente', async () => {
       executeMock.mockResolvedValue([[]])
-      executeMock.mockResolvedValueOnce([[]])  // load
-      executeMock.mockResolvedValueOnce([{ affectedRows: 1 }])  // INSERT
-      executeMock.mockResolvedValueOnce([{ affectedRows: 1 }])  // DELETE
+      executeMock.mockResolvedValueOnce([[]]) // load
+      executeMock.mockResolvedValueOnce([{ affectedRows: 1 }]) // INSERT
+      executeMock.mockResolvedValueOnce([{ affectedRows: 1 }]) // DELETE
       const wh = await store.createWebhook('conn1', { url: 'https://x.com', eventsFilter: ['*'] })
       const deleted = await store.deleteWebhook(wh.id, 'conn1')
       expect(deleted).toBe(true)

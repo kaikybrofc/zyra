@@ -96,12 +96,8 @@ describe('playvid command', () => {
     const ctx = createCtx(['retry'])
     const refreshedTrack = { ...baseTrack, streamUrl: 'https://cdn.example/video-fresh.mp4', title: 'Fresh Video' }
     const videoBuffer = Buffer.from('video-fresh')
-    refreshTrackIfNeededMock
-      .mockImplementationOnce(async (track: unknown) => track)
-      .mockResolvedValueOnce(refreshedTrack)
-    fetchMock
-      .mockResolvedValueOnce(new Response('expired', { status: 503 }))
-      .mockResolvedValueOnce(new Response(videoBuffer, { status: 200 }))
+    refreshTrackIfNeededMock.mockImplementationOnce(async (track: unknown) => track).mockResolvedValueOnce(refreshedTrack)
+    fetchMock.mockResolvedValueOnce(new Response('expired', { status: 503 })).mockResolvedValueOnce(new Response(videoBuffer, { status: 200 }))
     isLikelyTransientPlayStreamErrorMock.mockReturnValue(true)
 
     await playVideoCommand.execute(ctx as never)
@@ -115,9 +111,7 @@ describe('playvid command', () => {
     const ctx = createCtx(['huge'])
     const secondTrack = { ...baseTrack, lookupKey: 'video:q:huge-2', streamUrl: 'https://cdn.example/video-2.mp4', title: 'Video 2' }
     const videoBuffer = Buffer.from('video-2')
-    resolvePlayInputMock
-      .mockResolvedValueOnce(baseTrack)
-      .mockResolvedValueOnce(secondTrack)
+    resolvePlayInputMock.mockResolvedValueOnce(baseTrack).mockResolvedValueOnce(secondTrack)
     fetchMock
       .mockResolvedValueOnce(
         new Response('too big', {
@@ -137,12 +131,8 @@ describe('playvid command', () => {
 
   it('retorna erro amigável quando o envio do vídeo falha sem mais candidatos', async () => {
     const ctx = createCtx(['fail'])
-    resolvePlayInputMock
-      .mockResolvedValueOnce(baseTrack)
-      .mockRejectedValueOnce(new Error('sem mais candidatos'))
-    fetchMock
-      .mockResolvedValueOnce(new Response('bad gateway', { status: 502 }))
-      .mockResolvedValueOnce(new Response('bad gateway', { status: 502 }))
+    resolvePlayInputMock.mockResolvedValueOnce(baseTrack).mockRejectedValueOnce(new Error('sem mais candidatos'))
+    fetchMock.mockResolvedValueOnce(new Response('bad gateway', { status: 502 })).mockResolvedValueOnce(new Response('bad gateway', { status: 502 }))
     isLikelyTransientPlayStreamErrorMock.mockImplementation((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error)
       return message.includes('HTTP 502 ao baixar vídeo')

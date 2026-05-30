@@ -62,14 +62,7 @@ const classifyKnownDecryptNoise = (message: string, meta: Meta | undefined) => {
   return {
     classification,
     canonical: message === 'failed to decrypt message',
-    key: [
-      typeof meta?.connectionId === 'string' ? meta.connectionId : 'default',
-      author ?? '',
-      remoteJid ?? '',
-      classification,
-      errorName,
-      errorMessage,
-    ].join('::'),
+    key: [typeof meta?.connectionId === 'string' ? meta.connectionId : 'default', author ?? '', remoteJid ?? '', classification, errorName, errorMessage].join('::'),
     remoteJid,
     author,
     errorName,

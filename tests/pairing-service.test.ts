@@ -81,11 +81,7 @@ describe('pairing-service', () => {
     const state = await pairing.getPairingState('conn-qr')
     expect(state.status).toBe('qr_ready')
     expect(state.qrCode).toBe('qr-123')
-    expect(enqueueConnectionOutboxEventMock).toHaveBeenCalledWith(
-      'conn-qr',
-      'connection.qr.updated',
-      expect.any(Object)
-    )
+    expect(enqueueConnectionOutboxEventMock).toHaveBeenCalledWith('conn-qr', 'connection.qr.updated', expect.any(Object))
   })
 
   it('conclui pairing ao receber connection=open', async () => {

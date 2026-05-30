@@ -380,7 +380,6 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
   store.bind(sock.ev)
 
   sock.ev.on('creds.update', scheduleCredsSave)
-
   ;(sock as SocketWithCredsFlush).flushCredsNow = flushCredsNow
 
   // Registro para encerramento seguro do processo

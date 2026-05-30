@@ -16,9 +16,7 @@ const splitStatements = (sql: string): string[] =>
     .map((statement) => statement.trim())
     .filter(Boolean)
 
-const queryFiles = (await readdir(queriesDir))
-  .filter((file) => file.endsWith('.sql'))
-  .sort()
+const queryFiles = (await readdir(queriesDir)).filter((file) => file.endsWith('.sql')).sort()
 
 describe('queries sql', () => {
   it('encontra arquivos SQL para validar', () => {
@@ -45,20 +43,24 @@ describe('queries sql', () => {
 
     const run = mysqlUrl ? it : it.skip
 
-    run(`executa ${fileName} sem erro no mysql configurado`, async () => {
-      const sqlPath = path.join(queriesDir, fileName)
-      const sql = await readFile(sqlPath, 'utf-8')
-      const statements = splitStatements(sql)
+    run(
+      `executa ${fileName} sem erro no mysql configurado`,
+      async () => {
+        const sqlPath = path.join(queriesDir, fileName)
+        const sql = await readFile(sqlPath, 'utf-8')
+        const statements = splitStatements(sql)
 
-      const connection = await mysql.createConnection(mysqlUrl!)
-      try {
-        for (const statement of statements) {
-          const [rows] = await connection.query(statement)
-          expect(Array.isArray(rows)).toBe(true)
+        const connection = await mysql.createConnection(mysqlUrl!)
+        try {
+          for (const statement of statements) {
+            const [rows] = await connection.query(statement)
+            expect(Array.isArray(rows)).toBe(true)
+          }
+        } finally {
+          await connection.end()
         }
-      } finally {
-        await connection.end()
-      }
-    }, 20_000)
+      },
+      20_000
+    )
   }
 })

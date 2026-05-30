@@ -154,11 +154,7 @@ const pickFrom = (obj: Record<string, unknown> | null, keys: string[]) => {
   return pickString(nested, keys)
 }
 
-const isUserJid = (jid: string) =>
-  jid.includes('@') &&
-  !jid.endsWith('@g.us') &&
-  !jid.endsWith('@newsletter') &&
-  jid !== 'status@broadcast'
+const isUserJid = (jid: string) => jid.includes('@') && !jid.endsWith('@g.us') && !jid.endsWith('@newsletter') && jid !== 'status@broadcast'
 
 const userIdCache = new Map<string, string>()
 const cacheKey = (type: string, value: string) => `${type}:${value}`
@@ -322,9 +318,7 @@ async function main() {
   }
 
   const ensureUserByIdentifiers = async (identifiers: Array<{ type: UserIdentifierType; value: string }>, displayName?: string | null) => {
-    const clean = identifiers
-      .map((entry) => normalizeUserIdentifier(entry))
-      .filter((entry): entry is { type: UserIdentifierType; value: string } => Boolean(entry?.value))
+    const clean = identifiers.map((entry) => normalizeUserIdentifier(entry)).filter((entry): entry is { type: UserIdentifierType; value: string } => Boolean(entry?.value))
     if (!clean.length) return null
     const lookup = clean.flatMap(buildUserIdentifierLookupVariants).filter((entry, index, entries) => entries.findIndex((item) => item.type === entry.type && item.value === entry.value) === index)
 
@@ -487,14 +481,7 @@ async function main() {
 
   const extractChatFallbackDisplayName = (chatData: Record<string, unknown> | null): string | null => {
     if (!chatData) return null
-    const direct = pickNestedString(chatData, [
-      ['name'],
-      ['subject'],
-      ['formattedTitle'],
-      ['displayName'],
-      ['notify'],
-      ['pushName'],
-    ])
+    const direct = pickNestedString(chatData, [['name'], ['subject'], ['formattedTitle'], ['displayName'], ['notify'], ['pushName']])
     if (direct) return normalizeDisplayName(direct)
     const messages = Array.isArray(chatData.messages) ? chatData.messages : []
     for (const item of messages) {
@@ -559,8 +546,7 @@ async function main() {
     return rows[0]?.sender_user_id ?? null
   }
 
-  const resolveEventActorJid = (record: Record<string, unknown>) =>
-    pickNestedString(record, [['actorJid'], ['actor'], ['author'], ['from'], ['sender'], ['receipt', 'userJid'], ['key', 'participant']])
+  const resolveEventActorJid = (record: Record<string, unknown>) => pickNestedString(record, [['actorJid'], ['actor'], ['author'], ['from'], ['sender'], ['receipt', 'userJid'], ['key', 'participant']])
 
   const dedupeUserIdentifierEntries = (entries: Array<{ type: UserIdentifierType; value: string }>) => {
     const seen = new Set<string>()
@@ -572,22 +558,11 @@ async function main() {
     })
   }
 
-  const resolveEventActorIdentifierEntries = (record: Record<string, unknown>) =>
-    dedupeUserIdentifierEntries(resolveUserIdentifierEntries(resolveEventActorJid(record)))
+  const resolveEventActorIdentifierEntries = (record: Record<string, unknown>) => dedupeUserIdentifierEntries(resolveUserIdentifierEntries(resolveEventActorJid(record)))
 
   const resolveEventTargetIdentifierEntries = (record: Record<string, unknown>) => {
     const entries: Array<{ type: UserIdentifierType; value: string }> = []
-    const paths: string[][] = [
-      ['targetJid'],
-      ['user'],
-      ['participant'],
-      ['contactJid'],
-      ['receipt', 'userJid'],
-      ['reaction', 'participant'],
-      ['id'],
-      ['pn'],
-      ['lid'],
-    ]
+    const paths: string[][] = [['targetJid'], ['user'], ['participant'], ['contactJid'], ['receipt', 'userJid'], ['reaction', 'participant'], ['id'], ['pn'], ['lid']]
     for (const path of paths) {
       const candidate = pickNestedString(record, [path])
       if (!candidate) continue
@@ -926,9 +901,7 @@ async function main() {
     let skippedGuardWorseCandidateFromJson = 0
     for (const row of rows) {
       const contactData = deserialize<Record<string, unknown>>(row.data_json)
-      const candidateDisplayName = normalizeDisplayName(
-        pickNestedString(contactData, [['name'], ['notify'], ['pushName'], ['verifiedName'], ['fullName']])
-      )
+      const candidateDisplayName = normalizeDisplayName(pickNestedString(contactData, [['name'], ['notify'], ['pushName'], ['verifiedName'], ['fullName']]))
       const currentDisplayName = normalizeDisplayName(row.display_name)
       if (!candidateDisplayName) {
         skippedNoSourceFromJson += 1
@@ -1220,31 +1193,21 @@ async function main() {
       const messageText = getMessageText(message)
       const timestamp = toNumber(message.messageTimestamp)
       const contentType = normalized.type ? normalizeString(String(normalized.type), { maxLength: MAX_LENGTHS.contentType }) : null
-      const messageType =
-        message.messageStubType !== undefined && message.messageStubType !== null
-          ? normalizeString(String(message.messageStubType), { maxLength: MAX_LENGTHS.messageType })
-          : null
+      const messageType = message.messageStubType !== undefined && message.messageStubType !== null ? normalizeString(String(message.messageStubType), { maxLength: MAX_LENGTHS.messageType }) : null
       const status = message.status !== undefined && message.status !== null ? normalizeString(String(message.status), { maxLength: MAX_LENGTHS.status }) : null
-      const isForwarded = toTinyInt((() => {
-        if (!normalized.type || !normalized.content) return null
-        const inner = normalized.content[normalized.type]
-        if (!inner || typeof inner !== 'object') return null
-        const contextInfo = (inner as { contextInfo?: { isForwarded?: boolean; forwardingScore?: number } }).contextInfo
-        if (!contextInfo) return null
-        if (typeof contextInfo.isForwarded === 'boolean') return contextInfo.isForwarded
-        if (typeof contextInfo.forwardingScore === 'number') return contextInfo.forwardingScore > 0
-        return null
-      })())
-      const isEphemeral = message.message
-        ? toTinyInt(
-            Boolean(
-              message.message.ephemeralMessage ||
-                message.message.viewOnceMessage ||
-                message.message.viewOnceMessageV2 ||
-                message.message.viewOnceMessageV2Extension
-            )
-          )
-        : null
+      const isForwarded = toTinyInt(
+        (() => {
+          if (!normalized.type || !normalized.content) return null
+          const inner = normalized.content[normalized.type]
+          if (!inner || typeof inner !== 'object') return null
+          const contextInfo = (inner as { contextInfo?: { isForwarded?: boolean; forwardingScore?: number } }).contextInfo
+          if (!contextInfo) return null
+          if (typeof contextInfo.isForwarded === 'boolean') return contextInfo.isForwarded
+          if (typeof contextInfo.forwardingScore === 'number') return contextInfo.forwardingScore > 0
+          return null
+        })()
+      )
+      const isEphemeral = message.message ? toTinyInt(Boolean(message.message.ephemeralMessage || message.message.viewOnceMessage || message.message.viewOnceMessageV2 || message.message.viewOnceMessageV2Extension)) : null
       const textPreview = normalizeString(messageText, { maxLength: 512, truncate: true, trim: false })
 
       if (timestamp === null) stats.skipped.noSource.timestamp += 1
@@ -1366,10 +1329,7 @@ async function main() {
       const actorEntries = !row.actor_user_id ? resolveEventActorIdentifierEntries(record) : []
       const targetEntries = !row.target_user_id ? resolveEventTargetIdentifierEntries(record) : []
       const actorUserId = actorEntries.length ? await ensureUserByIdentifiers(actorEntries) : null
-      const targetUserId =
-        targetEntries.length
-          ? await ensureUserByIdentifiers(targetEntries)
-          : senderUserId
+      const targetUserId = targetEntries.length ? await ensureUserByIdentifiers(targetEntries) : senderUserId
 
       if (!messageDbId) stats.skipped.noSource.message_db_id += 1
       if (!actorUserId && !row.actor_user_id) stats.skipped.noSource.actor_user_id += 1
@@ -1439,16 +1399,17 @@ async function main() {
       await setCheckpoint('events_log', 0)
       return
     }
-    const ids = idRows.map(r => r.id)
+    const ids = idRows.map((r) => r.id)
 
-    const [eventRows] = await pool.query<RowDataPacket[]>(
-      `SELECT id, actor_user_id, target_user_id, chat_jid, group_jid, message_db_id, data_json FROM events_log WHERE id IN (?)`,
-      [ids]
-    )
-    
+    const [eventRows] = await pool.query<RowDataPacket[]>(`SELECT id, actor_user_id, target_user_id, chat_jid, group_jid, message_db_id, data_json FROM events_log WHERE id IN (?)`, [ids])
+
     for (const row of eventRows) {
       let record: Record<string, unknown> | null = null
-      try { record = deserialize<Record<string, unknown>>(row.data_json) } catch { continue }
+      try {
+        record = deserialize<Record<string, unknown>>(row.data_json)
+      } catch {
+        continue
+      }
       if (!record) continue
 
       if (!row.actor_user_id) {
@@ -1470,14 +1431,10 @@ async function main() {
       const chatJid = !row.chat_jid ? resolveEventChatJid(record) : null
       const groupJid = !row.group_jid ? resolveEventGroupJid(record) : null
       const messageKey = resolveEventMessageKey(record)
-      const messageDbId =
-        !row.message_db_id && messageKey ? await resolveMessageDbId(messageKey.chatJid, messageKey.messageId, messageKey.fromMe) : null
+      const messageDbId = !row.message_db_id && messageKey ? await resolveMessageDbId(messageKey.chatJid, messageKey.messageId, messageKey.fromMe) : null
       const senderUserId = await getMessageSenderUserId((row.message_db_id as number | null) ?? messageDbId)
       const actorUserId = actorEntries.length ? await ensureUserByIdentifiers(actorEntries) : null
-      const targetUserId =
-        targetEntries.length
-          ? await ensureUserByIdentifiers(targetEntries)
-          : senderUserId
+      const targetUserId = targetEntries.length ? await ensureUserByIdentifiers(targetEntries) : senderUserId
       if (!actorUserId && !targetUserId && !chatJid && !groupJid && !messageDbId) continue
       await pool.execute(
         `UPDATE events_log
@@ -1547,15 +1504,8 @@ async function main() {
       const chatJid = row.chat_jid ?? pickNestedString(record, [['chatId'], ['chatJid']])
       const messageId = pickNestedString(record, [['messageId'], ['messageKey', 'messageId']])
       const fromMeValue = getNestedValue(record, ['messageKey', 'fromMe'])
-      const messageDbId =
-        row.message_db_id ?? (chatJid && messageId ? await resolveMessageDbId(chatJid, messageId, typeof fromMeValue === 'boolean' ? fromMeValue : null) : null)
-      const targetJid =
-        row.target_jid ??
-        (row.association_type === 'contact'
-          ? pickNestedString(record, [['contactJid'], ['targetJid'], ['chatId']])
-          : row.association_type === 'group'
-            ? pickNestedString(record, [['groupJid'], ['groupId'], ['chatId']])
-            : null)
+      const messageDbId = row.message_db_id ?? (chatJid && messageId ? await resolveMessageDbId(chatJid, messageId, typeof fromMeValue === 'boolean' ? fromMeValue : null) : null)
+      const targetJid = row.target_jid ?? (row.association_type === 'contact' ? pickNestedString(record, [['contactJid'], ['targetJid'], ['chatId']]) : row.association_type === 'group' ? pickNestedString(record, [['groupJid'], ['groupId'], ['chatId']]) : null)
       if (!messageDbId && !targetJid) continue
       await pool.execute(
         `UPDATE label_associations
@@ -1746,9 +1696,7 @@ async function main() {
 
     const before = finalBefore ?? (await collectBackfillMetrics())
     const after = finalAfter ?? (await collectBackfillMetrics())
-    const deltas = Object.fromEntries(
-      Object.keys(after).map((key) => [key, { before: before[key] ?? 0, after: after[key] ?? 0, delta: (before[key] ?? 0) - (after[key] ?? 0) }])
-    )
+    const deltas = Object.fromEntries(Object.keys(after).map((key) => [key, { before: before[key] ?? 0, after: after[key] ?? 0, delta: (before[key] ?? 0) - (after[key] ?? 0) }]))
     logger.info('backfill ciclo concluido', { connectionId, passes: pass, deltas })
   }
 
@@ -1764,7 +1712,7 @@ async function main() {
     await runCycle()
     const duration = Date.now() - start
     const wait = Math.max(1000, WORKER_INTERVAL_MS - duration)
-    await new Promise(resolve => setTimeout(resolve, wait))
+    await new Promise((resolve) => setTimeout(resolve, wait))
   }
 }
 

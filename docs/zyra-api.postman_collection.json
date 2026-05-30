@@ -49,9 +49,7 @@
           "name": "Criar instância",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/connections",
               "host": ["{{base_url}}"],
@@ -93,9 +91,7 @@
           "name": "Atualizar label",
           "request": {
             "method": "PATCH",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/connections/{{connection_id}}",
               "host": ["{{base_url}}"],
@@ -190,9 +186,7 @@
           "name": "Enviar texto",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/connections/{{connection_id}}/messages/send",
               "host": ["{{base_url}}"],
@@ -210,9 +204,7 @@
           "name": "Enviar imagem",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/connections/{{connection_id}}/messages/send",
               "host": ["{{base_url}}"],
@@ -230,9 +222,7 @@
           "name": "Enviar vídeo",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/connections/{{connection_id}}/messages/send",
               "host": ["{{base_url}}"],
@@ -250,9 +240,7 @@
           "name": "Enviar áudio",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/connections/{{connection_id}}/messages/send",
               "host": ["{{base_url}}"],
@@ -270,9 +258,7 @@
           "name": "Enviar documento",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/connections/{{connection_id}}/messages/send",
               "host": ["{{base_url}}"],
@@ -290,9 +276,7 @@
           "name": "Enviar mensagem para grupo",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/connections/{{connection_id}}/messages/send",
               "host": ["{{base_url}}"],
@@ -344,9 +328,7 @@
           "name": "Criar webhook global",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/webhooks",
               "host": ["{{base_url}}"],
@@ -376,9 +358,7 @@
           "name": "Atualizar webhook global",
           "request": {
             "method": "PATCH",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/webhooks/{{webhook_id}}",
               "host": ["{{base_url}}"],
@@ -449,9 +429,7 @@
           "name": "Criar webhook",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/connections/{{connection_id}}/webhooks",
               "host": ["{{base_url}}"],
@@ -469,9 +447,7 @@
           "name": "Criar webhook — somente mensagens",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/connections/{{connection_id}}/webhooks",
               "host": ["{{base_url}}"],
@@ -501,9 +477,7 @@
           "name": "Atualizar webhook",
           "request": {
             "method": "PATCH",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/connections/{{connection_id}}/webhooks/{{webhook_id}}",
               "host": ["{{base_url}}"],
@@ -521,9 +495,7 @@
           "name": "Desativar webhook",
           "request": {
             "method": "PATCH",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": {
               "raw": "{{base_url}}/connections/{{connection_id}}/webhooks/{{webhook_id}}",
               "host": ["{{base_url}}"],

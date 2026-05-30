@@ -128,11 +128,7 @@ describe('session pair command', () => {
     expect(initMysqlSchemaMock).toHaveBeenCalledTimes(1)
     expect(createSocketMock).toHaveBeenCalledWith('loja2', logger)
     expect(flushSocketCredsNowMock.mock.calls[0]?.[1]).toBe('pairing_complete')
-    expect(flushSocketCredsNowMock.mock.calls.map((call) => call[1])).toEqual([
-      'pairing_complete',
-      'pairing_finalize',
-      'pairing_validation_finalize',
-    ])
+    expect(flushSocketCredsNowMock.mock.calls.map((call) => call[1])).toEqual(['pairing_complete', 'pairing_finalize', 'pairing_validation_finalize'])
 
     process.argv = argv
   })
@@ -369,10 +365,7 @@ describe('session pair command', () => {
     await waitForPairFlowToSettle()
 
     expect(flushSocketCredsNowMock).toHaveBeenCalledWith(expect.anything(), 'pairing_post_login_close')
-    expect(logger.warn).toHaveBeenCalledWith(
-      'pairing: encerramento pos-login sem status explicito, seguindo por compatibilidade',
-      { connectionId: 'loja2' }
-    )
+    expect(logger.warn).toHaveBeenCalledWith('pairing: encerramento pos-login sem status explicito, seguindo por compatibilidade', { connectionId: 'loja2' })
 
     process.argv = argv
   })
@@ -485,10 +478,7 @@ describe('session pair command', () => {
     await importPromise
     await waitForPairFlowToSettle()
 
-    expect(logger.info).toHaveBeenCalledWith(
-      'pairing: pm2 indisponivel, reinicio automatico ignorado',
-      expect.objectContaining({ connectionId: 'loja2' })
-    )
+    expect(logger.info).toHaveBeenCalledWith('pairing: pm2 indisponivel, reinicio automatico ignorado', expect.objectContaining({ connectionId: 'loja2' }))
     expect(logger.error).not.toHaveBeenCalledWith('falha no pairing via terminal', expect.anything())
 
     process.argv = argv
@@ -512,10 +502,7 @@ describe('session pair command', () => {
     await importPromise
     await waitForPairFlowToSettle()
 
-    expect(logger.warn).toHaveBeenCalledWith(
-      'pairing: falha ao ler lista de processos do pm2',
-      expect.objectContaining({ connectionId: 'loja2' })
-    )
+    expect(logger.warn).toHaveBeenCalledWith('pairing: falha ao ler lista de processos do pm2', expect.objectContaining({ connectionId: 'loja2' }))
 
     process.argv = argv
   })
@@ -541,10 +528,7 @@ describe('session pair command', () => {
     await importPromise
     await waitForPairFlowToSettle()
 
-    expect(logger.info).toHaveBeenCalledWith(
-      'pairing: app do pm2 nao esta online, reinicio automatico ignorado',
-      expect.objectContaining({ connectionId: 'loja2', appStatus: 'stopped' })
-    )
+    expect(logger.info).toHaveBeenCalledWith('pairing: app do pm2 nao esta online, reinicio automatico ignorado', expect.objectContaining({ connectionId: 'loja2', appStatus: 'stopped' }))
 
     process.argv = argv
   })
@@ -576,10 +560,7 @@ describe('session pair command', () => {
     await importPromise
     await waitForPairFlowToSettle()
 
-    expect(logger.warn).toHaveBeenCalledWith(
-      'pairing: falha ao reiniciar app do pm2 apos validacao',
-      expect.objectContaining({ connectionId: 'loja2', source: 'pm2-env', connectionIds: ['base1', 'loja2'] })
-    )
+    expect(logger.warn).toHaveBeenCalledWith('pairing: falha ao reiniciar app do pm2 apos validacao', expect.objectContaining({ connectionId: 'loja2', source: 'pm2-env', connectionIds: ['base1', 'loja2'] }))
     expect(logger.error).not.toHaveBeenCalledWith('falha no pairing via terminal', expect.anything())
 
     process.argv = argv
@@ -619,10 +600,7 @@ describe('session pair command', () => {
         env: expect.objectContaining({ WA_CONNECTION_IDS: 'base1,loja2,base2' }),
       })
     )
-    expect(logger.info).toHaveBeenCalledWith(
-      'pairing: pm2 reiniciado com lista atualizada de conexoes',
-      expect.objectContaining({ source: 'pm2-env', connectionIds: ['base1', 'loja2', 'base2'] })
-    )
+    expect(logger.info).toHaveBeenCalledWith('pairing: pm2 reiniciado com lista atualizada de conexoes', expect.objectContaining({ source: 'pm2-env', connectionIds: ['base1', 'loja2', 'base2'] }))
 
     process.argv = argv
   })
@@ -666,10 +644,7 @@ describe('session pair command', () => {
         env: expect.objectContaining({ WA_CONNECTION_IDS: 'base1,loja2,base3' }),
       })
     )
-    expect(logger.info).toHaveBeenCalledWith(
-      'pairing: pm2 reiniciado com lista atualizada de conexoes',
-      expect.objectContaining({ source: 'mysql-fallback', connectionIds: ['base1', 'loja2', 'base3'] })
-    )
+    expect(logger.info).toHaveBeenCalledWith('pairing: pm2 reiniciado com lista atualizada de conexoes', expect.objectContaining({ source: 'mysql-fallback', connectionIds: ['base1', 'loja2', 'base3'] }))
 
     process.argv = argv
   })

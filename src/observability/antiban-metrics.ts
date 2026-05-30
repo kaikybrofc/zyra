@@ -134,16 +134,7 @@ const buildOperationalSnapshots = (provider?: OperationalSnapshotProvider): Oper
  * Renderiza métricas operacionais extras no formato Prometheus.
  */
 const renderOperationalPrometheus = (snapshots: OperationalSnapshot[]): string => {
-  const lines: string[] = [
-    '# HELP zyra_antiban_enabled Anti-ban habilitado (1=true, 0=false).',
-    '# TYPE zyra_antiban_enabled gauge',
-    '# HELP zyra_antiban_metrics_enabled Endpoint de metricas anti-ban habilitado (1=true, 0=false).',
-    '# TYPE zyra_antiban_metrics_enabled gauge',
-    '# HELP zyra_antiban_socket_active Socket ativo no runtime (1=true, 0=false).',
-    '# TYPE zyra_antiban_socket_active gauge',
-    '# HELP zyra_antiban_reconnect_in_flight Reconnect em andamento (1=true, 0=false).',
-    '# TYPE zyra_antiban_reconnect_in_flight gauge',
-  ]
+  const lines: string[] = ['# HELP zyra_antiban_enabled Anti-ban habilitado (1=true, 0=false).', '# TYPE zyra_antiban_enabled gauge', '# HELP zyra_antiban_metrics_enabled Endpoint de metricas anti-ban habilitado (1=true, 0=false).', '# TYPE zyra_antiban_metrics_enabled gauge', '# HELP zyra_antiban_socket_active Socket ativo no runtime (1=true, 0=false).', '# TYPE zyra_antiban_socket_active gauge', '# HELP zyra_antiban_reconnect_in_flight Reconnect em andamento (1=true, 0=false).', '# TYPE zyra_antiban_reconnect_in_flight gauge']
 
   for (const snapshot of snapshots) {
     const connectionId = snapshot.connectionId ? escapeLabel(snapshot.connectionId) : 'default'
@@ -182,12 +173,7 @@ const renderOperationalPrometheus = (snapshots: OperationalSnapshot[]): string =
  * - `${WA_ANTIBAN_METRICS_PATH}?format=json`: payload JSON com stats + snapshot operacional
  * - `${WA_ANTIBAN_METRICS_PATH}/ops`: métricas operacionais extras (Prometheus)
  */
-export const startAntiBanMetricsServer = ({
-  logger,
-  getStats,
-  getStatsByConnection,
-  getOperationalSnapshots,
-}: StartAntiBanMetricsServerOptions): MetricsServerHandle => {
+export const startAntiBanMetricsServer = ({ logger, getStats, getStatsByConnection, getOperationalSnapshots }: StartAntiBanMetricsServerOptions): MetricsServerHandle => {
   if (!config.antibanEnabled || !config.antibanMetricsEnabled) {
     return {
       stop: async () => undefined,

@@ -46,10 +46,7 @@ const stringifyStickerTemplate = (rawPackName: string | null, rawPackAuthor: str
   return `/${rawPackAuthor}`
 }
 
-const applyStickerTemplate = (
-  value: string,
-  replacements: Record<'#data' | '#hora' | '#nome' | '#grupo' | '#numero', string>
-): string => {
+const applyStickerTemplate = (value: string, replacements: Record<'#data' | '#hora' | '#nome' | '#grupo' | '#numero', string>): string => {
   return value
     .replace(/#data/gi, replacements['#data'])
     .replace(/#hora/gi, replacements['#hora'])
@@ -59,37 +56,7 @@ const applyStickerTemplate = (
 }
 
 const buildStickerHelpMessage = (): string => {
-  return (
-    'Comando de figurinha (`!sticker`, `!s`, `!st`)\n'
-    + '\n'
-    + 'Como usar:\n'
-    + '- Envie o comando na legenda da mídia ou respondendo uma mídia.\n'
-    + '- `!s` usa seu template salvo (ou padrão se ainda não houver).\n'
-    + '- `!s texto` atualiza só o lado esquerdo (pack).\n'
-    + '- `!s pack/autor` atualiza os dois lados.\n'
-    + '- `!s pack/` atualiza só pack e mantém autor salvo.\n'
-    + '- `!s /autor` atualiza só autor e mantém pack salvo.\n'
-    + '\n'
-    + 'Persistência por usuário:\n'
-    + '- O último template fica salvo no banco por usuário.\n'
-    + '- Ao enviar novo texto, só os lados informados são alterados.\n'
-    + '\n'
-    + 'Placeholders disponíveis:\n'
-    + '- `#data` data atual\n'
-    + '- `#hora` hora atual\n'
-    + '- `#nome` nome do usuário\n'
-    + '- `#grupo` nome do grupo\n'
-    + '- `#numero` número do remetente\n'
-    + '\n'
-    + 'Exemplos:\n'
-    + '- `!s`\n'
-    + '- `!s Zyra`\n'
-    + '- `!s Zyra/#nome`\n'
-    + '- `!s Pack #grupo/#nome - #numero`\n'
-    + '- `!s Evento #data/#hora`\n'
-    + '\n'
-    + 'Ajuda rápida: `!s -h` ou `!s -help`'
-  )
+  return 'Comando de figurinha (`!sticker`, `!s`, `!st`)\n' + '\n' + 'Como usar:\n' + '- Envie o comando na legenda da mídia ou respondendo uma mídia.\n' + '- `!s` usa seu template salvo (ou padrão se ainda não houver).\n' + '- `!s texto` atualiza só o lado esquerdo (pack).\n' + '- `!s pack/autor` atualiza os dois lados.\n' + '- `!s pack/` atualiza só pack e mantém autor salvo.\n' + '- `!s /autor` atualiza só autor e mantém pack salvo.\n' + '\n' + 'Persistência por usuário:\n' + '- O último template fica salvo no banco por usuário.\n' + '- Ao enviar novo texto, só os lados informados são alterados.\n' + '\n' + 'Placeholders disponíveis:\n' + '- `#data` data atual\n' + '- `#hora` hora atual\n' + '- `#nome` nome do usuário\n' + '- `#grupo` nome do grupo\n' + '- `#numero` número do remetente\n' + '\n' + 'Exemplos:\n' + '- `!s`\n' + '- `!s Zyra`\n' + '- `!s Zyra/#nome`\n' + '- `!s Pack #grupo/#nome - #numero`\n' + '- `!s Evento #data/#hora`\n' + '\n' + 'Ajuda rápida: `!s -h` ou `!s -help`'
 }
 
 const safeFileName = (value: string): string => value.replace(/[^a-zA-Z0-9._-]/g, '_')
@@ -100,17 +67,7 @@ const toRelativePath = (absolutePath: string): string => {
 }
 
 const isAnimatedWebP = (buffer: Buffer): boolean => {
-  if (
-    buffer.length < 12
-    || buffer[0] !== 0x52
-    || buffer[1] !== 0x49
-    || buffer[2] !== 0x46
-    || buffer[3] !== 0x46
-    || buffer[8] !== 0x57
-    || buffer[9] !== 0x45
-    || buffer[10] !== 0x42
-    || buffer[11] !== 0x50
-  ) {
+  if (buffer.length < 12 || buffer[0] !== 0x52 || buffer[1] !== 0x49 || buffer[2] !== 0x46 || buffer[3] !== 0x46 || buffer[8] !== 0x57 || buffer[9] !== 0x45 || buffer[10] !== 0x42 || buffer[11] !== 0x50) {
     return false
   }
 
@@ -133,23 +90,7 @@ const isAnimatedWebP = (buffer: Buffer): boolean => {
   return false
 }
 
-const persistGeneratedSticker = async (params: {
-  sticker: Buffer
-  sender: string
-  packName: string
-  packAuthor: string
-  templateText?: string | null
-  record: (entry: {
-    packName: string
-    packAuthor: string
-    templateText?: string | null
-    localPath: string
-    fileSha256: string
-    fileLength: number
-    mimeType?: string | null
-    data?: unknown
-  }) => Promise<void>
-}): Promise<void> => {
+const persistGeneratedSticker = async (params: { sticker: Buffer; sender: string; packName: string; packAuthor: string; templateText?: string | null; record: (entry: { packName: string; packAuthor: string; templateText?: string | null; localPath: string; fileSha256: string; fileLength: number; mimeType?: string | null; data?: unknown }) => Promise<void> }): Promise<void> => {
   const hashHex = createHash('sha256').update(params.sticker).digest('hex')
   const hashB64 = createHash('sha256').update(params.sticker).digest('base64')
   const stickerPackFileName = `${hashB64.replace(/\//g, '-')}.webp`
@@ -214,12 +155,7 @@ const executeStickerCommand: Command['execute'] = async (ctx) => {
 
   const source = await ctx.getStickerSourceMedia()
   if (!source) {
-    await safeReply(
-      'Não encontrei mídia para converter em figurinha.\n'
-      + 'Use `!s` na legenda da mídia ou respondendo uma imagem/vídeo/sticker.\n'
-      + 'Dica: `!s` sozinho reutiliza seu template salvo.\n'
-      + 'Para ajuda completa use `!s -h`.'
-    )
+    await safeReply('Não encontrei mídia para converter em figurinha.\n' + 'Use `!s` na legenda da mídia ou respondendo uma imagem/vídeo/sticker.\n' + 'Dica: `!s` sozinho reutiliza seu template salvo.\n' + 'Para ajuda completa use `!s -h`.')
     return
   }
 
@@ -252,7 +188,7 @@ const executeStickerCommand: Command['execute'] = async (ctx) => {
     const replacements = {
       '#data': date,
       '#hora': hour,
-      '#nome': (ctx.pushName?.trim() || DEFAULT_PACK_AUTHOR),
+      '#nome': ctx.pushName?.trim() || DEFAULT_PACK_AUTHOR,
       '#grupo': groupName,
       '#numero': normalizePhoneFromJid(ctx.sender),
     } as const

@@ -140,11 +140,7 @@ describe('baileys-store', () => {
     expect(redisStore.setChat).toHaveBeenCalledWith('chat@s.whatsapp.net', expect.objectContaining({ id: 'chat@s.whatsapp.net' }))
     expect(sqlStore.setContact).toHaveBeenCalledWith('user@s.whatsapp.net', expect.objectContaining({ id: 'user@s.whatsapp.net' }))
     expect(redisStore.setMessage).toHaveBeenCalled()
-    expect(sqlStore.setGroupParticipants).toHaveBeenCalledWith(
-      'group@g.us',
-      [{ id: 'user@s.whatsapp.net', admin: 'admin' }],
-      { replace: true }
-    )
+    expect(sqlStore.setGroupParticipants).toHaveBeenCalledWith('group@g.us', [{ id: 'user@s.whatsapp.net', admin: 'admin' }], { replace: true })
     expect(sqlStore.setChatUser).toHaveBeenCalledWith('group@g.us', 'user@s.whatsapp.net', 'admin')
     expect(await store.getMessage(message.key as never)).toEqual({ conversation: 'oi' })
     expect(await store.getGroupMetadata('group@g.us')).toEqual(expect.objectContaining({ id: 'group@g.us', subject: 'Grupo' }))
@@ -172,17 +168,13 @@ describe('baileys-store', () => {
     const { createBaileysStore } = await import('../src/store/baileys-store.ts')
     const store = createBaileysStore('tenant')
 
-    expect(
-      await store.getMessage({ remoteJid: 'chat@s.whatsapp.net', id: 'msg-1', fromMe: false } as never)
-    ).toEqual({ conversation: 'redis' })
+    expect(await store.getMessage({ remoteJid: 'chat@s.whatsapp.net', id: 'msg-1', fromMe: false } as never)).toEqual({ conversation: 'redis' })
     expect(await store.getGroupMetadata('group@g.us')).toEqual({ id: 'group@g.us', subject: 'Redis Group' })
 
     redisStore.getMessage.mockResolvedValueOnce(undefined)
     redisStore.getGroup.mockResolvedValueOnce(undefined)
 
-    expect(
-      await store.getMessage({ remoteJid: 'chat2@s.whatsapp.net', id: 'msg-2', fromMe: false } as never)
-    ).toEqual({ conversation: 'sql' })
+    expect(await store.getMessage({ remoteJid: 'chat2@s.whatsapp.net', id: 'msg-2', fromMe: false } as never)).toEqual({ conversation: 'sql' })
     expect(await store.getGroupMetadata('group2@g.us')).toEqual({ id: 'group2@g.us', subject: 'SQL Group' })
   })
 
@@ -213,18 +205,12 @@ describe('baileys-store', () => {
       action: 'add',
     })
 
-    expect(sqlStore.setGroupParticipants).toHaveBeenCalledWith(
-      'group@g.us',
-      [{ id: 'user2@s.whatsapp.net', admin: 'admin' }]
-    )
+    expect(sqlStore.setGroupParticipants).toHaveBeenCalledWith('group@g.us', [{ id: 'user2@s.whatsapp.net', admin: 'admin' }])
     expect(sqlStore.setChatUser).toHaveBeenCalledWith('group@g.us', 'user2@s.whatsapp.net', 'admin')
     expect(await store.getGroupMetadata('group@g.us')).toEqual(
       expect.objectContaining({
         size: 2,
-        participants: expect.arrayContaining([
-          expect.objectContaining({ id: 'user1@s.whatsapp.net' }),
-          expect.objectContaining({ id: 'user2@s.whatsapp.net', admin: 'admin' }),
-        ]),
+        participants: expect.arrayContaining([expect.objectContaining({ id: 'user1@s.whatsapp.net' }), expect.objectContaining({ id: 'user2@s.whatsapp.net', admin: 'admin' })]),
       })
     )
 
@@ -358,9 +344,7 @@ describe('baileys-store', () => {
       ev.emit('messages.upsert', { messages: msgs })
 
       for (let i = 1; i <= 10; i++) {
-        expect(
-          await store.getMessage({ remoteJid: 'chat@s.whatsapp.net', id: `msg-${i}`, fromMe: false } as never)
-        ).toEqual({ conversation: `msg-${i}` })
+        expect(await store.getMessage({ remoteJid: 'chat@s.whatsapp.net', id: `msg-${i}`, fromMe: false } as never)).toEqual({ conversation: `msg-${i}` })
       }
     } finally {
       delete process.env.WA_MAX_CACHED_MESSAGES

@@ -82,24 +82,14 @@ describe('handleHealthRoutes', () => {
   it('retorna false para rota não-health', async () => {
     const { handleHealthRoutes } = await import('../src/api/routes/health.ts')
     const res = makeRes()
-    const handled = await handleHealthRoutes(
-      { method: 'GET', url: '/connections' } as IncomingMessage,
-      res as unknown as ServerResponse,
-      '/connections',
-      logger
-    )
+    const handled = await handleHealthRoutes({ method: 'GET', url: '/connections' } as IncomingMessage, res as unknown as ServerResponse, '/connections', logger)
     expect(handled).toBe(false)
   })
 
   it('responde /health/live com 200', async () => {
     const { handleHealthRoutes } = await import('../src/api/routes/health.ts')
     const res = makeRes()
-    const handled = await handleHealthRoutes(
-      { method: 'GET', url: '/health/live' } as IncomingMessage,
-      res as unknown as ServerResponse,
-      '/health/live',
-      logger
-    )
+    const handled = await handleHealthRoutes({ method: 'GET', url: '/health/live' } as IncomingMessage, res as unknown as ServerResponse, '/health/live', logger)
     expect(handled).toBe(true)
     expect(res.statusCode).toBe(200)
     const data = JSON.parse(res.body) as { ok: boolean; live: boolean }
@@ -110,12 +100,7 @@ describe('handleHealthRoutes', () => {
   it('responde /health/ready com 200 quando checks estão saudáveis', async () => {
     const { handleHealthRoutes } = await import('../src/api/routes/health.ts')
     const res = makeRes()
-    const handled = await handleHealthRoutes(
-      { method: 'GET', url: '/health/ready' } as IncomingMessage,
-      res as unknown as ServerResponse,
-      '/health/ready',
-      logger
-    )
+    const handled = await handleHealthRoutes({ method: 'GET', url: '/health/ready' } as IncomingMessage, res as unknown as ServerResponse, '/health/ready', logger)
     expect(handled).toBe(true)
     expect(res.statusCode).toBe(200)
     const data = JSON.parse(res.body) as { ready: boolean }
@@ -131,12 +116,7 @@ describe('handleHealthRoutes', () => {
     })
     const { handleHealthRoutes } = await import('../src/api/routes/health.ts')
     const res = makeRes()
-    const handled = await handleHealthRoutes(
-      { method: 'GET', url: '/health/ready' } as IncomingMessage,
-      res as unknown as ServerResponse,
-      '/health/ready',
-      logger
-    )
+    const handled = await handleHealthRoutes({ method: 'GET', url: '/health/ready' } as IncomingMessage, res as unknown as ServerResponse, '/health/ready', logger)
     expect(handled).toBe(true)
     expect(res.statusCode).toBe(503)
     const data = JSON.parse(res.body) as { ready: boolean }
@@ -191,12 +171,7 @@ describe('handleHealthRoutes', () => {
 
     const { handleHealthRoutes } = await import('../src/api/routes/health.ts')
     const res = makeRes()
-    const handled = await handleHealthRoutes(
-      { method: 'GET', url: '/health/connections' } as IncomingMessage,
-      res as unknown as ServerResponse,
-      '/health/connections',
-      logger
-    )
+    const handled = await handleHealthRoutes({ method: 'GET', url: '/health/connections' } as IncomingMessage, res as unknown as ServerResponse, '/health/connections', logger)
     expect(handled).toBe(true)
     expect(res.statusCode).toBe(200)
     const data = JSON.parse(res.body) as { total: number; open: number; connecting: number; paused: number; error: number }

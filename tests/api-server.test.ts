@@ -82,8 +82,13 @@ const createResponse = (): FakeResponse => {
     headers: {},
     body: '',
     headersSent: false,
-    setHeader: vi.fn((key: string, value: string) => { res.headers[key] = value }),
-    end: vi.fn((body?: string) => { res.body = body ?? ''; res.headersSent = true }),
+    setHeader: vi.fn((key: string, value: string) => {
+      res.headers[key] = value
+    }),
+    end: vi.fn((body?: string) => {
+      res.body = body ?? ''
+      res.headersSent = true
+    }),
   }
   return res
 }

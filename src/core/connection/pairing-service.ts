@@ -2,13 +2,7 @@ import { DisconnectReason } from 'baileys'
 import { Boom } from '@hapi/boom'
 import { createLogger, type AppLogger } from '../../observability/logger.js'
 import { createSocket, flushSocketCredsNow, unregisterShutdownTarget, type SocketWithCredsFlush } from './socket.js'
-import {
-  connect,
-  createConnection,
-  disconnect,
-  getConnection,
-  getLogger as getManagerLogger,
-} from './manager.js'
+import { connect, createConnection, disconnect, getConnection, getLogger as getManagerLogger } from './manager.js'
 import { recordConnectionAdminEvent, upsertManagedConnection } from '../../store/connection-admin-store.js'
 import { enqueueConnectionOutboxEvent } from '../webhooks/outbox-dispatcher.js'
 
@@ -41,12 +35,7 @@ type PairingRuntime = {
 
 const PAIRING_TIMEOUT_MS = Math.max(60_000, Number(process.env.WA_PAIR_TIMEOUT_MS ?? 10 * 60_000))
 const QR_TTL_MS = Math.max(10_000, Number(process.env.WA_PAIRING_QR_TTL_MS ?? 60_000))
-const EXPECTED_POST_LOGIN_CLOSE_CODES = new Set<number>([
-  DisconnectReason.restartRequired,
-  408,
-  428,
-  440,
-])
+const EXPECTED_POST_LOGIN_CLOSE_CODES = new Set<number>([DisconnectReason.restartRequired, 408, 428, 440])
 
 const formatErrorMessage = (error: unknown): string => {
   if (error instanceof Error && error.message) return error.message
@@ -54,10 +43,7 @@ const formatErrorMessage = (error: unknown): string => {
 }
 
 const extractDisconnectStatusCode = (update: { lastDisconnect?: { error?: unknown } }): number | null => {
-  const error = update.lastDisconnect?.error as
-    | (Boom & { output?: { statusCode?: number } })
-    | (Error & { output?: { statusCode?: number } })
-    | undefined
+  const error = update.lastDisconnect?.error as (Boom & { output?: { statusCode?: number } }) | (Error & { output?: { statusCode?: number } }) | undefined
   const explicitStatus = error?.output?.statusCode
   if (typeof explicitStatus === 'number') return explicitStatus
   const message = error instanceof Error ? error.message : String(error ?? '')
@@ -114,11 +100,7 @@ class DefaultPairingService {
     return created
   }
 
-  private async withPairingLock<T>(
-    connectionId: string,
-    operation: 'pairing_start' | 'pairing_cancel',
-    task: () => Promise<T>
-  ): Promise<T> {
+  private async withPairingLock<T>(connectionId: string, operation: 'pairing_start' | 'pairing_cancel', task: () => Promise<T>): Promise<T> {
     const previous = this.operationLocks.get(connectionId) ?? Promise.resolve()
     let release: () => void = () => undefined
     const current = new Promise<void>((resolve) => {
@@ -191,32 +173,12 @@ class DefaultPairingService {
     runtime.socket = sock
 
     const eventBus = sock.ev as {
-      on: (event: 'connection.update', listener: (update: {
-        connection?: string
-        qr?: string
-        isNewLogin?: boolean
-        lastDisconnect?: { error?: unknown }
-      }) => void) => unknown
-      off?: (event: 'connection.update', listener: (update: {
-        connection?: string
-        qr?: string
-        isNewLogin?: boolean
-        lastDisconnect?: { error?: unknown }
-      }) => unknown) => unknown
-      removeListener?: (event: 'connection.update', listener: (update: {
-        connection?: string
-        qr?: string
-        isNewLogin?: boolean
-        lastDisconnect?: { error?: unknown }
-      }) => unknown) => unknown
+      on: (event: 'connection.update', listener: (update: { connection?: string; qr?: string; isNewLogin?: boolean; lastDisconnect?: { error?: unknown } }) => void) => unknown
+      off?: (event: 'connection.update', listener: (update: { connection?: string; qr?: string; isNewLogin?: boolean; lastDisconnect?: { error?: unknown } }) => unknown) => unknown
+      removeListener?: (event: 'connection.update', listener: (update: { connection?: string; qr?: string; isNewLogin?: boolean; lastDisconnect?: { error?: unknown } }) => unknown) => unknown
     }
 
-    const onUpdate = (update: {
-      connection?: string
-      qr?: string
-      isNewLogin?: boolean
-      lastDisconnect?: { error?: unknown }
-    }) => {
+    const onUpdate = (update: { connection?: string; qr?: string; isNewLogin?: boolean; lastDisconnect?: { error?: unknown } }) => {
       if (!this.runtimes.has(connectionId)) return
       if (update.qr) {
         const now = Date.now()

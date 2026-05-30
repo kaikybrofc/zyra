@@ -48,11 +48,7 @@ describe('groupFeatureStore', () => {
     await groupFeatureStore.setAntilinkEnabled('grupo@g.us', true)
 
     expect(mockPool.execute).toHaveBeenCalled()
-    expect(mockRedisClient.hSet).toHaveBeenCalledWith(
-      'zyra:conexao:default:features:group',
-      'grupo@g.us',
-      expect.stringContaining('"antilink":true')
-    )
+    expect(mockRedisClient.hSet).toHaveBeenCalledWith('zyra:conexao:default:features:group', 'grupo@g.us', expect.stringContaining('"antilink":true'))
     const fallback = [...memFiles.values()].join('\n')
     expect(fallback).toContain('grupo@g.us')
     expect(fallback).toContain('"antilink": true')

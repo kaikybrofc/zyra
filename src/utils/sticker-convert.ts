@@ -27,10 +27,7 @@ type WebpConvInstance = {
 /**
  * Contrato do construtor do `@caed0/webp-conv` usado no runtime.
  */
-type WebpConvConstructor = new (options?: {
-  quality?: number
-  transparent?: string
-}) => WebpConvInstance
+type WebpConvConstructor = new (options?: { quality?: number; transparent?: string }) => WebpConvInstance
 
 const require = createRequire(import.meta.url)
 const WebpConv = require('@caed0/webp-conv') as WebpConvConstructor

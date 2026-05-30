@@ -29,24 +29,7 @@ const optionalColumns = new Set<string>(['messages.content_type', 'messages.text
 
 const targetColumns = new Set<string>(['groups.owner_user_id', 'lid_mappings.user_id', 'wa_contacts_cache.user_id', 'messages.sender_user_id', 'commands_log.actor_user_id', 'group_events.actor_user_id', 'message_events.actor_user_id', 'message_events.target_user_id', 'message_events.message_db_id', 'chats.display_name', 'users.display_name', 'chat_users.role', 'group_participants.role'])
 
-const contextualColumns = new Set<string>([
-  'events_log.message_db_id',
-  'events_log.group_jid',
-  'events_log.target_user_id',
-  'events_log.chat_jid',
-  'blocklist.actor_user_id',
-  'blocklist.reason',
-  'bot_sessions.platform',
-  'bot_sessions.app_version',
-  'group_feature_flags.antilink_allow_own_group_invite',
-  'label_associations.message_db_id',
-  'label_associations.target_jid',
-  'label_associations.actor_user_id',
-  'newsletter_events.actor_user_id',
-  'newsletter_events.target_user_id',
-  'commands_log.args_text',
-  'labels.actor_user_id',
-])
+const contextualColumns = new Set<string>(['events_log.message_db_id', 'events_log.group_jid', 'events_log.target_user_id', 'events_log.chat_jid', 'blocklist.actor_user_id', 'blocklist.reason', 'bot_sessions.platform', 'bot_sessions.app_version', 'group_feature_flags.antilink_allow_own_group_invite', 'label_associations.message_db_id', 'label_associations.target_jid', 'label_associations.actor_user_id', 'newsletter_events.actor_user_id', 'newsletter_events.target_user_id', 'commands_log.args_text', 'labels.actor_user_id'])
 
 type Category = 'target' | 'optional' | 'contextual' | 'other'
 type ClassifiedCategory = Category | 'ignored'
@@ -74,17 +57,13 @@ export const buildNullCountQuery = ({ connectionId, hasConnectionId, table, colu
 
   if (table === 'label_associations' && column === 'message_db_id') {
     return {
-      query: hasConnectionId
-        ? `SELECT COUNT(*) AS count FROM \`${tableEscaped}\` WHERE connection_id = ? AND association_type = 'message' AND \`${columnEscaped}\` IS NULL`
-        : `SELECT COUNT(*) AS count FROM \`${tableEscaped}\` WHERE association_type = 'message' AND \`${columnEscaped}\` IS NULL`,
+      query: hasConnectionId ? `SELECT COUNT(*) AS count FROM \`${tableEscaped}\` WHERE connection_id = ? AND association_type = 'message' AND \`${columnEscaped}\` IS NULL` : `SELECT COUNT(*) AS count FROM \`${tableEscaped}\` WHERE association_type = 'message' AND \`${columnEscaped}\` IS NULL`,
       params: hasConnectionId ? [connectionId ?? 'default'] : [],
     }
   }
 
   return {
-    query: hasConnectionId
-      ? `SELECT COUNT(*) AS count FROM \`${tableEscaped}\` WHERE connection_id = ? AND \`${columnEscaped}\` IS NULL`
-      : `SELECT COUNT(*) AS count FROM \`${tableEscaped}\` WHERE \`${columnEscaped}\` IS NULL`,
+    query: hasConnectionId ? `SELECT COUNT(*) AS count FROM \`${tableEscaped}\` WHERE connection_id = ? AND \`${columnEscaped}\` IS NULL` : `SELECT COUNT(*) AS count FROM \`${tableEscaped}\` WHERE \`${columnEscaped}\` IS NULL`,
     params: hasConnectionId ? [connectionId ?? 'default'] : [],
   }
 }
@@ -128,8 +107,7 @@ const formatSeverity = (severity: Severity) => {
 const formatRow = (item: { table: string; column: string; count: number; total: number; percent: number; category: Category }) => {
   const severity = evaluateSeverity(item.percent, item.category)
   const percentText = `${item.percent.toFixed(2)}%`
-  const coloredPercent =
-    severity === 'bad' ? colorize(percentText, 'red') : severity === 'medium' ? colorize(percentText, 'yellow') : colorize(percentText, 'green')
+  const coloredPercent = severity === 'bad' ? colorize(percentText, 'red') : severity === 'medium' ? colorize(percentText, 'yellow') : colorize(percentText, 'green')
   return `${formatSeverity(severity)} ${item.table}.${item.column} -> ${item.count}/${item.total} (${coloredPercent})`
 }
 
@@ -226,9 +204,7 @@ export async function main() {
     }
 
     if (table === 'users' || table === 'chats' || table === 'wa_contacts_cache') {
-      const suspiciousQuery = hasConnectionId
-        ? `SELECT display_name FROM \`${tableEscaped}\` WHERE connection_id = ? AND display_name IS NOT NULL AND display_name <> ''`
-        : `SELECT display_name FROM \`${tableEscaped}\` WHERE display_name IS NOT NULL AND display_name <> ''`
+      const suspiciousQuery = hasConnectionId ? `SELECT display_name FROM \`${tableEscaped}\` WHERE connection_id = ? AND display_name IS NOT NULL AND display_name <> ''` : `SELECT display_name FROM \`${tableEscaped}\` WHERE display_name IS NOT NULL AND display_name <> ''`
       const [nameRows] = await pool.execute<SuspiciousNameRow[]>(suspiciousQuery, hasConnectionId ? [connectionId] : [])
       const suspiciousCount = nameRows.reduce((sum, current) => sum + (current.display_name && isSuspiciousDisplayName(current.display_name) ? 1 : 0), 0)
       if (suspiciousCount > 0) {
@@ -243,9 +219,7 @@ export async function main() {
   }
 
   await pool.end()
-  const filtered = findings.filter(
-    (item): item is (typeof findings)[number] & { category: Category } => item.category !== 'ignored'
-  )
+  const filtered = findings.filter((item): item is (typeof findings)[number] & { category: Category } => item.category !== 'ignored')
   const sorted = filtered.sort((a, b) => b.percent - a.percent)
   if (!sorted.length) {
     logger.info('verificacao de NULL concluida (nenhum NULL encontrado)')

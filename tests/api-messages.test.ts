@@ -43,8 +43,12 @@ const createResponse = (): FakeResponse => {
     statusCode: 200,
     headers: {},
     body: '',
-    setHeader: vi.fn((key: string, value: string) => { res.headers[key] = value }),
-    end: vi.fn((body?: string) => { res.body = body ?? '' }),
+    setHeader: vi.fn((key: string, value: string) => {
+      res.headers[key] = value
+    }),
+    end: vi.fn((body?: string) => {
+      res.body = body ?? ''
+    }),
   }
   return res
 }
@@ -81,12 +85,7 @@ describe('handleMessagesRoutes', () => {
   it('retorna 404 para conexão inexistente', async () => {
     const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
     const res = createResponse()
-    await handleMessagesRoutes(
-      makeReq('POST', '/connections/nao-existe/messages/send', '{}') as never,
-      res as never,
-      '/connections/nao-existe/messages/send',
-      logger as never
-    )
+    await handleMessagesRoutes(makeReq('POST', '/connections/nao-existe/messages/send', '{}') as never, res as never, '/connections/nao-existe/messages/send', logger as never)
     expect(res.statusCode).toBe(404)
   })
 
@@ -94,12 +93,7 @@ describe('handleMessagesRoutes', () => {
     getConnectionMock.mockReturnValue(makeInfo({ status: 'qr' }))
     const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
     const res = createResponse()
-    await handleMessagesRoutes(
-      makeReq('POST', '/connections/sess/messages/send', JSON.stringify({ type: 'text', to: '5511@s.whatsapp.net', text: 'oi' })) as never,
-      res as never,
-      '/connections/sess/messages/send',
-      logger as never
-    )
+    await handleMessagesRoutes(makeReq('POST', '/connections/sess/messages/send', JSON.stringify({ type: 'text', to: '5511@s.whatsapp.net', text: 'oi' })) as never, res as never, '/connections/sess/messages/send', logger as never)
     expect(res.statusCode).toBe(409)
   })
 
@@ -108,12 +102,7 @@ describe('handleMessagesRoutes', () => {
     getActiveSocketMock.mockReturnValue(makeSock())
     const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
     const res = createResponse()
-    await handleMessagesRoutes(
-      makeReq('POST', '/connections/sess/messages/send', JSON.stringify({ type: 'text', text: 'oi' })) as never,
-      res as never,
-      '/connections/sess/messages/send',
-      logger as never
-    )
+    await handleMessagesRoutes(makeReq('POST', '/connections/sess/messages/send', JSON.stringify({ type: 'text', text: 'oi' })) as never, res as never, '/connections/sess/messages/send', logger as never)
     expect(res.statusCode).toBe(400)
     expect(JSON.parse(res.body)).toMatchObject({ error: expect.stringContaining('to') })
   })
@@ -125,12 +114,7 @@ describe('handleMessagesRoutes', () => {
     const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
     const res = createResponse()
     const body = JSON.stringify({ type: 'text', to: '5511@s.whatsapp.net', text: 'Olá!' })
-    await handleMessagesRoutes(
-      makeReq('POST', '/connections/sess-txt/messages/send', body) as never,
-      res as never,
-      '/connections/sess-txt/messages/send',
-      logger as never
-    )
+    await handleMessagesRoutes(makeReq('POST', '/connections/sess-txt/messages/send', body) as never, res as never, '/connections/sess-txt/messages/send', logger as never)
     expect(res.statusCode).toBe(200)
     expect(sock.sendMessage).toHaveBeenCalledWith('5511@s.whatsapp.net', { text: 'Olá!' })
   })
@@ -142,12 +126,7 @@ describe('handleMessagesRoutes', () => {
     const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
     const res = createResponse()
     const body = JSON.stringify({ type: 'image', to: '5511@s.whatsapp.net', url: 'https://example.com/img.png', caption: 'foto' })
-    await handleMessagesRoutes(
-      makeReq('POST', '/connections/sess-img/messages/send', body) as never,
-      res as never,
-      '/connections/sess-img/messages/send',
-      logger as never
-    )
+    await handleMessagesRoutes(makeReq('POST', '/connections/sess-img/messages/send', body) as never, res as never, '/connections/sess-img/messages/send', logger as never)
     expect(res.statusCode).toBe(200)
     expect(sock.sendMessage).toHaveBeenCalledWith('5511@s.whatsapp.net', {
       image: { url: 'https://example.com/img.png' },

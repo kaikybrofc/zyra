@@ -123,11 +123,7 @@ describe('cache-store', () => {
     const extended = createExtendedCacheStore('devices', 30, 'tenant-1')
 
     await cache.set('msg', { id: '1' })
-    expect(redis.client.set).toHaveBeenCalledWith(
-      'suite:cache:tenant-1:cache:media:msg',
-      expect.any(String),
-      { EX: 60 }
-    )
+    expect(redis.client.set).toHaveBeenCalledWith('suite:cache:tenant-1:cache:media:msg', expect.any(String), { EX: 60 })
     expect(await cache.get<{ id: string }>('msg')).toEqual({ id: '1' })
 
     await extended.mset([

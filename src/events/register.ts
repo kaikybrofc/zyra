@@ -213,10 +213,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId, onQrCode
   /**
    * Extrai e persiste devices de `participant` e `remoteJid` a partir de uma message key.
    */
-  const persistDevicesFromMessageKey = (
-    key?: { remoteJid?: string | null; participant?: string | null; fromMe?: boolean | null },
-    source = 'messages.upsert'
-  ) => {
+  const persistDevicesFromMessageKey = (key?: { remoteJid?: string | null; participant?: string | null; fromMe?: boolean | null }, source = 'messages.upsert') => {
     if (!key) return
     persistUserDeviceFromJid(key.participant ?? null, `${source}:participant`)
     if (!key.fromMe) {
@@ -245,10 +242,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId, onQrCode
   const hasMediaKey = (message: WAMessage): boolean => {
     const normalized = getNormalizedMessage(message)
     if (!normalized.content || !normalized.type) return false
-    const inner = (normalized.content as Record<string, unknown>)[normalized.type] as
-      | { mediaKey?: Uint8Array | Buffer | null; mediaKeyTimestamp?: number | null }
-      | null
-      | undefined
+    const inner = (normalized.content as Record<string, unknown>)[normalized.type] as { mediaKey?: Uint8Array | Buffer | null; mediaKeyTimestamp?: number | null } | null | undefined
     if (!inner || typeof inner !== 'object') return false
     if (inner.mediaKey && ((inner.mediaKey as Uint8Array).byteLength ?? 0) > 0) return true
     return typeof inner.mediaKeyTimestamp === 'number' && Number.isFinite(inner.mediaKeyTimestamp)
@@ -260,10 +254,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId, onQrCode
   const hasMediaTransportHints = (message: WAMessage): boolean => {
     const normalized = getNormalizedMessage(message)
     if (!normalized.content || !normalized.type) return false
-    const inner = (normalized.content as Record<string, unknown>)[normalized.type] as
-      | { directPath?: string | null; url?: string | null }
-      | null
-      | undefined
+    const inner = (normalized.content as Record<string, unknown>)[normalized.type] as { directPath?: string | null; url?: string | null } | null | undefined
     if (!inner || typeof inner !== 'object') return false
     return Boolean(inner.directPath || inner.url)
   }

@@ -4,11 +4,7 @@ import { sendWebhookEvent } from './delivery.js'
 
 export { WEBHOOK_SUPPORTED_EVENTS }
 
-export const dispatchWebhookEvent = async (
-  connectionId: string,
-  event: string,
-  data: unknown
-): Promise<void> => {
+export const dispatchWebhookEvent = async (connectionId: string, event: string, data: unknown): Promise<void> => {
   if (!WEBHOOK_SUPPORTED_EVENTS.has(event)) return
 
   const webhooks = await getActiveWebhooksForEvent(connectionId, event)

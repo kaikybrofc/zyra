@@ -1,21 +1,6 @@
-import type {
-  AnyMessageContent,
-  MiscMessageGenerationOptions,
-  WAMessage,
-} from 'baileys'
+import type { AnyMessageContent, MiscMessageGenerationOptions, WAMessage } from 'baileys'
 import type { StickerSourceMedia } from '../../utils/sticker.js'
-import type {
-  CommandAdminActions,
-  GroupInviteCodeResult,
-  GroupJoinApprovalModeValue,
-  GroupJoinRequestListResult,
-  GroupJoinRequestUpdateResult,
-  GroupMemberAddModeValue,
-  GroupParticipantsUpdateResult,
-  GroupRevokeInviteResult,
-  GroupSettingValue,
-  ParticipantTarget,
-} from './admin.js'
+import type { CommandAdminActions, GroupInviteCodeResult, GroupJoinApprovalModeValue, GroupJoinRequestListResult, GroupJoinRequestUpdateResult, GroupMemberAddModeValue, GroupParticipantsUpdateResult, GroupRevokeInviteResult, GroupSettingValue, ParticipantTarget } from './admin.js'
 
 /** Extrai de `AnyMessageContent` o shape que contém a chave `K`. */
 type MessageContentByKey<K extends string> = Extract<AnyMessageContent, Record<K, unknown>>
@@ -67,16 +52,7 @@ type CommandContextInit = {
   /** Recupera o último template de pack/autor salvo pelo usuário para o comando de sticker. */
   loadStickerTemplate: () => Promise<string | null>
   /** Registra metadados da figurinha gerada para uso futuro em sticker packs. */
-  recordGeneratedSticker: (entry: {
-    packName: string
-    packAuthor: string
-    templateText?: string | null
-    localPath: string
-    fileSha256: string
-    fileLength: number
-    mimeType?: string | null
-    data?: unknown
-  }) => Promise<void>
+  recordGeneratedSticker: (entry: { packName: string; packAuthor: string; templateText?: string | null; localPath: string; fileSha256: string; fileLength: number; mimeType?: string | null; data?: unknown }) => Promise<void>
   /** Ações administrativas disponíveis no contexto. */
   admin: CommandAdminActions
 }
@@ -121,26 +97,7 @@ export class CommandContext {
   /**
    * @param options Dados iniciais do contexto vindos do processador.
    */
-  constructor({
-    chatId,
-    sender,
-    text,
-    args,
-    isGroup,
-    commandName,
-    messageId,
-    pushName,
-    mentionedJids = [],
-    quotedSender = null,
-    send,
-    reply,
-    react,
-    resolveStickerSourceMedia,
-    saveStickerTemplate,
-    loadStickerTemplate,
-    recordGeneratedSticker,
-    admin,
-  }: CommandContextInit) {
+  constructor({ chatId, sender, text, args, isGroup, commandName, messageId, pushName, mentionedJids = [], quotedSender = null, send, reply, react, resolveStickerSourceMedia, saveStickerTemplate, loadStickerTemplate, recordGeneratedSticker, admin }: CommandContextInit) {
     this.chatId = chatId
     this.sender = sender
     this.text = text
@@ -208,27 +165,14 @@ export class CommandContext {
   /**
    * Registra metadados da figurinha gerada para biblioteca local/futuro sticker pack.
    */
-  async recordGeneratedSticker(entry: {
-    packName: string
-    packAuthor: string
-    templateText?: string | null
-    localPath: string
-    fileSha256: string
-    fileLength: number
-    mimeType?: string | null
-    data?: unknown
-  }): Promise<void> {
+  async recordGeneratedSticker(entry: { packName: string; packAuthor: string; templateText?: string | null; localPath: string; fileSha256: string; fileLength: number; mimeType?: string | null; data?: unknown }): Promise<void> {
     await this.#recordGeneratedStickerAction(entry)
   }
 
   /**
    * Atalho para envio de texto.
    */
-  async sendText(
-    text: string,
-    extras: Omit<TextContent, 'text'> = {},
-    options?: CommandSendOptions
-  ): Promise<WAMessage | undefined> {
+  async sendText(text: string, extras: Omit<TextContent, 'text'> = {}, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send({ ...extras, text }, options)
   }
 
@@ -250,18 +194,12 @@ export class CommandContext {
   }
 
   /** Atalho para envio de sticker. */
-  async sendSticker(
-    content: MessageContentByKey<'sticker'>,
-    options?: CommandSendOptions
-  ): Promise<WAMessage | undefined> {
+  async sendSticker(content: MessageContentByKey<'sticker'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send(content, options)
   }
 
   /** Atalho para envio de documento. */
-  async sendDocument(
-    content: MessageContentByKey<'document'>,
-    options?: CommandSendOptions
-  ): Promise<WAMessage | undefined> {
+  async sendDocument(content: MessageContentByKey<'document'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send(content, options)
   }
 
@@ -276,50 +214,32 @@ export class CommandContext {
   }
 
   /** Atalho para envio de contatos. */
-  async sendContacts(
-    content: MessageContentByKey<'contacts'>,
-    options?: CommandSendOptions
-  ): Promise<WAMessage | undefined> {
+  async sendContacts(content: MessageContentByKey<'contacts'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send(content, options)
   }
 
   /** Atalho para envio de localização. */
-  async sendLocation(
-    content: MessageContentByKey<'location'>,
-    options?: CommandSendOptions
-  ): Promise<WAMessage | undefined> {
+  async sendLocation(content: MessageContentByKey<'location'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send(content, options)
   }
 
   /** Atalho para envio de reação como conteúdo explícito. */
-  async sendReaction(
-    content: MessageContentByKey<'react'>,
-    options?: CommandSendOptions
-  ): Promise<WAMessage | undefined> {
+  async sendReaction(content: MessageContentByKey<'react'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send(content, options)
   }
 
   /** Atalho para envio de resposta de botão. */
-  async sendButtonReply(
-    content: MessageContentByKey<'buttonReply'>,
-    options?: CommandSendOptions
-  ): Promise<WAMessage | undefined> {
+  async sendButtonReply(content: MessageContentByKey<'buttonReply'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send(content, options)
   }
 
   /** Atalho para envio de convite de grupo. */
-  async sendGroupInvite(
-    content: MessageContentByKey<'groupInvite'>,
-    options?: CommandSendOptions
-  ): Promise<WAMessage | undefined> {
+  async sendGroupInvite(content: MessageContentByKey<'groupInvite'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send(content, options)
   }
 
   /** Atalho para envio de resposta de lista. */
-  async sendListReply(
-    content: MessageContentByKey<'listReply'>,
-    options?: CommandSendOptions
-  ): Promise<WAMessage | undefined> {
+  async sendListReply(content: MessageContentByKey<'listReply'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send(content, options)
   }
 
@@ -329,34 +249,22 @@ export class CommandContext {
   }
 
   /** Atalho para envio de produto. */
-  async sendProduct(
-    content: MessageContentByKey<'product'>,
-    options?: CommandSendOptions
-  ): Promise<WAMessage | undefined> {
+  async sendProduct(content: MessageContentByKey<'product'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send(content, options)
   }
 
   /** Atalho para compartilhar o próprio número no chat. */
-  async sendSharePhoneNumber(
-    content: MessageContentByKey<'sharePhoneNumber'> = { sharePhoneNumber: true },
-    options?: CommandSendOptions
-  ): Promise<WAMessage | undefined> {
+  async sendSharePhoneNumber(content: MessageContentByKey<'sharePhoneNumber'> = { sharePhoneNumber: true }, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send(content, options)
   }
 
   /** Atalho para solicitar compartilhamento de número. */
-  async sendRequestPhoneNumber(
-    content: MessageContentByKey<'requestPhoneNumber'> = { requestPhoneNumber: true },
-    options?: CommandSendOptions
-  ): Promise<WAMessage | undefined> {
+  async sendRequestPhoneNumber(content: MessageContentByKey<'requestPhoneNumber'> = { requestPhoneNumber: true }, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send(content, options)
   }
 
   /** Atalho para encaminhar mensagem. */
-  async sendForward(
-    content: MessageContentByKey<'forward'>,
-    options?: CommandSendOptions
-  ): Promise<WAMessage | undefined> {
+  async sendForward(content: MessageContentByKey<'forward'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send(content, options)
   }
 
@@ -366,18 +274,12 @@ export class CommandContext {
   }
 
   /** Atalho para configurar mensagens temporárias no chat via payload nativo. */
-  async setDisappearingMessages(
-    content: MessageContentByKey<'disappearingMessagesInChat'>,
-    options?: CommandSendOptions
-  ): Promise<WAMessage | undefined> {
+  async setDisappearingMessages(content: MessageContentByKey<'disappearingMessagesInChat'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send(content, options)
   }
 
   /** Atalho para limitar compartilhamento via payload nativo. */
-  async setLimitSharing(
-    content: MessageContentByKey<'limitSharing'>,
-    options?: CommandSendOptions
-  ): Promise<WAMessage | undefined> {
+  async setLimitSharing(content: MessageContentByKey<'limitSharing'>, options?: CommandSendOptions): Promise<WAMessage | undefined> {
     return this.send(content, options)
   }
 

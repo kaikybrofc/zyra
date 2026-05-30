@@ -2,46 +2,13 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { AppLogger } from '../../observability/logger.js'
 import { config } from '../../config/index.js'
-import {
-  createConnection,
-  getConnection,
-  connect,
-  restart,
-  disconnect,
-  pause,
-  resume,
-  deleteConnection,
-  hardDeleteConnection,
-  setConnectionLabel,
-} from '../../core/connection/manager.js'
+import { createConnection, getConnection, connect, restart, disconnect, pause, resume, deleteConnection, hardDeleteConnection, setConnectionLabel } from '../../core/connection/manager.js'
 import { startPairing, cancelPairing } from '../../core/connection/pairing-service.js'
-import {
-  BodyTooLargeError,
-  matchRoute,
-  parseJson,
-  readBody,
-  sendError,
-  sendJson,
-} from '../http.js'
-import {
-  finishWebhookCommand,
-  getWebhookCommand,
-  saveWebhookCommandReceived,
-} from '../../store/connection-admin-store.js'
+import { BodyTooLargeError, matchRoute, parseJson, readBody, sendError, sendJson } from '../http.js'
+import { finishWebhookCommand, getWebhookCommand, saveWebhookCommandReceived } from '../../store/connection-admin-store.js'
 import { validateConnectionId } from '../../core/connection/connection-id.js'
 
-type CommandActionType =
-  | 'register'
-  | 'start'
-  | 'reconnect'
-  | 'disconnect'
-  | 'pause'
-  | 'resume'
-  | 'delete_soft'
-  | 'delete_hard'
-  | 'sync_status'
-  | 'pairing_start'
-  | 'pairing_cancel'
+type CommandActionType = 'register' | 'start' | 'reconnect' | 'disconnect' | 'pause' | 'resume' | 'delete_soft' | 'delete_hard' | 'sync_status' | 'pairing_start' | 'pairing_cancel'
 
 type ConnectionCommandPayload = {
   event: string
@@ -73,23 +40,9 @@ type CommandResponse = {
   reason?: string
 }
 
-type HardDeleteGuardResult =
-  | { ok: true }
-  | { ok: false; httpStatus: number; reason: string }
+type HardDeleteGuardResult = { ok: true } | { ok: false; httpStatus: number; reason: string }
 
-const COMMAND_ACTIONS: ReadonlySet<string> = new Set([
-  'register',
-  'start',
-  'reconnect',
-  'disconnect',
-  'pause',
-  'resume',
-  'delete_soft',
-  'delete_hard',
-  'sync_status',
-  'pairing_start',
-  'pairing_cancel',
-])
+const COMMAND_ACTIONS: ReadonlySet<string> = new Set(['register', 'start', 'reconnect', 'disconnect', 'pause', 'resume', 'delete_soft', 'delete_hard', 'sync_status', 'pairing_start', 'pairing_cancel'])
 
 const normalizeSignature = (value: string): string => {
   const trimmed = value.trim()
@@ -98,9 +51,7 @@ const normalizeSignature = (value: string): string => {
 }
 
 const isValidSignature = (secret: string, timestamp: string, body: string, provided: string): boolean => {
-  const expected = createHmac('sha256', secret)
-    .update(`${timestamp}.${body}`)
-    .digest('hex')
+  const expected = createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex')
   const normalized = normalizeSignature(provided)
   const expectedBuffer = Buffer.from(expected)
   const providedBuffer = Buffer.from(normalized)
@@ -131,9 +82,7 @@ const ensureConnectionExists = (connectionId: string): { created: boolean } => {
   return { created: true }
 }
 
-const parseWebhookConnectionId = (
-  rawConnectionId: string | null | undefined
-): { ok: true; value: string } | { ok: false; reason: string } => {
+const parseWebhookConnectionId = (rawConnectionId: string | null | undefined): { ok: true; value: string } | { ok: false; reason: string } => {
   const parsed = validateConnectionId(rawConnectionId)
   if (parsed.ok) return parsed
   return { ok: false, reason: parsed.reason.replace('connectionId', 'connection.id') }
@@ -144,12 +93,7 @@ const requireJsonContentType = (req: IncomingMessage): boolean => {
   return contentType.includes('application/json')
 }
 
-const invalidResponse = (
-  commandId: string,
-  connectionId: string,
-  action: string,
-  reason: string
-): CommandResponse => ({
+const invalidResponse = (commandId: string, connectionId: string, action: string, reason: string): CommandResponse => ({
   ok: false,
   command_id: commandId,
   connection_id: connectionId,
@@ -160,11 +104,7 @@ const invalidResponse = (
   reason,
 })
 
-const validateHardDeleteGuard = (input: {
-  forceFlag: boolean
-  hardDeleteConfirmHeader: string
-  hardDeleteTokenHeader: string
-}): HardDeleteGuardResult => {
+const validateHardDeleteGuard = (input: { forceFlag: boolean; hardDeleteConfirmHeader: string; hardDeleteTokenHeader: string }): HardDeleteGuardResult => {
   if (!input.forceFlag) {
     return { ok: false, httpStatus: 422, reason: 'delete_hard requer options.force=true' }
   }
@@ -183,12 +123,7 @@ const validateHardDeleteGuard = (input: {
   return { ok: true }
 }
 
-const finalizeAndReply = async (
-  commandId: string,
-  response: CommandResponse,
-  result: { status: 'accepted' | 'rejected' | 'failed'; httpStatus: number },
-  res: ServerResponse
-) => {
+const finalizeAndReply = async (commandId: string, response: CommandResponse, result: { status: 'accepted' | 'rejected' | 'failed'; httpStatus: number }, res: ServerResponse) => {
   await finishWebhookCommand(commandId, {
     status: result.status,
     response,
@@ -199,12 +134,7 @@ const finalizeAndReply = async (
 /**
  * Ingress de comandos administrativos de conexão via webhook autenticado por HMAC.
  */
-export async function handleConnectionWebhookRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  pathname: string,
-  logger: AppLogger
-): Promise<boolean> {
+export async function handleConnectionWebhookRoutes(req: IncomingMessage, res: ServerResponse, pathname: string, logger: AppLogger): Promise<boolean> {
   if (!matchRoute('/webhooks/connections', pathname)) return false
 
   if ((req.method ?? 'GET') !== 'POST') {
@@ -226,7 +156,9 @@ export async function handleConnectionWebhookRoutes(
   const timestampHeader = String(req.headers['x-zyra-timestamp'] ?? '').trim()
   const signatureHeader = String(req.headers['x-zyra-signature'] ?? '').trim()
   const deliveryId = String(req.headers['x-zyra-delivery-id'] ?? '').trim()
-  const hardDeleteConfirmHeader = String(req.headers['x-zyra-hard-delete-confirm'] ?? '').trim().toLowerCase()
+  const hardDeleteConfirmHeader = String(req.headers['x-zyra-hard-delete-confirm'] ?? '')
+    .trim()
+    .toLowerCase()
   const hardDeleteTokenHeader = String(req.headers['x-zyra-hard-delete-token'] ?? '').trim()
 
   if (!timestampHeader || !signatureHeader || !deliveryId) {

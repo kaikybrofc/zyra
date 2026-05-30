@@ -42,7 +42,9 @@ const createResponse = (): FakeResponse => {
     statusCode: 200,
     body: '',
     setHeader: vi.fn(),
-    end: vi.fn((body?: string) => { res.body = body ?? '' }),
+    end: vi.fn((body?: string) => {
+      res.body = body ?? ''
+    }),
   }
   return res
 }

@@ -1,19 +1,6 @@
 import type { Command } from './types.js'
 import { antilinkCommand } from './antilink.js'
-import {
-  addCommand,
-  banCommand,
-  demoteCommand,
-  descriptionCommand,
-  ephemeralCommand,
-  groupCommand,
-  inviteCommand,
-  kickCommand,
-  lockCommand,
-  promoteCommand,
-  revokeInviteCommand,
-  subjectCommand,
-} from './admin.js'
+import { addCommand, banCommand, demoteCommand, descriptionCommand, ephemeralCommand, groupCommand, inviteCommand, kickCommand, lockCommand, promoteCommand, revokeInviteCommand, subjectCommand } from './admin.js'
 import { createMenuCommand } from './menu.js'
 import { pingCommand } from './ping.js'
 import { playCommand } from './play.js'

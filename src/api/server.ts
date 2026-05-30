@@ -111,7 +111,10 @@ export const startApiServer = ({ logger }: StartApiServerOptions): ApiServerHand
     stop: () =>
       new Promise<void>((resolve, reject) => {
         server.close((error) => {
-          if (error) { reject(error); return }
+          if (error) {
+            reject(error)
+            return
+          }
           resolve()
         })
       }),

@@ -73,6 +73,7 @@ curl -s -X POST http://localhost:3000/connections \
 ```
 
 **Resposta `201`:**
+
 ```json
 {
   "connectionId": "minha-sessao",
@@ -99,6 +100,7 @@ curl -s http://localhost:3000/connections \
 ```
 
 **Resposta `200`:**
+
 ```json
 [
   {
@@ -182,6 +184,7 @@ curl -s http://localhost:3000/connections/minha-sessao/qr \
 ```
 
 **Resposta `200`:**
+
 ```json
 {
   "connectionId": "minha-sessao",
@@ -206,6 +209,7 @@ curl -s http://localhost:3000/connections/minha-sessao/status \
 ```
 
 **Resposta `200`:**
+
 ```json
 {
   "connectionId": "minha-sessao",
@@ -216,14 +220,14 @@ curl -s http://localhost:3000/connections/minha-sessao/status \
 
 **Valores possíveis de `status`:**
 
-| Status | Descrição |
-|--------|-----------|
-| `created` | Instância criada, sem socket |
-| `connecting` | Socket sendo iniciado |
-| `qr` | Aguardando escaneamento do QR |
-| `open` | Autenticada e conectada |
-| `closed` | Desconectada explicitamente |
-| `error` | Falha durante a conexão |
+| Status       | Descrição                     |
+| ------------ | ----------------------------- |
+| `created`    | Instância criada, sem socket  |
+| `connecting` | Socket sendo iniciado         |
+| `qr`         | Aguardando escaneamento do QR |
+| `open`       | Autenticada e conectada       |
+| `closed`     | Desconectada explicitamente   |
+| `error`      | Falha durante a conexão       |
 
 ---
 
@@ -266,6 +270,7 @@ curl -s -X POST http://localhost:3000/connections/minha-sessao/pairing/start \
 ```
 
 **Resposta `202`:**
+
 ```json
 {
   "connectionId": "minha-sessao",
@@ -438,24 +443,24 @@ curl -s -X POST http://localhost:3000/connections/minha-sessao/messages/send \
 
 **Campos do payload de mensagem:**
 
-| Campo | Tipos | Obrigatório | Descrição |
-|-------|-------|-------------|-----------|
-| `type` | `text` \| `image` \| `video` \| `audio` \| `document` | sim | Tipo da mensagem |
-| `to` | string | sim | JID do destinatário (`@s.whatsapp.net` ou `@g.us`) |
-| `text` | string | para `text` | Conteúdo textual |
-| `url` | string | para mídia | URL pública acessível pelo servidor WhatsApp |
-| `caption` | string | não | Legenda (image/video) |
-| `fileName` | string | não | Nome exibido (document) |
-| `mimetype` | string | não | MIME type (document — padrão: `application/octet-stream`) |
+| Campo      | Tipos                                                 | Obrigatório | Descrição                                                 |
+| ---------- | ----------------------------------------------------- | ----------- | --------------------------------------------------------- |
+| `type`     | `text` \| `image` \| `video` \| `audio` \| `document` | sim         | Tipo da mensagem                                          |
+| `to`       | string                                                | sim         | JID do destinatário (`@s.whatsapp.net` ou `@g.us`)        |
+| `text`     | string                                                | para `text` | Conteúdo textual                                          |
+| `url`      | string                                                | para mídia  | URL pública acessível pelo servidor WhatsApp              |
+| `caption`  | string                                                | não         | Legenda (image/video)                                     |
+| `fileName` | string                                                | não         | Nome exibido (document)                                   |
+| `mimetype` | string                                                | não         | MIME type (document — padrão: `application/octet-stream`) |
 
 **Erros possíveis:**
 
-| Código | Motivo |
-|--------|--------|
-| `400` | Body inválido ou campo obrigatório ausente |
-| `404` | Instância não encontrada |
-| `409` | Instância não está `open` |
-| `500` | Falha no envio pelo Baileys |
+| Código | Motivo                                     |
+| ------ | ------------------------------------------ |
+| `400`  | Body inválido ou campo obrigatório ausente |
+| `404`  | Instância não encontrada                   |
+| `409`  | Instância não está `open`                  |
+| `500`  | Falha no envio pelo Baileys                |
 
 ---
 
@@ -469,6 +474,7 @@ curl -s http://localhost:3000/connections/minha-sessao/groups \
 ```
 
 **Resposta `200`:**
+
 ```json
 {
   "120363000000000001@g.us": {
@@ -509,6 +515,7 @@ curl -s http://localhost:3000/system/runtime \
 ```
 
 **Resposta `200`:**
+
 ```json
 {
   "now": 1748000000000,
@@ -548,12 +555,12 @@ curl -s http://localhost:3000/system/runtime \
 
 **Perfis possíveis de `profile`:**
 
-| Perfil | Condição |
-|--------|----------|
-| `full` | `WA_BOOTSTRAP_CONNECTIONS_ENABLED=true` e `WA_API_ENABLED=true` |
-| `connections-only` | Apenas `WA_BOOTSTRAP_CONNECTIONS_ENABLED=true` |
-| `api-webhook` | Apenas `WA_API_ENABLED=true` (sem gerenciar conexões localmente) |
-| `stateless` | Nenhum dos dois habilitado |
+| Perfil             | Condição                                                         |
+| ------------------ | ---------------------------------------------------------------- |
+| `full`             | `WA_BOOTSTRAP_CONNECTIONS_ENABLED=true` e `WA_API_ENABLED=true`  |
+| `connections-only` | Apenas `WA_BOOTSTRAP_CONNECTIONS_ENABLED=true`                   |
+| `api-webhook`      | Apenas `WA_API_ENABLED=true` (sem gerenciar conexões localmente) |
+| `stateless`        | Nenhum dos dois habilitado                                       |
 
 ---
 
@@ -575,11 +582,11 @@ Endpoints que sempre funcionam independente do modo: `GET /connections`, `GET /c
 
 O WhatsApp identifica contatos e grupos por JID (Jabber ID):
 
-| Tipo | Formato | Exemplo |
-|------|---------|---------|
-| Contato | `{ddi}{ddd}{numero}@s.whatsapp.net` | `5511999999999@s.whatsapp.net` |
-| Grupo | `{id}@g.us` | `120363000000000001@g.us` |
-| Newsletter | `{id}@newsletter` | `120363111111111111@newsletter` |
+| Tipo       | Formato                             | Exemplo                         |
+| ---------- | ----------------------------------- | ------------------------------- |
+| Contato    | `{ddi}{ddd}{numero}@s.whatsapp.net` | `5511999999999@s.whatsapp.net`  |
+| Grupo      | `{id}@g.us`                         | `120363000000000001@g.us`       |
+| Newsletter | `{id}@newsletter`                   | `120363111111111111@newsletter` |
 
 > O número deve incluir o código do país (55 para Brasil) sem o `+`.
 
@@ -593,13 +600,13 @@ Todos os erros seguem o formato:
 { "error": "mensagem descritiva" }
 ```
 
-| Código | Situação |
-|--------|----------|
-| `400` | Parâmetros inválidos ou ausentes |
-| `401` | Token de autenticação ausente ou incorreto |
-| `404` | Recurso não encontrado |
-| `409` | Operação inválida para o estado atual |
-| `500` | Erro interno do servidor |
+| Código | Situação                                   |
+| ------ | ------------------------------------------ |
+| `400`  | Parâmetros inválidos ou ausentes           |
+| `401`  | Token de autenticação ausente ou incorreto |
+| `404`  | Recurso não encontrado                     |
+| `409`  | Operação inválida para o estado atual      |
+| `500`  | Erro interno do servidor                   |
 
 ---
 

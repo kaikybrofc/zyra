@@ -79,11 +79,7 @@ const toComparableJid = (jid: string): string => jid.trim().toLowerCase()
  * @param actionKind Tipo de ação executada.
  * @returns `true` quando o estado final no grupo confirma a ação.
  */
-const validateParticipantActionResult = async (
-  ctx: Parameters<Command['execute']>[0],
-  participants: string[],
-  actionKind: ParticipantActionKind
-): Promise<boolean> => {
+const validateParticipantActionResult = async (ctx: Parameters<Command['execute']>[0], participants: string[], actionKind: ParticipantActionKind): Promise<boolean> => {
   const metadata = await ctx.getMetadata()
   const participantByJid = new Map(metadata.participants.map((participant) => [toComparableJid(participant.id), participant]))
 
@@ -203,12 +199,7 @@ const parseEphemeral = (value: string | undefined): number | null => {
  * @param actionKind Tipo da ação (add/remove/promote/demote).
  * @param handler Função que efetivamente chama a operação no provedor.
  */
-const executeParticipantAction = async (
-  ctx: Parameters<Command['execute']>[0],
-  actionLabel: string,
-  actionKind: ParticipantActionKind,
-  handler: (participants: string[]) => Promise<unknown>
-): Promise<void> => {
+const executeParticipantAction = async (ctx: Parameters<Command['execute']>[0], actionLabel: string, actionKind: ParticipantActionKind, handler: (participants: string[]) => Promise<unknown>): Promise<void> => {
   const allowed = await ensureAdminContext(ctx)
   if (!allowed.ok) return
 

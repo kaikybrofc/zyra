@@ -40,7 +40,9 @@ describe('ensureAuthFolder', () => {
 
   it('concurrent callers all wait on the same task and do not double-create', async () => {
     let resolveDir!: () => void
-    const dirPromise = new Promise<void>((r) => { resolveDir = r })
+    const dirPromise = new Promise<void>((r) => {
+      resolveDir = r
+    })
     mkdirMock.mockReturnValue(dirPromise)
 
     const { ensureAuthFolder } = await import('../src/core/auth/storage-utils.ts')

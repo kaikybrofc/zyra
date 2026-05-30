@@ -143,10 +143,7 @@ const makeRes = (): FakeResponse => {
   return res
 }
 
-const signBody = (timestamp: string, body: string) =>
-  createHmac('sha256', mockConfig.webhookSharedSecret)
-    .update(`${timestamp}.${body}`)
-    .digest('hex')
+const signBody = (timestamp: string, body: string) => createHmac('sha256', mockConfig.webhookSharedSecret).update(`${timestamp}.${body}`).digest('hex')
 
 const makeReq = (body: string, headers: Record<string, string> = {}): FakeRequest => {
   const req: FakeRequest = {
@@ -163,12 +160,7 @@ const makeReq = (body: string, headers: Record<string, string> = {}): FakeReques
 }
 
 describe('handleConnectionWebhookRoutes', () => {
-  let handleConnectionWebhookRoutes: (
-    req: IncomingMessage,
-    res: ServerResponse,
-    pathname: string,
-    logger: typeof logger
-  ) => Promise<boolean>
+  let handleConnectionWebhookRoutes: (req: IncomingMessage, res: ServerResponse, pathname: string, logger: typeof logger) => Promise<boolean>
 
   beforeEach(async () => {
     vi.resetModules()
@@ -253,10 +245,7 @@ describe('handleConnectionWebhookRoutes', () => {
     expect(createConnectionMock).toHaveBeenCalledWith('conn-r')
     expect(setConnectionLabelMock).toHaveBeenCalledWith('conn-r', 'Conexao R')
     expect(saveWebhookCommandReceivedMock).toHaveBeenCalled()
-    expect(finishWebhookCommandMock).toHaveBeenCalledWith(
-      'cmd-register',
-      expect.objectContaining({ status: 'accepted' })
-    )
+    expect(finishWebhookCommandMock).toHaveBeenCalledWith('cmd-register', expect.objectContaining({ status: 'accepted' }))
   })
 
   it('retorna resposta anterior quando command_id é duplicado', async () => {

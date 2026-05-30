@@ -1,11 +1,5 @@
 import type { Command } from './types.js'
-import {
-  formatDurationMs,
-  isLikelyTransientPlayStreamError,
-  refreshTrackIfNeeded,
-  resolvePlayInput,
-  type ResolvedPlayTrack,
-} from '../utils/play-resolver.js'
+import { formatDurationMs, isLikelyTransientPlayStreamError, refreshTrackIfNeeded, resolvePlayInput, type ResolvedPlayTrack } from '../utils/play-resolver.js'
 import { createLogger } from '../observability/logger.js'
 
 const logger = createLogger()
@@ -35,13 +29,7 @@ async function fetchVideoBuffer(track: ResolvedPlayTrack): Promise<Buffer> {
 
 function buildVideoCaption(track: ResolvedPlayTrack): string {
   const duration = formatDurationMs(track.durationMs)
-  return [
-    `🎬 ${track.title}`,
-    track.uploaderName ? `Artista/Canal: ${track.uploaderName}` : null,
-    duration ? `Duração: ${duration}` : null,
-    `ID: ${track.identifier}`,
-    track.webpageUrl,
-  ].filter((value): value is string => Boolean(value)).join('\n')
+  return [`🎬 ${track.title}`, track.uploaderName ? `Artista/Canal: ${track.uploaderName}` : null, duration ? `Duração: ${duration}` : null, `ID: ${track.identifier}`, track.webpageUrl].filter((value): value is string => Boolean(value)).join('\n')
 }
 
 /**

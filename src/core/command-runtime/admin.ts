@@ -155,8 +155,7 @@ type CreateCommandAdminActionsOptions = {
  * @param participants JID único ou lista de JIDs.
  * @returns Lista filtrada sem entradas vazias.
  */
-const toParticipantList = (participants: ParticipantTarget): string[] =>
-  (Array.isArray(participants) ? participants : [participants]).filter((participant) => participant.trim().length > 0)
+const toParticipantList = (participants: ParticipantTarget): string[] => (Array.isArray(participants) ? participants : [participants]).filter((participant) => participant.trim().length > 0)
 
 /**
  * Garante que a ação administrativa está sendo feita em contexto de grupo.
@@ -177,24 +176,14 @@ const ensureGroupChat = (chatId: string, isGroup: boolean): void => {
  * @param jid JID do participante a validar.
  * @returns `true` quando for admin ou superadmin.
  */
-const isAdminParticipant = (metadata: GroupMetadata, jid: string): boolean =>
-  metadata.participants.some(
-    (participant) =>
-      jidNormalizedUser(participant.id) === jidNormalizedUser(jid) &&
-      (participant.admin === 'admin' || participant.admin === 'superadmin')
-  )
+const isAdminParticipant = (metadata: GroupMetadata, jid: string): boolean => metadata.participants.some((participant) => jidNormalizedUser(participant.id) === jidNormalizedUser(jid) && (participant.admin === 'admin' || participant.admin === 'superadmin'))
 
 /**
  * Cria as ações administrativas para o contexto de um comando.
  * @param options Opções de inicialização.
  * @returns Um objeto contendo métodos para interagir com a administração do grupo.
  */
-export function createCommandAdminActions({
-  sock,
-  chatId,
-  sender,
-  isGroup,
-}: CreateCommandAdminActionsOptions): CommandAdminActions {
+export function createCommandAdminActions({ sock, chatId, sender, isGroup }: CreateCommandAdminActionsOptions): CommandAdminActions {
   /**
    * Busca metadados do grupo atual após validar contexto.
    */
@@ -206,10 +195,7 @@ export function createCommandAdminActions({
   /**
    * Executa uma ação de participantes (add/remove/promote/demote).
    */
-  const updateParticipants = async (
-    participants: ParticipantTarget,
-    action: ParticipantAction
-  ): Promise<GroupParticipantsUpdateResult> => {
+  const updateParticipants = async (participants: ParticipantTarget, action: ParticipantAction): Promise<GroupParticipantsUpdateResult> => {
     ensureGroupChat(chatId, isGroup)
     const targetList = toParticipantList(participants)
     if (!targetList.length) {
@@ -221,10 +207,7 @@ export function createCommandAdminActions({
   /**
    * Executa atualização de solicitações de entrada (aprovar/rejeitar).
    */
-  const updateJoinRequests = async (
-    participants: ParticipantTarget,
-    action: 'approve' | 'reject'
-  ): Promise<GroupJoinRequestUpdateResult> => {
+  const updateJoinRequests = async (participants: ParticipantTarget, action: 'approve' | 'reject'): Promise<GroupJoinRequestUpdateResult> => {
     ensureGroupChat(chatId, isGroup)
     const targetList = toParticipantList(participants)
     if (!targetList.length) {

@@ -133,10 +133,7 @@ describe('redis-store', () => {
 
     await store.deleteMessagesByJid('chat@s.whatsapp.net')
 
-    expect(redis.client.hDel).toHaveBeenCalledWith(
-      'zyra:tenant:store:messages',
-      ['chat@s.whatsapp.net::0:1', 'chat@s.whatsapp.net:user@s.whatsapp.net:0:2']
-    )
+    expect(redis.client.hDel).toHaveBeenCalledWith('zyra:tenant:store:messages', ['chat@s.whatsapp.net::0:1', 'chat@s.whatsapp.net:user@s.whatsapp.net:0:2'])
 
     getRedisClientMock.mockRejectedValueOnce(new Error('redis down'))
     await expect(store.getMessage('missing')).resolves.toBeUndefined()

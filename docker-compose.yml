@@ -12,10 +12,10 @@ services:
       # Sem WA_CONNECTION_IDS, o bootstrap ainda pode descobrir conexões em auth_creds.
       WA_REDIS_URL: redis://redis:6379
       MYSQL_URL: mysql://zyra:zyra@mysql:3306/zyra
-      WA_ANTIBAN_ENABLED: "true"
-      WA_ANTIBAN_METRICS_ENABLED: "true"
+      WA_ANTIBAN_ENABLED: 'true'
+      WA_ANTIBAN_METRICS_ENABLED: 'true'
     ports:
-      - "9108:9108"   # Prometheus metrics
+      - '9108:9108' # Prometheus metrics
     depends_on:
       mysql:
         condition: service_healthy
@@ -27,14 +27,14 @@ services:
   backfill:
     build: .
     restart: unless-stopped
-    command: ["node", "dist/core/db/backfill.js"]
+    command: ['node', 'dist/core/db/backfill.js']
     volumes:
       - zyra-data:/app/data
     environment:
       WA_CONNECTION_ID: default
       MYSQL_URL: mysql://zyra:zyra@mysql:3306/zyra
-      WA_BACKFILL_ONCE: "false"
-      WA_BACKFILL_INTERVAL_MS: "30000"
+      WA_BACKFILL_ONCE: 'false'
+      WA_BACKFILL_INTERVAL_MS: '30000'
     depends_on:
       mysql:
         condition: service_healthy
@@ -52,7 +52,7 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -63,7 +63,7 @@ services:
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5

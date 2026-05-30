@@ -246,18 +246,7 @@ export type SqlStore = {
   recordCommandLog: (entry: { actorJid?: string | null; chatJid: string; commandName: string; argsText?: string | null; success: boolean; durationMs?: number | null; data?: unknown }) => Promise<void>
   setUserStickerTemplate: (entry: { userJid: string; templateText: string }) => Promise<void>
   getUserStickerTemplate: (userJid: string) => Promise<string | null>
-  recordUserGeneratedSticker: (entry: {
-    userJid: string
-    chatJid?: string | null
-    packName?: string | null
-    packAuthor?: string | null
-    templateText?: string | null
-    localPath: string
-    fileSha256: string
-    fileLength: number
-    mimeType?: string | null
-    data?: unknown
-  }) => Promise<void>
+  recordUserGeneratedSticker: (entry: { userJid: string; chatJid?: string | null; packName?: string | null; packAuthor?: string | null; templateText?: string | null; localPath: string; fileSha256: string; fileLength: number; mimeType?: string | null; data?: unknown }) => Promise<void>
   setUserDevice: (entry: { userJid: string; deviceId: string; data?: unknown }) => Promise<void>
   setChatUser: (chatJid: string, userJid: string, role?: string | null) => Promise<void>
   deleteChatUser: (chatJid: string, userJid: string) => Promise<void>
@@ -314,11 +303,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
     }
   }
 
-  const safe = async <T>(
-    fn: (pool: NonNullable<ReturnType<typeof getMysqlPool>>) => Promise<T>,
-    fallback: T,
-    options?: { ensureConnection?: boolean; action?: string }
-  ): Promise<T> => {
+  const safe = async <T>(fn: (pool: NonNullable<ReturnType<typeof getMysqlPool>>) => Promise<T>, fallback: T, options?: { ensureConnection?: boolean; action?: string }): Promise<T> => {
     try {
       const pool = getMysqlPool()
       if (!pool) return fallback
@@ -367,10 +352,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
     return [entry]
   }
 
-  const lookupUserIdByIdentifier = async (
-    pool: NonNullable<ReturnType<typeof getMysqlPool>>,
-    entry: { type: UserIdentifierType; value: string }
-  ): Promise<string | null> => {
+  const lookupUserIdByIdentifier = async (pool: NonNullable<ReturnType<typeof getMysqlPool>>, entry: { type: UserIdentifierType; value: string }): Promise<string | null> => {
     const normalized = normalizeUserIdentifier(entry)
     if (!normalized) return null
     type UserRow = RowDataPacket & { user_id: string }
@@ -395,12 +377,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
     return `zyra:user:${digest}`
   }
 
-  const withUserMaterializationTransaction = async <T>(
-    pool: NonNullable<ReturnType<typeof getMysqlPool>>,
-    identifiers: Array<{ type: UserIdentifierType; value: string }>,
-    action: 'ensureUserByIdentifiers' | 'createIsolatedUserForPnLid',
-    fn: (connection: PoolConnection) => Promise<T>
-  ): Promise<T> => {
+  const withUserMaterializationTransaction = async <T>(pool: NonNullable<ReturnType<typeof getMysqlPool>>, identifiers: Array<{ type: UserIdentifierType; value: string }>, action: 'ensureUserByIdentifiers' | 'createIsolatedUserForPnLid', fn: (connection: PoolConnection) => Promise<T>): Promise<T> => {
     const connection = await pool.getConnection()
     const lockKey = buildUserMaterializationLockKey(identifiers)
     let lockAcquired = false
@@ -441,11 +418,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
     }
   }
 
-  const createIsolatedUserForPnLid = async (
-    pool: NonNullable<ReturnType<typeof getMysqlPool>>,
-    pn: string,
-    lid: string
-  ): Promise<string> =>
+  const createIsolatedUserForPnLid = async (pool: NonNullable<ReturnType<typeof getMysqlPool>>, pn: string, lid: string): Promise<string> =>
     withUserMaterializationTransaction(
       pool,
       [
@@ -717,7 +690,9 @@ export function createSqlStore(connectionId?: string): SqlStore {
     }
   }
 
-  const summarizeMediaNode = (value: unknown): {
+  const summarizeMediaNode = (
+    value: unknown
+  ): {
     hasUrl: boolean
     hasDirectPath: boolean
     hasMediaKey: boolean
@@ -749,10 +724,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
     const url = typeof node.url === 'string' ? node.url : null
     const directPath = typeof node.directPath === 'string' ? node.directPath : null
     const mediaKey = node.mediaKey as { byteLength?: number; length?: number } | null | undefined
-    const mediaKeyLength =
-      typeof mediaKey?.byteLength === 'number' ? mediaKey.byteLength
-        : typeof mediaKey?.length === 'number' ? mediaKey.length
-          : null
+    const mediaKeyLength = typeof mediaKey?.byteLength === 'number' ? mediaKey.byteLength : typeof mediaKey?.length === 'number' ? mediaKey.length : null
     let urlHost: string | null = null
     if (url) {
       try {
@@ -768,9 +740,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
       mediaKeyLength,
       urlHost,
       directPathPrefix: directPath ? directPath.slice(0, 80) : null,
-      mediaKeyTimestamp: node.mediaKeyTimestamp !== undefined && node.mediaKeyTimestamp !== null
-        ? String(node.mediaKeyTimestamp)
-        : null,
+      mediaKeyTimestamp: node.mediaKeyTimestamp !== undefined && node.mediaKeyTimestamp !== null ? String(node.mediaKeyTimestamp) : null,
       isAnimated: typeof node.isAnimated === 'boolean' ? node.isAnimated : null,
     }
   }
@@ -1062,10 +1032,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
               if (mediaInfo) {
                 let localPath: string | null = null
                 if (config.mediaAutoDownload && normalized.type) {
-                  const mediaDownloadInspection = inspectIncomingMediaDownload(
-                    normalized.type as 'imageMessage' | 'videoMessage' | 'audioMessage' | 'documentMessage' | 'stickerMessage' | 'ptvMessage',
-                    mediaInfo.data
-                  )
+                  const mediaDownloadInspection = inspectIncomingMediaDownload(normalized.type as 'imageMessage' | 'videoMessage' | 'audioMessage' | 'documentMessage' | 'stickerMessage' | 'ptvMessage', mediaInfo.data)
                   if (!mediaDownloadInspection.downloadable) {
                     if (mediaDownloadInspection.reason === 'missing-transport') {
                       getStoreLogger().debug('download de midia local ignorado por payload incompleto', {
@@ -1140,18 +1107,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
                  )
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `,
-                  [
-                    resolvedConnectionId,
-                    messageDbId,
-                    mediaInfo.mediaType,
-                    mediaInfo.mimeType,
-                    mediaInfo.fileSha256,
-                    mediaInfo.fileLength,
-                    mediaInfo.fileName,
-                    mediaInfo.url,
-                    localPath,
-                    serialize(mediaInfo.data),
-                  ]
+                  [resolvedConnectionId, messageDbId, mediaInfo.mediaType, mediaInfo.mimeType, mediaInfo.fileSha256, mediaInfo.fileLength, mediaInfo.fileName, mediaInfo.url, localPath, serialize(mediaInfo.data)]
                 )
               }
               if (messageText && messageText.trim().length) {
@@ -1465,10 +1421,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
           const directDisplayName = normalizeDisplayName(contact.name ?? null)
           const notifyDisplayName = normalizeDisplayName(contact.notify ?? null)
           const pushNameDisplayName = normalizeDisplayName((contact as { pushName?: string }).pushName ?? null)
-          const displayName = pickBetterDisplayName(
-            directDisplayName,
-            pickBetterDisplayName(notifyDisplayName, pushNameDisplayName)
-          )
+          const displayName = pickBetterDisplayName(directDisplayName, pickBetterDisplayName(notifyDisplayName, pushNameDisplayName))
           const normalizedJid = normalizeJid(id)
           if (!normalizedJid) return
           const aliases: Array<{
@@ -2071,9 +2024,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
           const packAuthor = normalizeString(entry.packAuthor ?? null, { maxLength: MAX_LENGTHS.displayName, truncate: true })
           const templateText = normalizeString(entry.templateText ?? null, { maxLength: 512, truncate: true })
           const mimeType = normalizeString(entry.mimeType ?? null, { maxLength: MAX_LENGTHS.mimeType })
-          const fileLength = typeof entry.fileLength === 'number' && Number.isFinite(entry.fileLength) && entry.fileLength >= 0
-            ? entry.fileLength
-            : 0
+          const fileLength = typeof entry.fileLength === 'number' && Number.isFinite(entry.fileLength) && entry.fileLength >= 0 ? entry.fileLength : 0
           const dataJson = {
             link: localPath,
             hash: fileSha256,
@@ -2094,19 +2045,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
              data_json
            )
            VALUES (?, UNHEX(REPLACE(?, '-', '')), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-              resolvedConnectionId,
-              userId,
-              chatJid,
-              packName,
-              packAuthor,
-              templateText,
-              localPath,
-              fileSha256,
-              mimeType,
-              fileLength,
-              serialize(dataJson),
-            ]
+            [resolvedConnectionId, userId, chatJid, packName, packAuthor, templateText, localPath, fileSha256, mimeType, fileLength, serialize(dataJson)]
           )
         },
         undefined,

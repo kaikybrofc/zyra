@@ -257,22 +257,22 @@ Exceções: `GET /health/*` e `POST /webhooks/connections` usam fluxo operaciona
 
 ### Endpoints principais
 
-| Método | Rota | Uso |
-|---|---|---|
-| `GET` | `/dashboard` | Interface web para operações de conexão/webhook |
-| `GET` | `/system/runtime` | Perfil do processo (`full`, `connections-only`, `api-webhook`, `stateless`) |
-| `GET` | `/health/live` | Liveness para orquestradores |
-| `GET` | `/health/ready` | Readiness de MySQL/Redis/control-plane |
-| `GET` | `/health/connections` | Resumo dos estados por `connection_id` |
-| `POST` | `/connections` | Criar instância |
-| `POST` | `/connections/:id/connect` | Iniciar conexão (gera QR) |
-| `GET` | `/connections/:id/qr` | Ler QR atual |
-| `GET` | `/connections/:id/status` | Estado resumido (`created`, `connecting`, `qr`, `open`, `closed`, `error`) |
-| `POST` | `/connections/:id/messages/send` | Enviar texto/mídia |
-| `GET` | `/connections/:id/groups` | Listar grupos da instância |
-| `POST` | `/connections/:id/webhooks` | Cadastrar webhook da instância |
-| `POST` | `/webhooks` | Cadastrar webhook global (todas as instâncias) |
-| `POST` | `/webhooks/connections` | Ingress assinado por HMAC para comandos de conexão |
+| Método | Rota                             | Uso                                                                         |
+| ------ | -------------------------------- | --------------------------------------------------------------------------- |
+| `GET`  | `/dashboard`                     | Interface web para operações de conexão/webhook                             |
+| `GET`  | `/system/runtime`                | Perfil do processo (`full`, `connections-only`, `api-webhook`, `stateless`) |
+| `GET`  | `/health/live`                   | Liveness para orquestradores                                                |
+| `GET`  | `/health/ready`                  | Readiness de MySQL/Redis/control-plane                                      |
+| `GET`  | `/health/connections`            | Resumo dos estados por `connection_id`                                      |
+| `POST` | `/connections`                   | Criar instância                                                             |
+| `POST` | `/connections/:id/connect`       | Iniciar conexão (gera QR)                                                   |
+| `GET`  | `/connections/:id/qr`            | Ler QR atual                                                                |
+| `GET`  | `/connections/:id/status`        | Estado resumido (`created`, `connecting`, `qr`, `open`, `closed`, `error`)  |
+| `POST` | `/connections/:id/messages/send` | Enviar texto/mídia                                                          |
+| `GET`  | `/connections/:id/groups`        | Listar grupos da instância                                                  |
+| `POST` | `/connections/:id/webhooks`      | Cadastrar webhook da instância                                              |
+| `POST` | `/webhooks`                      | Cadastrar webhook global (todas as instâncias)                              |
+| `POST` | `/webhooks/connections`          | Ingress assinado por HMAC para comandos de conexão                          |
 
 ### Modo managed (API separada do processo de conexões)
 

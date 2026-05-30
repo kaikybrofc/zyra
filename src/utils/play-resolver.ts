@@ -99,9 +99,7 @@ function extractYoutubeVideoId(value: string): string | null {
     if (YOUTUBE_ID_RE.test(watchId)) return watchId
 
     const segments = pathname.split('/').filter(Boolean)
-    const candidate = segments.length >= 2 && ['shorts', 'embed', 'live', 'watch'].includes(segments[0] ?? '')
-      ? (segments[1] ?? '')
-      : (segments[0] ?? '')
+    const candidate = segments.length >= 2 && ['shorts', 'embed', 'live', 'watch'].includes(segments[0] ?? '') ? (segments[1] ?? '') : (segments[0] ?? '')
 
     return YOUTUBE_ID_RE.test(candidate) ? candidate : null
   } catch {
@@ -140,9 +138,7 @@ function parseJsonDurationMs(value: unknown): number | null {
     const parts = trimmed.split(':').map((part) => part.trim())
     if (parts.length >= 2 && parts.length <= 3 && parts.every((part) => /^\d+$/.test(part))) {
       const numbers = parts.map(Number)
-      const seconds = parts.length === 3
-        ? numbers[0] * 3_600 + numbers[1] * 60 + numbers[2]
-        : numbers[0] * 60 + numbers[1]
+      const seconds = parts.length === 3 ? numbers[0] * 3_600 + numbers[1] * 60 + numbers[2] : numbers[0] * 60 + numbers[1]
       return seconds > 0 ? seconds * 1_000 : null
     }
   }
@@ -238,15 +234,7 @@ function entryCandidateUrl(entry: JsonRecord): string | null {
 }
 
 function extractUploaderName(payload: JsonRecord): string | null {
-  return pickString(
-    payload.uploaderName,
-    payload.uploader,
-    payload.author,
-    payload.artist,
-    payload.channel,
-    payload.channelName,
-    payload.creator
-  )
+  return pickString(payload.uploaderName, payload.uploader, payload.author, payload.artist, payload.channel, payload.channelName, payload.creator)
 }
 
 function extractSearchCandidates(payload: unknown): SearchCandidate[] {
@@ -411,18 +399,20 @@ async function resolveCandidate(candidate: SearchCandidate, lookupKey: string, s
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(mode === 'video'
-        ? {
-            url: candidateUrl,
-            os: 'linux',
-            output: { type: 'video', format: 'mp4' },
-          }
-        : {
-            url: candidateUrl,
-            os: 'linux',
-            output: { type: 'audio', format: 'mp3' },
-            audio: { bitrate: '128k', trackId: 'origin' },
-          }),
+      body: JSON.stringify(
+        mode === 'video'
+          ? {
+              url: candidateUrl,
+              os: 'linux',
+              output: { type: 'video', format: 'mp4' },
+            }
+          : {
+              url: candidateUrl,
+              os: 'linux',
+              output: { type: 'audio', format: 'mp3' },
+              audio: { bitrate: '128k', trackId: 'origin' },
+            }
+      ),
     },
     CREATE_TIMEOUT_MS
   )
@@ -455,11 +445,7 @@ async function resolveCandidate(candidate: SearchCandidate, lookupKey: string, s
     uploaderName: extractUploaderName(statusPayload) ?? extractUploaderName(createPayload) ?? candidate.uploaderName,
     durationMs: parseJsonDurationMs(statusPayload.duration ?? createPayload.duration) ?? candidate.durationMs,
     webpageUrl: sourceUrl,
-    thumbnailUrl: pickString(statusPayload.thumbnailUrl, statusPayload.thumbnail, statusPayload.thumbnail_url)
-      ?? pickString(createPayload.thumbnailUrl, createPayload.thumbnail, createPayload.thumbnail_url)
-      ?? candidate.thumbnailUrl
-      ?? extractThumbnailUrl(statusPayload, youtubeId)
-      ?? extractThumbnailUrl(createPayload, youtubeId),
+    thumbnailUrl: pickString(statusPayload.thumbnailUrl, statusPayload.thumbnail, statusPayload.thumbnail_url) ?? pickString(createPayload.thumbnailUrl, createPayload.thumbnail, createPayload.thumbnail_url) ?? candidate.thumbnailUrl ?? extractThumbnailUrl(statusPayload, youtubeId) ?? extractThumbnailUrl(createPayload, youtubeId),
     streamUrl,
     streamExpiresAt: parseExpiresAtFromUrl(streamUrl),
     resolvedAt,
@@ -469,10 +455,7 @@ async function resolveCandidate(candidate: SearchCandidate, lookupKey: string, s
 
 async function resolveWithoutCache(input: string, lookupKey: string, mode: ResolveMode, skipLookupKeys: Set<string>): Promise<ResolvedPlayTrack> {
   const normalizedInput = collapseWhitespace(input)
-  const candidates = (isUrl(normalizedInput)
-    ? [{ url: normalizedInput, title: null, uploaderName: null, durationMs: null, thumbnailUrl: null } satisfies SearchCandidate]
-    : await searchCandidates(normalizedInput))
-    .filter((candidate) => !skipLookupKeys.has(buildLookupKey(candidate.url, mode)))
+  const candidates = (isUrl(normalizedInput) ? [{ url: normalizedInput, title: null, uploaderName: null, durationMs: null, thumbnailUrl: null } satisfies SearchCandidate] : await searchCandidates(normalizedInput)).filter((candidate) => !skipLookupKeys.has(buildLookupKey(candidate.url, mode)))
   if (candidates.length === 0) {
     throw new Error('Não encontrei resultados para essa busca')
   }

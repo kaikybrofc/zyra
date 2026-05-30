@@ -24,12 +24,7 @@ type SendMessagePayload = SendTextPayload | SendMediaPayload
  * Trata requisições HTTP para envio de mensagens via uma instância conectada.
  * Retorna `true` se a rota foi reconhecida e tratada, `false` caso contrário.
  */
-export async function handleMessagesRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  pathname: string,
-  logger: AppLogger
-): Promise<boolean> {
+export async function handleMessagesRoutes(req: IncomingMessage, res: ServerResponse, pathname: string, logger: AppLogger): Promise<boolean> {
   const method = req.method ?? 'GET'
 
   // POST /connections/:id/messages/send
@@ -37,18 +32,30 @@ export async function handleMessagesRoutes(
   if (method === 'POST' && sendMatch) {
     const connectionId = sendMatch.params['id'] ?? ''
     const info = getConnection(connectionId)
-    if (!info) { sendError(res, 404, 'conexão não encontrada'); return true }
+    if (!info) {
+      sendError(res, 404, 'conexão não encontrada')
+      return true
+    }
     if (info.status !== 'open') {
       sendError(res, 409, `instância não está conectada (status: ${info.status})`)
       return true
     }
 
     const sock = getActiveSocket(connectionId)
-    if (!sock) { sendError(res, 409, 'socket não disponível'); return true }
+    if (!sock) {
+      sendError(res, 409, 'socket não disponível')
+      return true
+    }
 
     const payload = parseJson<SendMessagePayload>(await readBody(req))
-    if (!payload) { sendError(res, 400, 'corpo da requisição inválido'); return true }
-    if (!payload.to?.trim()) { sendError(res, 400, 'destinatário (to) é obrigatório'); return true }
+    if (!payload) {
+      sendError(res, 400, 'corpo da requisição inválido')
+      return true
+    }
+    if (!payload.to?.trim()) {
+      sendError(res, 400, 'destinatário (to) é obrigatório')
+      return true
+    }
 
     const to = payload.to.trim()
 
@@ -56,19 +63,34 @@ export async function handleMessagesRoutes(
       let result: unknown
 
       if (payload.type === 'text') {
-        if (!payload.text?.trim()) { sendError(res, 400, 'campo text é obrigatório para type=text'); return true }
+        if (!payload.text?.trim()) {
+          sendError(res, 400, 'campo text é obrigatório para type=text')
+          return true
+        }
         result = await sock.sendMessage(to, { text: payload.text })
       } else if (payload.type === 'image') {
-        if (!payload.url?.trim()) { sendError(res, 400, 'campo url é obrigatório para type=image'); return true }
+        if (!payload.url?.trim()) {
+          sendError(res, 400, 'campo url é obrigatório para type=image')
+          return true
+        }
         result = await sock.sendMessage(to, { image: { url: payload.url }, caption: payload.caption })
       } else if (payload.type === 'video') {
-        if (!payload.url?.trim()) { sendError(res, 400, 'campo url é obrigatório para type=video'); return true }
+        if (!payload.url?.trim()) {
+          sendError(res, 400, 'campo url é obrigatório para type=video')
+          return true
+        }
         result = await sock.sendMessage(to, { video: { url: payload.url }, caption: payload.caption })
       } else if (payload.type === 'audio') {
-        if (!payload.url?.trim()) { sendError(res, 400, 'campo url é obrigatório para type=audio'); return true }
+        if (!payload.url?.trim()) {
+          sendError(res, 400, 'campo url é obrigatório para type=audio')
+          return true
+        }
         result = await sock.sendMessage(to, { audio: { url: payload.url } })
       } else if (payload.type === 'document') {
-        if (!payload.url?.trim()) { sendError(res, 400, 'campo url é obrigatório para type=document'); return true }
+        if (!payload.url?.trim()) {
+          sendError(res, 400, 'campo url é obrigatório para type=document')
+          return true
+        }
         result = await sock.sendMessage(to, {
           document: { url: payload.url! },
           mimetype: payload.mimetype ?? 'application/octet-stream',

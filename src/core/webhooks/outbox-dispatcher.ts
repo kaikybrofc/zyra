@@ -1,19 +1,14 @@
 import { createHmac, randomUUID } from 'node:crypto'
 import { config } from '../../config/index.js'
 import type { AppLogger } from '../../observability/logger.js'
-import {
-  createWebhookOutboxEntry,
-  getDueWebhookOutboxEntries,
-  updateWebhookOutboxEntry,
-} from '../../store/connection-admin-store.js'
+import { createWebhookOutboxEntry, getDueWebhookOutboxEntries, updateWebhookOutboxEntry } from '../../store/connection-admin-store.js'
 import { getActiveWebhooksForEvent, getWebhook, GLOBAL_WEBHOOK_CONNECTION_ID } from '../../webhook/store.js'
 import { resolveAllowedWebhookTarget } from '../../webhook/url-validation.js'
 
 const OUTBOX_VERSION = '2026-05-24'
 const WORKER_INTERVAL_MS = 5_000
 
-const sign = (secret: string, body: string): string =>
-  'sha256=' + createHmac('sha256', secret).update(body).digest('hex')
+const sign = (secret: string, body: string): string => 'sha256=' + createHmac('sha256', secret).update(body).digest('hex')
 
 const calcNextRetryAt = (attempt: number): number => {
   const growth = Math.max(0, attempt - 1)
@@ -30,11 +25,7 @@ type OutboxPayload = {
   data: unknown
 }
 
-export const enqueueConnectionOutboxEvent = async (
-  connectionId: string,
-  eventType: string,
-  data: unknown
-): Promise<void> => {
+export const enqueueConnectionOutboxEvent = async (connectionId: string, eventType: string, data: unknown): Promise<void> => {
   if (!config.webhookOutboxEnabled) return
   const webhooks = await getActiveWebhooksForEvent(connectionId, eventType)
   if (!webhooks.length) return

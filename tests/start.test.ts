@@ -215,7 +215,7 @@ describe('startup multi-connection', () => {
     const { start } = await import('../src/bootstrap/start.ts')
     await start()
 
-    const reconnect = registerEventsMock.mock.calls[0]?.[0]?.reconnect as (() => Promise<void>)
+    const reconnect = registerEventsMock.mock.calls[0]?.[0]?.reconnect as () => Promise<void>
     reconnectBlocked = true
     const pendingA = reconnect()
     const pendingB = reconnect()
@@ -237,7 +237,7 @@ describe('startup multi-connection', () => {
     await start()
 
     isShutdownInProgressMock.mockReturnValue(true)
-    const reconnectA = registerEventsMock.mock.calls[0]?.[0]?.reconnect as (() => Promise<void>)
+    const reconnectA = registerEventsMock.mock.calls[0]?.[0]?.reconnect as () => Promise<void>
     await reconnectA()
 
     expect(createSocketMock).toHaveBeenCalledTimes(2)
@@ -264,8 +264,8 @@ describe('startup multi-connection', () => {
     const { start } = await import('../src/bootstrap/start.ts')
     await start()
 
-    const reconnectA = registerEventsMock.mock.calls[0]?.[0]?.reconnect as (() => Promise<void>)
-    const reconnectB = registerEventsMock.mock.calls[1]?.[0]?.reconnect as (() => Promise<void>)
+    const reconnectA = registerEventsMock.mock.calls[0]?.[0]?.reconnect as () => Promise<void>
+    const reconnectB = registerEventsMock.mock.calls[1]?.[0]?.reconnect as () => Promise<void>
     blockAReconnect = true
     const pendingA = reconnectA()
     await Promise.resolve()

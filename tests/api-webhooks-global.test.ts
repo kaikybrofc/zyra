@@ -64,20 +64,23 @@ const makeReq = (method: string, url: string, body: unknown = undefined): FakeRe
 
 const makeRes = (): FakeResponse => {
   const res: FakeResponse = {
-    statusCode: 200, headers: {}, body: '', headersSent: false,
-    setHeader: vi.fn((k: string, v: string) => { res.headers[k] = v }),
-    end: vi.fn((b?: string) => { res.body = b ?? ''; res.headersSent = true }),
+    statusCode: 200,
+    headers: {},
+    body: '',
+    headersSent: false,
+    setHeader: vi.fn((k: string, v: string) => {
+      res.headers[k] = v
+    }),
+    end: vi.fn((b?: string) => {
+      res.body = b ?? ''
+      res.headersSent = true
+    }),
   }
   return res
 }
 
 describe('handleGlobalWebhooksRoutes', () => {
-  let handleGlobalWebhooksRoutes: (
-    req: IncomingMessage,
-    res: ServerResponse,
-    pathname: string,
-    logger: typeof stubLogger
-  ) => Promise<boolean>
+  let handleGlobalWebhooksRoutes: (req: IncomingMessage, res: ServerResponse, pathname: string, logger: typeof stubLogger) => Promise<boolean>
 
   beforeEach(async () => {
     vi.resetModules()
@@ -86,8 +89,14 @@ describe('handleGlobalWebhooksRoutes', () => {
     listWebhooksMock.mockResolvedValue([])
     getWebhookMock.mockResolvedValue(null)
     createWebhookMock.mockResolvedValue({
-      id: 'wh1', connectionId: '__global__', url: 'https://x.com',
-      eventsFilter: ['*'], active: true, secret: null, createdAt: 0, updatedAt: 0,
+      id: 'wh1',
+      connectionId: '__global__',
+      url: 'https://x.com',
+      eventsFilter: ['*'],
+      active: true,
+      secret: null,
+      createdAt: 0,
+      updatedAt: 0,
     })
     updateWebhookMock.mockResolvedValue(null)
     deleteWebhookMock.mockResolvedValue(false)
@@ -103,12 +112,7 @@ describe('handleGlobalWebhooksRoutes', () => {
   it('GET /webhooks — lista webhooks globais', async () => {
     listWebhooksMock.mockResolvedValue([{ id: 'w1', connectionId: '__global__' }])
     const res = makeRes()
-    const handled = await handleGlobalWebhooksRoutes(
-      makeReq('GET', '/webhooks') as never,
-      res as never,
-      '/webhooks',
-      stubLogger as never,
-    )
+    const handled = await handleGlobalWebhooksRoutes(makeReq('GET', '/webhooks') as never, res as never, '/webhooks', stubLogger as never)
     expect(handled).toBe(true)
     expect(res.statusCode).toBe(200)
     expect(JSON.parse(res.body)).toHaveLength(1)
@@ -117,12 +121,7 @@ describe('handleGlobalWebhooksRoutes', () => {
 
   it('POST /webhooks — cria webhook global', async () => {
     const res = makeRes()
-    const handled = await handleGlobalWebhooksRoutes(
-      makeReq('POST', '/webhooks', { url: 'https://x.com', eventsFilter: ['*'] }) as never,
-      res as never,
-      '/webhooks',
-      stubLogger as never,
-    )
+    const handled = await handleGlobalWebhooksRoutes(makeReq('POST', '/webhooks', { url: 'https://x.com', eventsFilter: ['*'] }) as never, res as never, '/webhooks', stubLogger as never)
     expect(handled).toBe(true)
     expect(res.statusCode).toBe(201)
     expect(createWebhookMock).toHaveBeenCalledWith('__global__', expect.objectContaining({ url: 'https://x.com/' }))
@@ -130,46 +129,26 @@ describe('handleGlobalWebhooksRoutes', () => {
 
   it('POST /webhooks — retorna 400 sem url', async () => {
     const res = makeRes()
-    await handleGlobalWebhooksRoutes(
-      makeReq('POST', '/webhooks', { eventsFilter: ['*'] }) as never,
-      res as never,
-      '/webhooks',
-      stubLogger as never,
-    )
+    await handleGlobalWebhooksRoutes(makeReq('POST', '/webhooks', { eventsFilter: ['*'] }) as never, res as never, '/webhooks', stubLogger as never)
     expect(res.statusCode).toBe(400)
   })
 
   it('POST /webhooks — retorna 400 sem eventsFilter', async () => {
     const res = makeRes()
-    await handleGlobalWebhooksRoutes(
-      makeReq('POST', '/webhooks', { url: 'https://x.com' }) as never,
-      res as never,
-      '/webhooks',
-      stubLogger as never,
-    )
+    await handleGlobalWebhooksRoutes(makeReq('POST', '/webhooks', { url: 'https://x.com' }) as never, res as never, '/webhooks', stubLogger as never)
     expect(res.statusCode).toBe(400)
   })
 
   it('POST /webhooks — retorna 400 com url local', async () => {
     const res = makeRes()
-    await handleGlobalWebhooksRoutes(
-      makeReq('POST', '/webhooks', { url: 'http://localhost:3000/hook', eventsFilter: ['*'] }) as never,
-      res as never,
-      '/webhooks',
-      stubLogger as never,
-    )
+    await handleGlobalWebhooksRoutes(makeReq('POST', '/webhooks', { url: 'http://localhost:3000/hook', eventsFilter: ['*'] }) as never, res as never, '/webhooks', stubLogger as never)
     expect(res.statusCode).toBe(400)
     expect(createWebhookMock).not.toHaveBeenCalled()
   })
 
   it('GET /webhooks/:wid — 404 quando não encontrado', async () => {
     const res = makeRes()
-    const handled = await handleGlobalWebhooksRoutes(
-      makeReq('GET', '/webhooks/nope') as never,
-      res as never,
-      '/webhooks/nope',
-      stubLogger as never,
-    )
+    const handled = await handleGlobalWebhooksRoutes(makeReq('GET', '/webhooks/nope') as never, res as never, '/webhooks/nope', stubLogger as never)
     expect(handled).toBe(true)
     expect(res.statusCode).toBe(404)
     expect(getWebhookMock).toHaveBeenCalledWith('nope', '__global__')
@@ -179,12 +158,7 @@ describe('handleGlobalWebhooksRoutes', () => {
     const wh = { id: 'wh1', connectionId: '__global__', url: 'https://x.com', eventsFilter: ['*'], active: true, secret: null, createdAt: 0, updatedAt: 0 }
     getWebhookMock.mockResolvedValue(wh)
     const res = makeRes()
-    await handleGlobalWebhooksRoutes(
-      makeReq('GET', '/webhooks/wh1') as never,
-      res as never,
-      '/webhooks/wh1',
-      stubLogger as never,
-    )
+    await handleGlobalWebhooksRoutes(makeReq('GET', '/webhooks/wh1') as never, res as never, '/webhooks/wh1', stubLogger as never)
     expect(res.statusCode).toBe(200)
     expect(JSON.parse(res.body)).toMatchObject({ id: 'wh1', connectionId: '__global__' })
   })
@@ -193,24 +167,14 @@ describe('handleGlobalWebhooksRoutes', () => {
     const updated = { id: 'wh1', connectionId: '__global__', url: 'https://new.com', eventsFilter: ['*'], active: true, secret: null, createdAt: 0, updatedAt: 1 }
     updateWebhookMock.mockResolvedValue(updated)
     const res = makeRes()
-    await handleGlobalWebhooksRoutes(
-      makeReq('PATCH', '/webhooks/wh1', { url: 'https://new.com' }) as never,
-      res as never,
-      '/webhooks/wh1',
-      stubLogger as never,
-    )
+    await handleGlobalWebhooksRoutes(makeReq('PATCH', '/webhooks/wh1', { url: 'https://new.com' }) as never, res as never, '/webhooks/wh1', stubLogger as never)
     expect(res.statusCode).toBe(200)
     expect(updateWebhookMock).toHaveBeenCalledWith('wh1', '__global__', expect.any(Object))
   })
 
   it('PATCH /webhooks/:wid — retorna 400 com url local', async () => {
     const res = makeRes()
-    await handleGlobalWebhooksRoutes(
-      makeReq('PATCH', '/webhooks/wh1', { url: 'http://127.0.0.1/hook' }) as never,
-      res as never,
-      '/webhooks/wh1',
-      stubLogger as never,
-    )
+    await handleGlobalWebhooksRoutes(makeReq('PATCH', '/webhooks/wh1', { url: 'http://127.0.0.1/hook' }) as never, res as never, '/webhooks/wh1', stubLogger as never)
     expect(res.statusCode).toBe(400)
     expect(updateWebhookMock).not.toHaveBeenCalled()
   })
@@ -218,24 +182,14 @@ describe('handleGlobalWebhooksRoutes', () => {
   it('PATCH /webhooks/:wid — 404 quando não encontrado', async () => {
     updateWebhookMock.mockResolvedValue(null)
     const res = makeRes()
-    await handleGlobalWebhooksRoutes(
-      makeReq('PATCH', '/webhooks/nope', { active: false }) as never,
-      res as never,
-      '/webhooks/nope',
-      stubLogger as never,
-    )
+    await handleGlobalWebhooksRoutes(makeReq('PATCH', '/webhooks/nope', { active: false }) as never, res as never, '/webhooks/nope', stubLogger as never)
     expect(res.statusCode).toBe(404)
   })
 
   it('DELETE /webhooks/:wid — 204 ao deletar', async () => {
     deleteWebhookMock.mockResolvedValue(true)
     const res = makeRes()
-    await handleGlobalWebhooksRoutes(
-      makeReq('DELETE', '/webhooks/wh1') as never,
-      res as never,
-      '/webhooks/wh1',
-      stubLogger as never,
-    )
+    await handleGlobalWebhooksRoutes(makeReq('DELETE', '/webhooks/wh1') as never, res as never, '/webhooks/wh1', stubLogger as never)
     expect(res.statusCode).toBe(204)
     expect(deleteWebhookMock).toHaveBeenCalledWith('wh1', '__global__')
   })
@@ -243,12 +197,7 @@ describe('handleGlobalWebhooksRoutes', () => {
   it('DELETE /webhooks/:wid — 404 quando não encontrado', async () => {
     deleteWebhookMock.mockResolvedValue(false)
     const res = makeRes()
-    await handleGlobalWebhooksRoutes(
-      makeReq('DELETE', '/webhooks/nope') as never,
-      res as never,
-      '/webhooks/nope',
-      stubLogger as never,
-    )
+    await handleGlobalWebhooksRoutes(makeReq('DELETE', '/webhooks/nope') as never, res as never, '/webhooks/nope', stubLogger as never)
     expect(res.statusCode).toBe(404)
   })
 
@@ -257,12 +206,7 @@ describe('handleGlobalWebhooksRoutes', () => {
     getWebhookMock.mockResolvedValue(wh)
     listDeliveriesMock.mockResolvedValue([{ id: 'd1', status: 'delivered' }])
     const res = makeRes()
-    const handled = await handleGlobalWebhooksRoutes(
-      makeReq('GET', '/webhooks/wh1/deliveries') as never,
-      res as never,
-      '/webhooks/wh1/deliveries',
-      stubLogger as never,
-    )
+    const handled = await handleGlobalWebhooksRoutes(makeReq('GET', '/webhooks/wh1/deliveries') as never, res as never, '/webhooks/wh1/deliveries', stubLogger as never)
     expect(handled).toBe(true)
     expect(res.statusCode).toBe(200)
     expect(JSON.parse(res.body)).toHaveLength(1)
@@ -270,23 +214,13 @@ describe('handleGlobalWebhooksRoutes', () => {
 
   it('retorna false para rotas não reconhecidas', async () => {
     const res = makeRes()
-    const handled = await handleGlobalWebhooksRoutes(
-      makeReq('GET', '/outra-rota') as never,
-      res as never,
-      '/outra-rota',
-      stubLogger as never,
-    )
+    const handled = await handleGlobalWebhooksRoutes(makeReq('GET', '/outra-rota') as never, res as never, '/outra-rota', stubLogger as never)
     expect(handled).toBe(false)
   })
 
   it('retorna false para /connections/:id/webhooks (rota por instância)', async () => {
     const res = makeRes()
-    const handled = await handleGlobalWebhooksRoutes(
-      makeReq('GET', '/connections/sess/webhooks') as never,
-      res as never,
-      '/connections/sess/webhooks',
-      stubLogger as never,
-    )
+    const handled = await handleGlobalWebhooksRoutes(makeReq('GET', '/connections/sess/webhooks') as never, res as never, '/connections/sess/webhooks', stubLogger as never)
     expect(handled).toBe(false)
   })
 })

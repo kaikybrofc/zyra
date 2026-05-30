@@ -15,11 +15,7 @@ const resolveProfile = (): RuntimeProfile => {
 /**
  * Expõe metadados operacionais do processo para uso do dashboard.
  */
-export async function handleRuntimeRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  pathname: string
-): Promise<boolean> {
+export async function handleRuntimeRoutes(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<boolean> {
   const method = req.method ?? 'GET'
   if (!(method === 'GET' && matchRoute('/system/runtime', pathname))) return false
 

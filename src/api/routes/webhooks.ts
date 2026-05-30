@@ -1,16 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { AppLogger } from '../../observability/logger.js'
 import { readBody, parseJson, sendJson, sendError, matchRoute } from '../http.js'
-import {
-  createWebhook,
-  listWebhooks,
-  getWebhook,
-  updateWebhook,
-  deleteWebhook,
-  listDeliveries,
-  retryDelivery,
-  getDelivery,
-} from '../../webhook/store.js'
+import { createWebhook, listWebhooks, getWebhook, updateWebhook, deleteWebhook, listDeliveries, retryDelivery, getDelivery } from '../../webhook/store.js'
 import { attemptDelivery } from '../../webhook/delivery.js'
 import { resolveAllowedWebhookTarget } from '../../webhook/url-validation.js'
 
@@ -31,12 +22,7 @@ type UpdateWebhookBody = {
  * Trata requisições HTTP para gerenciamento de webhooks.
  * Retorna `true` se a rota foi reconhecida e tratada, `false` caso contrário.
  */
-export async function handleWebhooksRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  pathname: string,
-  logger: AppLogger
-): Promise<boolean> {
+export async function handleWebhooksRoutes(req: IncomingMessage, res: ServerResponse, pathname: string, logger: AppLogger): Promise<boolean> {
   const method = req.method ?? 'GET'
 
   // POST /connections/:id/webhooks
@@ -52,8 +38,14 @@ export async function handleWebhooksRoutes(
 
     if (method === 'POST') {
       const body = parseJson<CreateWebhookBody>(await readBody(req))
-      if (!body) { sendError(res, 400, 'corpo da requisição inválido'); return true }
-      if (typeof body.url !== 'string' || !body.url.trim()) { sendError(res, 400, 'campo url é obrigatório'); return true }
+      if (!body) {
+        sendError(res, 400, 'corpo da requisição inválido')
+        return true
+      }
+      if (typeof body.url !== 'string' || !body.url.trim()) {
+        sendError(res, 400, 'campo url é obrigatório')
+        return true
+      }
       if (!Array.isArray(body.eventsFilter) || !body.eventsFilter.length) {
         sendError(res, 400, 'campo eventsFilter deve ser um array não-vazio')
         return true
@@ -86,29 +78,47 @@ export async function handleWebhooksRoutes(
 
     if (method === 'GET') {
       const webhook = await getWebhook(webhookId, connectionId)
-      if (!webhook) { sendError(res, 404, 'webhook não encontrado'); return true }
+      if (!webhook) {
+        sendError(res, 404, 'webhook não encontrado')
+        return true
+      }
       sendJson(res, 200, webhook)
       return true
     }
 
     if (method === 'PATCH') {
       const body = parseJson<UpdateWebhookBody>(await readBody(req))
-      if (!body) { sendError(res, 400, 'corpo da requisição inválido'); return true }
+      if (!body) {
+        sendError(res, 400, 'corpo da requisição inválido')
+        return true
+      }
       if (body.url !== undefined) {
-        if (typeof body.url !== 'string') { sendError(res, 400, 'campo url inválido'); return true }
+        if (typeof body.url !== 'string') {
+          sendError(res, 400, 'campo url inválido')
+          return true
+        }
         const resolvedTarget = resolveAllowedWebhookTarget(body.url)
-        if (!resolvedTarget.ok) { sendError(res, 400, resolvedTarget.reason); return true }
+        if (!resolvedTarget.ok) {
+          sendError(res, 400, resolvedTarget.reason)
+          return true
+        }
         body.url = resolvedTarget.targetUrl
       }
       const updated = await updateWebhook(webhookId, connectionId, body)
-      if (!updated) { sendError(res, 404, 'webhook não encontrado'); return true }
+      if (!updated) {
+        sendError(res, 404, 'webhook não encontrado')
+        return true
+      }
       sendJson(res, 200, updated)
       return true
     }
 
     if (method === 'DELETE') {
       const deleted = await deleteWebhook(webhookId, connectionId)
-      if (!deleted) { sendError(res, 404, 'webhook não encontrado'); return true }
+      if (!deleted) {
+        sendError(res, 404, 'webhook não encontrado')
+        return true
+      }
       res.statusCode = 204
       res.end()
       return true
@@ -121,7 +131,10 @@ export async function handleWebhooksRoutes(
     const connectionId = deliveriesMatch.params['id'] ?? ''
     const webhookId = deliveriesMatch.params['webhookId'] ?? ''
     const webhook = await getWebhook(webhookId, connectionId)
-    if (!webhook) { sendError(res, 404, 'webhook não encontrado'); return true }
+    if (!webhook) {
+      sendError(res, 404, 'webhook não encontrado')
+      return true
+    }
     const items = await listDeliveries(webhookId)
     sendJson(res, 200, items)
     return true
@@ -135,7 +148,10 @@ export async function handleWebhooksRoutes(
     const deliveryId = retryMatch.params['deliveryId'] ?? ''
 
     const webhook = await getWebhook(webhookId, connectionId)
-    if (!webhook) { sendError(res, 404, 'webhook não encontrado'); return true }
+    if (!webhook) {
+      sendError(res, 404, 'webhook não encontrado')
+      return true
+    }
 
     const delivery = await retryDelivery(deliveryId)
     if (!delivery || delivery.webhookId !== webhookId) {

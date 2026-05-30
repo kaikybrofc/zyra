@@ -1,10 +1,4 @@
-import {
-  getLogger,
-  bootstrapConnections,
-  getAntiBanStats,
-  getAntiBanStatsByConnection,
-  getOperationalSnapshots,
-} from '../core/connection/manager.js'
+import { getLogger, bootstrapConnections, getAntiBanStats, getAntiBanStatsByConnection, getOperationalSnapshots } from '../core/connection/manager.js'
 import { startAntiBanMetricsServer } from '../observability/antiban-metrics.js'
 import { startApiServer } from '../api/server.js'
 import { startWebhookRetryWorker } from '../webhook/retry-worker.js'

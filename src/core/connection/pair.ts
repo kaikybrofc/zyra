@@ -19,12 +19,7 @@ const PAIR_USAGE = 'uso: npm run session:pair -- --connection <id>'
 const PM2_APP_NAME = process.env.WA_PM2_APP_NAME?.trim() || 'zyra'
 const execFileAsync = promisify(execFile)
 const VALID_MYSQL_PROTOCOLS = new Set(['mysql:', 'mariadb:'])
-const EXPECTED_POST_LOGIN_CLOSE_CODES = new Set<number>([
-  DisconnectReason.restartRequired,
-  408,
-  428,
-  440,
-])
+const EXPECTED_POST_LOGIN_CLOSE_CODES = new Set<number>([DisconnectReason.restartRequired, 408, 428, 440])
 
 type ConnectionUpdate = {
   connection?: string
@@ -156,13 +151,8 @@ function validatePairingPrerequisites(connectionId: string | null): string {
  * @param update Payload parcial de atualização de conexão.
  * @returns Status code mapeado ou `null`.
  */
-function extractDisconnectStatusCode(update: {
-  lastDisconnect?: { error?: unknown }
-}): number | null {
-  const error = update.lastDisconnect?.error as
-    | (Boom & { output?: { statusCode?: number } })
-    | (Error & { output?: { statusCode?: number } })
-    | undefined
+function extractDisconnectStatusCode(update: { lastDisconnect?: { error?: unknown } }): number | null {
+  const error = update.lastDisconnect?.error as (Boom & { output?: { statusCode?: number } }) | (Error & { output?: { statusCode?: number } }) | undefined
 
   const explicitStatus = error?.output?.statusCode
   if (typeof explicitStatus === 'number') return explicitStatus
@@ -211,9 +201,7 @@ async function loadConnectionIdsFromMysql(): Promise<string[]> {
   const pool = getMysqlPool()
   if (!pool) return []
   type ConnectionRow = RowDataPacket & { connection_id: string }
-  const [rows] = await pool.execute<ConnectionRow[]>(
-    `SELECT connection_id FROM auth_creds ORDER BY updated_at ASC, connection_id ASC`
-  )
+  const [rows] = await pool.execute<ConnectionRow[]>(`SELECT connection_id FROM auth_creds ORDER BY updated_at ASC, connection_id ASC`)
   return normalizeConnectionIds(rows.map((row) => row.connection_id))
 }
 
@@ -393,9 +381,7 @@ async function waitForConnectionOutcome(
         sawQr = true
         options.onQr?.(update.qr)
         if (options.rejectOnQr) {
-          settleReject(
-            new Error(`validacao falhou: QR reapareceu para a conexao ${options.connectionId} (sessao nao estabilizou)`)
-          )
+          settleReject(new Error(`validacao falhou: QR reapareceu para a conexao ${options.connectionId} (sessao nao estabilizou)`))
           return
         }
       }
@@ -534,8 +520,7 @@ async function main(): Promise<void> {
       onNewLogin: () => {
         logger.info('novo login detectado, aguardando estabilizacao da conexao', { connectionId })
       },
-      shouldIgnoreClose: ({ statusCode, sawNewLogin }) =>
-        statusCode === DisconnectReason.restartRequired && !sawNewLogin,
+      shouldIgnoreClose: ({ statusCode, sawNewLogin }) => statusCode === DisconnectReason.restartRequired && !sawNewLogin,
     })
 
     if (result.outcome === 'open') {
@@ -569,10 +554,7 @@ async function main(): Promise<void> {
           connectionId,
           statusCode: result.statusCode,
           pairingConfigured: result.sawNewLogin,
-          recommendation:
-            result.statusCode === DisconnectReason.loggedOut
-              ? 'sessao invalidada pelo WhatsApp; execute novo pareamento'
-              : 'verifique conectividade/rede e tente novamente',
+          recommendation: result.statusCode === DisconnectReason.loggedOut ? 'sessao invalidada pelo WhatsApp; execute novo pareamento' : 'verifique conectividade/rede e tente novamente',
         })
         throw new Error(`pairing encerrado antes de abrir a conexão ${connectionId}${formatStatusCodeSuffix(result.statusCode)}`)
       }

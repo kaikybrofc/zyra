@@ -33,7 +33,7 @@ const createLogger = () => ({
   trace: vi.fn(),
 })
 
-  const createMessage = (text: string, options: { chatId?: string; participant?: string } = {}) =>
+const createMessage = (text: string, options: { chatId?: string; participant?: string } = {}) =>
   ({
     key: {
       remoteJid: options.chatId ?? 'chat@s.whatsapp.net',
@@ -162,11 +162,7 @@ describe('CommandProcessor', () => {
       err: expect.any(Error),
       command: 'ping',
     })
-    expect(sendMessage).toHaveBeenCalledWith(
-      'chat@s.whatsapp.net',
-      { text: '❌ Ocorreu um erro interno ao executar este comando.' },
-      expect.any(Object)
-    )
+    expect(sendMessage).toHaveBeenCalledWith('chat@s.whatsapp.net', { text: '❌ Ocorreu um erro interno ao executar este comando.' }, expect.any(Object))
     expect(sqlStore.recordCommandLog).toHaveBeenCalledWith(
       expect.objectContaining({
         commandName: 'ping',
@@ -185,9 +181,7 @@ describe('CommandProcessor', () => {
       }
       const logger = createLogger()
       const blockedError = new Error('[baileys-antiban] Message blocked: Rate limit exceeded or identical message spam detected')
-      const sendMessage = vi.fn()
-        .mockRejectedValueOnce(blockedError)
-        .mockResolvedValueOnce(undefined)
+      const sendMessage = vi.fn().mockRejectedValueOnce(blockedError).mockResolvedValueOnce(undefined)
       const execute = vi.fn(async (ctx) => {
         await ctx.reply('pong')
       })
@@ -209,18 +203,8 @@ describe('CommandProcessor', () => {
       await processing
 
       expect(sendMessage).toHaveBeenCalledTimes(2)
-      expect(sendMessage).toHaveBeenNthCalledWith(
-        1,
-        'chat@s.whatsapp.net',
-        { text: 'pong' },
-        expect.any(Object)
-      )
-      expect(sendMessage).toHaveBeenNthCalledWith(
-        2,
-        'chat@s.whatsapp.net',
-        { text: 'pong' },
-        expect.any(Object)
-      )
+      expect(sendMessage).toHaveBeenNthCalledWith(1, 'chat@s.whatsapp.net', { text: 'pong' }, expect.any(Object))
+      expect(sendMessage).toHaveBeenNthCalledWith(2, 'chat@s.whatsapp.net', { text: 'pong' }, expect.any(Object))
       expect(logger.warn).toHaveBeenCalledWith(
         'envio bloqueado pelo antiban, aplicando retentativa',
         expect.objectContaining({
@@ -248,9 +232,7 @@ describe('CommandProcessor', () => {
     }
     const logger = createLogger()
     const blockedError = new Error('[baileys-antiban] Message blocked: Warm-up limit: day 1 cap reached')
-    const sendMessage = vi.fn()
-      .mockRejectedValueOnce(blockedError)
-      .mockResolvedValueOnce(undefined)
+    const sendMessage = vi.fn().mockRejectedValueOnce(blockedError).mockResolvedValueOnce(undefined)
     const execute = vi.fn(async (ctx) => {
       await ctx.reply('pong')
     })
@@ -277,10 +259,7 @@ describe('CommandProcessor', () => {
         antiBanReason: 'Warm-up limit: day 1 cap reached',
       })
     )
-    expect(logger.warn).not.toHaveBeenCalledWith(
-      'envio bloqueado pelo antiban, aplicando retentativa',
-      expect.anything()
-    )
+    expect(logger.warn).not.toHaveBeenCalledWith('envio bloqueado pelo antiban, aplicando retentativa', expect.anything())
     expect(sendMessage).toHaveBeenCalledTimes(2)
     expect(sqlStore.recordCommandLog).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -401,10 +380,7 @@ describe('CommandProcessor', () => {
     const sqlStore = { enabled: false, recordCommandLog: vi.fn() }
     const sendMessage = vi.fn().mockResolvedValue(undefined)
     const groupMetadata = vi.fn().mockResolvedValue({
-      participants: [
-        { id: 'user@s.whatsapp.net' },
-        { id: 'bot@s.whatsapp.net', admin: 'admin' },
-      ],
+      participants: [{ id: 'user@s.whatsapp.net' }, { id: 'bot@s.whatsapp.net', admin: 'admin' }],
     })
     const groupParticipantsUpdate = vi.fn().mockResolvedValue([])
 
@@ -419,27 +395,18 @@ describe('CommandProcessor', () => {
     const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
     const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
 
-    await processor.process(
-      sock as never,
-      createMessage('acesse https://exemplo.com', { chatId: 'grupo@g.us', participant: 'user@s.whatsapp.net' }) as never
-    )
+    await processor.process(sock as never, createMessage('acesse https://exemplo.com', { chatId: 'grupo@g.us', participant: 'user@s.whatsapp.net' }) as never)
 
     expect(groupParticipantsUpdate).toHaveBeenCalledWith('grupo@g.us', ['user@s.whatsapp.net'], 'remove')
-    expect(sendMessage).toHaveBeenCalledWith(
-      'grupo@g.us',
-      { text: 'o user foi banido pelo sistema de anti link' }
-    )
-    expect(sendMessage).toHaveBeenCalledWith(
-      'grupo@g.us',
-      {
-        delete: expect.objectContaining({
-          id: 'msg-1',
-          remoteJid: 'grupo@g.us',
-          participant: 'user@s.whatsapp.net',
-          fromMe: false,
-        }),
-      }
-    )
+    expect(sendMessage).toHaveBeenCalledWith('grupo@g.us', { text: 'o user foi banido pelo sistema de anti link' })
+    expect(sendMessage).toHaveBeenCalledWith('grupo@g.us', {
+      delete: expect.objectContaining({
+        id: 'msg-1',
+        remoteJid: 'grupo@g.us',
+        participant: 'user@s.whatsapp.net',
+        fromMe: false,
+      }),
+    })
   })
 
   it('remove participante de todos os grupos vinculados da mesma comunidade ao aplicar antilink', async () => {
@@ -453,10 +420,7 @@ describe('CommandProcessor', () => {
     const groupMetadata = vi.fn().mockResolvedValue({
       id: 'grupo-1@g.us',
       linkedParent: 'comunidade-1@g.us',
-      participants: [
-        { id: 'user@s.whatsapp.net' },
-        { id: 'bot@s.whatsapp.net', admin: 'admin' },
-      ],
+      participants: [{ id: 'user@s.whatsapp.net' }, { id: 'bot@s.whatsapp.net', admin: 'admin' }],
     })
     const groupParticipantsUpdate = vi.fn().mockResolvedValue([])
     const groupFetchAllParticipating = vi.fn().mockResolvedValue({
@@ -478,10 +442,7 @@ describe('CommandProcessor', () => {
     const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
     const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
 
-    await processor.process(
-      sock as never,
-      createMessage('acesse https://exemplo.com', { chatId: 'grupo-1@g.us', participant: 'user@s.whatsapp.net' }) as never
-    )
+    await processor.process(sock as never, createMessage('acesse https://exemplo.com', { chatId: 'grupo-1@g.us', participant: 'user@s.whatsapp.net' }) as never)
 
     expect(groupParticipantsUpdate).toHaveBeenCalledWith('grupo-1@g.us', ['user@s.whatsapp.net'], 'remove')
     expect(groupParticipantsUpdate).toHaveBeenCalledWith('grupo-2@g.us', ['user@s.whatsapp.net'], 'remove')
@@ -626,10 +587,7 @@ describe('CommandProcessor', () => {
     const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
     const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
 
-    await processor.process(
-      sock as never,
-      createMessage('!play https://www.youtube.com/watch?v=dQw4w9WgXcQ', { chatId: 'grupo@g.us' }) as never
-    )
+    await processor.process(sock as never, createMessage('!play https://www.youtube.com/watch?v=dQw4w9WgXcQ', { chatId: 'grupo@g.us' }) as never)
 
     expect(groupParticipantsUpdate).not.toHaveBeenCalled()
     expect(execute).toHaveBeenCalledTimes(1)
@@ -662,10 +620,7 @@ describe('CommandProcessor', () => {
     const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
     const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
 
-    await processor.process(
-      sock as never,
-      createMessage('!playvid https://www.youtube.com/watch?v=dQw4w9WgXcQ', { chatId: 'grupo@g.us' }) as never
-    )
+    await processor.process(sock as never, createMessage('!playvid https://www.youtube.com/watch?v=dQw4w9WgXcQ', { chatId: 'grupo@g.us' }) as never)
 
     expect(groupParticipantsUpdate).not.toHaveBeenCalled()
     expect(execute).toHaveBeenCalledTimes(1)
@@ -695,10 +650,7 @@ describe('CommandProcessor', () => {
     const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
     const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
 
-    await processor.process(
-      sock as never,
-      createMessage('acesse https://blog.exemplo.com/post', { chatId: 'grupo@g.us' }) as never
-    )
+    await processor.process(sock as never, createMessage('acesse https://blog.exemplo.com/post', { chatId: 'grupo@g.us' }) as never)
 
     expect(groupParticipantsUpdate).not.toHaveBeenCalled()
   })
@@ -756,10 +708,7 @@ describe('CommandProcessor', () => {
     const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
     const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
 
-    await processor.process(
-      sock as never,
-      createMessage('visite HTTPS://BLOG.EXEMPLO.COM/AGORA', { chatId: 'grupo@g.us', participant: 'user@s.whatsapp.net' }) as never
-    )
+    await processor.process(sock as never, createMessage('visite HTTPS://BLOG.EXEMPLO.COM/AGORA', { chatId: 'grupo@g.us', participant: 'user@s.whatsapp.net' }) as never)
 
     expect(groupParticipantsUpdate).not.toHaveBeenCalled()
   })
@@ -788,10 +737,7 @@ describe('CommandProcessor', () => {
     const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
     const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
 
-    await processor.process(
-      sock as never,
-      createMessage('visite https://blog.exemplo.com/post', { chatId: 'grupo@g.us', participant: 'user@s.whatsapp.net' }) as never
-    )
+    await processor.process(sock as never, createMessage('visite https://blog.exemplo.com/post', { chatId: 'grupo@g.us', participant: 'user@s.whatsapp.net' }) as never)
 
     expect(groupParticipantsUpdate).not.toHaveBeenCalled()
   })
@@ -820,10 +766,7 @@ describe('CommandProcessor', () => {
     const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
     const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
 
-    await processor.process(
-      sock as never,
-      createMessage('visite https://app.exemplo.com/home', { chatId: 'grupo@g.us', participant: 'user@s.whatsapp.net' }) as never
-    )
+    await processor.process(sock as never, createMessage('visite https://app.exemplo.com/home', { chatId: 'grupo@g.us', participant: 'user@s.whatsapp.net' }) as never)
 
     expect(groupParticipantsUpdate).not.toHaveBeenCalled()
   })
@@ -852,10 +795,7 @@ describe('CommandProcessor', () => {
     const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
     const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
 
-    await processor.process(
-      sock as never,
-      createMessage('visite https://blog.exemplo.com./agora', { chatId: 'grupo@g.us', participant: 'user@s.whatsapp.net' }) as never
-    )
+    await processor.process(sock as never, createMessage('visite https://blog.exemplo.com./agora', { chatId: 'grupo@g.us', participant: 'user@s.whatsapp.net' }) as never)
 
     expect(groupParticipantsUpdate).not.toHaveBeenCalled()
   })
@@ -953,10 +893,7 @@ describe('CommandProcessor', () => {
     const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
     const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
 
-    await processor.process(
-      sock as never,
-      createMessage('meu email e user@dominio.com', { chatId: 'grupo@g.us', participant: 'user@s.whatsapp.net' }) as never
-    )
+    await processor.process(sock as never, createMessage('meu email e user@dominio.com', { chatId: 'grupo@g.us', participant: 'user@s.whatsapp.net' }) as never)
 
     expect(groupParticipantsUpdate).not.toHaveBeenCalled()
   })
@@ -984,10 +921,7 @@ describe('CommandProcessor', () => {
     const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
     const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
 
-    await processor.process(
-      sock as never,
-      createMessage('abre o arquivo config.json', { chatId: 'grupo@g.us', participant: 'user@s.whatsapp.net' }) as never
-    )
+    await processor.process(sock as never, createMessage('abre o arquivo config.json', { chatId: 'grupo@g.us', participant: 'user@s.whatsapp.net' }) as never)
 
     expect(groupParticipantsUpdate).not.toHaveBeenCalled()
   })
@@ -1119,10 +1053,7 @@ describe('CommandProcessor', () => {
     const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
     const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
 
-    await processor.process(
-      sock as never,
-      createMessage('entrem: https://chat.whatsapp.com/SELF123', { chatId: 'grupo@g.us' }) as never
-    )
+    await processor.process(sock as never, createMessage('entrem: https://chat.whatsapp.com/SELF123', { chatId: 'grupo@g.us' }) as never)
 
     expect(groupInviteCode).toHaveBeenCalledWith('grupo@g.us')
     expect(groupParticipantsUpdate).not.toHaveBeenCalled()
@@ -1152,10 +1083,7 @@ describe('CommandProcessor', () => {
     const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
     const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
 
-    await processor.process(
-      sock as never,
-      createMessage('entrem: https://chat.whatsapp.com/OTHER999', { chatId: 'grupo@g.us' }) as never
-    )
+    await processor.process(sock as never, createMessage('entrem: https://chat.whatsapp.com/OTHER999', { chatId: 'grupo@g.us' }) as never)
 
     expect(groupParticipantsUpdate).toHaveBeenCalledWith('grupo@g.us', ['user@s.whatsapp.net'], 'remove')
   })
@@ -1187,16 +1115,10 @@ describe('CommandProcessor', () => {
     const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
     const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
 
-    await processor.process(
-      sock as never,
-      createMessage('link https://dominio-bloqueado.com', { chatId: 'grupo@g.us', participant: 'user@s.whatsapp.net' }) as never
-    )
+    await processor.process(sock as never, createMessage('link https://dominio-bloqueado.com', { chatId: 'grupo@g.us', participant: 'user@s.whatsapp.net' }) as never)
 
     expect(groupParticipantsUpdate).not.toHaveBeenCalled()
-    expect(sendMessage).toHaveBeenCalledWith(
-      'grupo@g.us',
-      { text: 'ℹ️ Link detectado na mensagem de Tester, mas nenhuma remoção foi aplicada porque o remetente é admin.' }
-    )
+    expect(sendMessage).toHaveBeenCalledWith('grupo@g.us', { text: 'ℹ️ Link detectado na mensagem de Tester, mas nenhuma remoção foi aplicada porque o remetente é admin.' })
   })
 
   it('apaga no maximo as ultimas 5 mensagens do usuario apos remocao', async () => {
@@ -1257,11 +1179,7 @@ describe('CommandProcessor', () => {
 
     const logger = createLogger()
     const sqlStore = { enabled: false, recordCommandLog: vi.fn() }
-    const sendMessage = vi
-      .fn()
-      .mockRejectedValueOnce(new Error('delete-fail-once'))
-      .mockResolvedValue(undefined)
-      .mockResolvedValue(undefined)
+    const sendMessage = vi.fn().mockRejectedValueOnce(new Error('delete-fail-once')).mockResolvedValue(undefined).mockResolvedValue(undefined)
     const groupMetadata = vi.fn().mockResolvedValue({
       participants: [{ id: 'user@s.whatsapp.net' }, { id: 'bot@s.whatsapp.net', admin: 'admin' }],
     })
@@ -1277,17 +1195,11 @@ describe('CommandProcessor', () => {
     const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
     const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
 
-    await processor.process(
-      sock as never,
-      createMessage('link https://dominio-bloqueado.com', { chatId: 'grupo@g.us', participant: 'user@s.whatsapp.net' }) as never
-    )
+    await processor.process(sock as never, createMessage('link https://dominio-bloqueado.com', { chatId: 'grupo@g.us', participant: 'user@s.whatsapp.net' }) as never)
 
     const deleteCalls = sendMessage.mock.calls.filter((call) => call[1] && typeof call[1] === 'object' && 'delete' in call[1])
     expect(deleteCalls).toHaveLength(2)
-    expect(sendMessage).toHaveBeenLastCalledWith(
-      'grupo@g.us',
-      { text: 'o user foi banido pelo sistema de anti link' }
-    )
+    expect(sendMessage).toHaveBeenLastCalledWith('grupo@g.us', { text: 'o user foi banido pelo sistema de anti link' })
   })
 
   it('evicts oldest key from recentMessagesByChat when MAX_CHAT_TRACKING_ENTRIES exceeded', async () => {
@@ -1300,20 +1212,26 @@ describe('CommandProcessor', () => {
 
     const LIMIT = 2_000
     for (let i = 0; i < LIMIT; i++) {
-      await processor.process(sock as never, {
-        key: { remoteJid: `chat-${i}@g.us`, fromMe: false, id: `msg-${i}`, participant: `user-${i}@s.whatsapp.net` },
+      await processor.process(
+        sock as never,
+        {
+          key: { remoteJid: `chat-${i}@g.us`, fromMe: false, id: `msg-${i}`, participant: `user-${i}@s.whatsapp.net` },
+          pushName: 'X',
+          message: { conversation: 'text' },
+          messageTimestamp: 1,
+        } as never
+      )
+    }
+
+    await processor.process(
+      sock as never,
+      {
+        key: { remoteJid: 'chat-new@g.us', fromMe: false, id: 'msg-new', participant: 'user-new@s.whatsapp.net' },
         pushName: 'X',
         message: { conversation: 'text' },
         messageTimestamp: 1,
-      } as never)
-    }
-
-    await processor.process(sock as never, {
-      key: { remoteJid: 'chat-new@g.us', fromMe: false, id: 'msg-new', participant: 'user-new@s.whatsapp.net' },
-      pushName: 'X',
-      message: { conversation: 'text' },
-      messageTimestamp: 1,
-    } as never)
+      } as never
+    )
 
     // Inserting LIMIT+1 unique chats should have evicted chat-0 to stay at LIMIT
     // We verify by checking chat-new is tracked (last sticker lookup returns null since it was text)
@@ -1331,20 +1249,26 @@ describe('CommandProcessor', () => {
 
     const LIMIT = 5_000
     for (let i = 0; i < LIMIT; i++) {
-      await processor.process(sock as never, {
-        key: { remoteJid: `group-${i}@g.us`, fromMe: false, id: `msg-${i}`, participant: `user-${i}@s.whatsapp.net` },
+      await processor.process(
+        sock as never,
+        {
+          key: { remoteJid: `group-${i}@g.us`, fromMe: false, id: `msg-${i}`, participant: `user-${i}@s.whatsapp.net` },
+          pushName: 'X',
+          message: { conversation: 'text' },
+          messageTimestamp: 1,
+        } as never
+      )
+    }
+
+    await processor.process(
+      sock as never,
+      {
+        key: { remoteJid: 'group-new@g.us', fromMe: false, id: 'msg-new', participant: 'user-new@s.whatsapp.net' },
         pushName: 'X',
         message: { conversation: 'text' },
         messageTimestamp: 1,
-      } as never)
-    }
-
-    await processor.process(sock as never, {
-      key: { remoteJid: 'group-new@g.us', fromMe: false, id: 'msg-new', participant: 'user-new@s.whatsapp.net' },
-      pushName: 'X',
-      message: { conversation: 'text' },
-      messageTimestamp: 1,
-    } as never)
+      } as never
+    )
 
     expect(sock.sendMessage).not.toHaveBeenCalled()
   })

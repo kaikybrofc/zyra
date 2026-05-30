@@ -69,9 +69,7 @@ describe('hardDeleteSessionArtifacts', () => {
   })
 
   it('registra erro quando limpeza do estado antiban falha', async () => {
-    rmMock
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(new Error('rm antiban failed'))
+    rmMock.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('rm antiban failed'))
 
     const { hardDeleteSessionArtifacts } = await import('../src/core/connection/session-cleanup.ts')
     const result = await hardDeleteSessionArtifacts('conn-b', logger as never)

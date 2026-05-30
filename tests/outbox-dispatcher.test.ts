@@ -100,9 +100,6 @@ describe('outbox-dispatcher', () => {
     handle.stop()
 
     expect(fetchMock).toHaveBeenCalled()
-    expect(updateWebhookOutboxEntryMock).toHaveBeenCalledWith(
-      'out-1',
-      expect.objectContaining({ status: 'delivered', attemptCount: 1, responseStatus: 200 })
-    )
+    expect(updateWebhookOutboxEntryMock).toHaveBeenCalledWith('out-1', expect.objectContaining({ status: 'delivered', attemptCount: 1, responseStatus: 200 }))
   })
 })

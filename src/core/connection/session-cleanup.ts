@@ -32,11 +32,7 @@ const withTimeout = async <T>(label: string, promise: Promise<T>, timeoutMs = DE
   }
 }
 
-const scanAndDelete = async (
-  client: Awaited<ReturnType<typeof getRedisClient>>,
-  pattern: string,
-  logger: AppLogger
-): Promise<number> => {
+const scanAndDelete = async (client: Awaited<ReturnType<typeof getRedisClient>>, pattern: string, logger: AppLogger): Promise<number> => {
   let cursor = 0
   let deleted = 0
   const startedAt = Date.now()
@@ -77,10 +73,7 @@ const normalizeRedisPrefixes = (connectionId: string): string[] => {
  *
  * Esta rotina é usada pelo hard delete administrativo para invalidar sessão de forma completa.
  */
-export const hardDeleteSessionArtifacts = async (
-  connectionId: string,
-  logger: AppLogger
-): Promise<SessionCleanupResult> => {
+export const hardDeleteSessionArtifacts = async (connectionId: string, logger: AppLogger): Promise<SessionCleanupResult> => {
   const result: SessionCleanupResult = {
     mysql: false,
     redis: false,
@@ -94,14 +87,8 @@ export const hardDeleteSessionArtifacts = async (
     result.mysql = true
   } else {
     try {
-      await withTimeout(
-        'mysql.auth_creds',
-        pool.execute(`DELETE FROM auth_creds WHERE connection_id = ?`, [connectionId])
-      )
-      await withTimeout(
-        'mysql.signal_keys',
-        pool.execute(`DELETE FROM signal_keys WHERE connection_id = ?`, [connectionId])
-      )
+      await withTimeout('mysql.auth_creds', pool.execute(`DELETE FROM auth_creds WHERE connection_id = ?`, [connectionId]))
+      await withTimeout('mysql.signal_keys', pool.execute(`DELETE FROM signal_keys WHERE connection_id = ?`, [connectionId]))
       result.mysql = true
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -118,11 +105,7 @@ export const hardDeleteSessionArtifacts = async (
       const prefixes = normalizeRedisPrefixes(connectionId)
       for (const prefix of prefixes) {
         await withTimeout('redis.del_creds', client.del(`${prefix}:creds`))
-        const deleted = await withTimeout(
-          'redis.scan_keys',
-          scanAndDelete(client, `${prefix}:keys:*`, logger),
-          REDIS_SCAN_MAX_MS + 5_000
-        )
+        const deleted = await withTimeout('redis.scan_keys', scanAndDelete(client, `${prefix}:keys:*`, logger), REDIS_SCAN_MAX_MS + 5_000)
         logger.info('hard delete: chaves de sessão removidas do redis', {
           connectionId,
           prefix,

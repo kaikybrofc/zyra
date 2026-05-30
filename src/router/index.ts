@@ -18,12 +18,7 @@ const resolveQueueKey = (message: proto.IWebMessageInfo, connectionId: string): 
   return `${connectionId}:${chatKey}`
 }
 
-const withCommandTimeout = (
-  task: () => Promise<void>,
-  logger: AppLogger,
-  queueKey: string,
-  messageId: string | null | undefined
-): Promise<void> => {
+const withCommandTimeout = (task: () => Promise<void>, logger: AppLogger, queueKey: string, messageId: string | null | undefined): Promise<void> => {
   if (COMMAND_TIMEOUT_MS <= 0) return task()
   return new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -35,17 +30,19 @@ const withCommandTimeout = (
       resolve()
     }, COMMAND_TIMEOUT_MS)
     void task().then(
-      () => { clearTimeout(timer); resolve() },
-      (err: unknown) => { clearTimeout(timer); reject(err) }
+      () => {
+        clearTimeout(timer)
+        resolve()
+      },
+      (err: unknown) => {
+        clearTimeout(timer)
+        reject(err)
+      }
     )
   })
 }
 
-const enqueueMessageProcessing = (
-  queueKey: string,
-  task: () => Promise<void>,
-  logger: AppLogger
-): boolean => {
+const enqueueMessageProcessing = (queueKey: string, task: () => Promise<void>, logger: AppLogger): boolean => {
   const pending = queueSizes.get(queueKey) ?? 0
   if (pending >= MAX_PENDING_PER_QUEUE) {
     logger.warn('fila de processamento saturada; mensagem descartada para proteger memoria', {
@@ -87,13 +84,7 @@ const enqueueMessageProcessing = (
  * Enfileira mensagens recebidas para execucao assíncrona preservando a ordem por chat.
  * Permite injetar a store SQL para multi-tenant.
  */
-export async function handleIncomingMessages(
-  sock: WASocket,
-  messages: proto.IWebMessageInfo[],
-  logger: AppLogger,
-  connectionId: string,
-  sqlStore: SqlStore
-): Promise<void> {
+export async function handleIncomingMessages(sock: WASocket, messages: proto.IWebMessageInfo[], logger: AppLogger, connectionId: string, sqlStore: SqlStore): Promise<void> {
   if (!messages.length) {
     logger.info('messages.upsert sem mensagens')
     return
@@ -106,16 +97,7 @@ export async function handleIncomingMessages(
 
   for (const message of messages) {
     const queueKey = resolveQueueKey(message, connectionId)
-    const enqueued = enqueueMessageProcessing(
-      queueKey,
-      () => withCommandTimeout(
-        () => processor.process(sock, message),
-        logger,
-        queueKey,
-        message.key?.id
-      ),
-      logger
-    )
+    const enqueued = enqueueMessageProcessing(queueKey, () => withCommandTimeout(() => processor.process(sock, message), logger, queueKey, message.key?.id), logger)
     if (!enqueued) {
       logger.debug('mensagem descartada por backpressure da fila', {
         queueKey,

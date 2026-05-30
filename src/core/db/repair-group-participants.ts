@@ -50,8 +50,7 @@ const toRole = (admin: 'admin' | 'superadmin' | null | undefined): 'member' | 'a
   return 'member'
 }
 
-const toUuidSql = (binaryExpr = 'user_id') =>
-  `LOWER(CONCAT(HEX(SUBSTR(${binaryExpr},1,4)),'-',HEX(SUBSTR(${binaryExpr},5,2)),'-',HEX(SUBSTR(${binaryExpr},7,2)),'-',HEX(SUBSTR(${binaryExpr},9,2)),'-',HEX(SUBSTR(${binaryExpr},11,6))))`
+const toUuidSql = (binaryExpr = 'user_id') => `LOWER(CONCAT(HEX(SUBSTR(${binaryExpr},1,4)),'-',HEX(SUBSTR(${binaryExpr},5,2)),'-',HEX(SUBSTR(${binaryExpr},7,2)),'-',HEX(SUBSTR(${binaryExpr},9,2)),'-',HEX(SUBSTR(${binaryExpr},11,6))))`
 
 const ensureConnectionRow = async (conn: mysql.Connection, connectionId: string) => {
   await conn.execute(

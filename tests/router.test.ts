@@ -28,10 +28,7 @@ describe('router', () => {
 
     const logger = createLogger()
     const sock = { user: { id: 'bot@s.whatsapp.net' } }
-    const messages = [
-      { key: { id: '1', remoteJid: 'chat-1@s.whatsapp.net' } },
-      { key: { id: '2', remoteJid: 'chat-2@s.whatsapp.net' } },
-    ]
+    const messages = [{ key: { id: '1', remoteJid: 'chat-1@s.whatsapp.net' } }, { key: { id: '2', remoteJid: 'chat-2@s.whatsapp.net' } }]
 
     const { handleIncomingMessages } = await import('../src/router/index.ts')
     await handleIncomingMessages(sock as never, messages as never, logger, 'conn', sqlStore as never)
@@ -63,10 +60,7 @@ describe('router', () => {
 
     const logger = createLogger()
     const sock = { user: { id: 'bot@s.whatsapp.net' } }
-    const messages = [
-      { key: { id: '1', remoteJid: 'chat@s.whatsapp.net' } },
-      { key: { id: '2', remoteJid: 'chat@s.whatsapp.net' } },
-    ]
+    const messages = [{ key: { id: '1', remoteJid: 'chat@s.whatsapp.net' } }, { key: { id: '2', remoteJid: 'chat@s.whatsapp.net' } }]
 
     const { handleIncomingMessages } = await import('../src/router/index.ts')
     await handleIncomingMessages(sock as never, messages as never, logger, 'conn', sqlStore as never)
@@ -103,10 +97,7 @@ describe('router', () => {
 
     const logger = createLogger()
     const sock = { user: { id: 'bot@s.whatsapp.net' } }
-    const messages = [
-      { key: { id: '1', remoteJid: 'chat-1@s.whatsapp.net' } },
-      { key: { id: '2', remoteJid: 'chat-2@s.whatsapp.net' } },
-    ]
+    const messages = [{ key: { id: '1', remoteJid: 'chat-1@s.whatsapp.net' } }, { key: { id: '2', remoteJid: 'chat-2@s.whatsapp.net' } }]
 
     const { handleIncomingMessages } = await import('../src/router/index.ts')
     await handleIncomingMessages(sock as never, messages as never, logger, 'conn', sqlStore as never)
@@ -131,10 +122,7 @@ describe('router', () => {
 
     const logger = createLogger()
     const sock = { user: { id: 'bot@s.whatsapp.net' } }
-    const messages = [
-      { key: { id: '1', remoteJid: 'chat@s.whatsapp.net' } },
-      { key: { id: '2', remoteJid: 'chat@s.whatsapp.net' } },
-    ]
+    const messages = [{ key: { id: '1', remoteJid: 'chat@s.whatsapp.net' } }, { key: { id: '2', remoteJid: 'chat@s.whatsapp.net' } }]
 
     const { handleIncomingMessages } = await import('../src/router/index.ts')
     await handleIncomingMessages(sock as never, messages as never, logger, 'conn', sqlStore as never)
@@ -168,10 +156,7 @@ describe('router', () => {
 
     const logger = createLogger()
     const sock = { user: { id: 'bot@s.whatsapp.net' } }
-    const messages = [
-      { key: { id: '1' } },
-      { key: { id: '2' } },
-    ]
+    const messages = [{ key: { id: '1' } }, { key: { id: '2' } }]
 
     const { handleIncomingMessages } = await import('../src/router/index.ts')
     await handleIncomingMessages(sock as never, messages as never, logger, 'conn', sqlStore as never)
@@ -246,10 +231,7 @@ describe('router', () => {
 
     const logger = createLogger()
     const sock = { user: { id: 'bot@s.whatsapp.net' } }
-    const messages = [
-      { key: { id: '1', remoteJid: 'chat@s.whatsapp.net' } },
-      { key: { id: '2', remoteJid: 'chat@s.whatsapp.net' } },
-    ]
+    const messages = [{ key: { id: '1', remoteJid: 'chat@s.whatsapp.net' } }, { key: { id: '2', remoteJid: 'chat@s.whatsapp.net' } }]
 
     const { handleIncomingMessages } = await import('../src/router/index.ts')
     await handleIncomingMessages(sock as never, messages as never, logger, 'conn', sqlStore as never)
@@ -275,34 +257,40 @@ describe('router', () => {
     vi.resetModules()
 
     let releaseHung: (() => void) | undefined
-    const hungPromise = new Promise<void>((resolve) => { releaseHung = resolve })
-    const processMessage = vi.fn()
-      .mockReturnValueOnce(hungPromise)
-      .mockResolvedValue(undefined)
+    const hungPromise = new Promise<void>((resolve) => {
+      releaseHung = resolve
+    })
+    const processMessage = vi.fn().mockReturnValueOnce(hungPromise).mockResolvedValue(undefined)
 
     const sqlStore = { enabled: true, recordCommandLog: vi.fn() }
     createCommandProcessorMock.mockReturnValue({ process: processMessage })
 
     const logger = createLogger()
     const sock = { user: { id: 'bot@s.whatsapp.net' } }
-    const messages = [
-      { key: { id: 'hang', remoteJid: 'chat@s.whatsapp.net' } },
-      { key: { id: 'next', remoteJid: 'chat@s.whatsapp.net' } },
-    ]
+    const messages = [{ key: { id: 'hang', remoteJid: 'chat@s.whatsapp.net' } }, { key: { id: 'next', remoteJid: 'chat@s.whatsapp.net' } }]
 
     const { handleIncomingMessages } = await import('../src/router/index.ts')
     await handleIncomingMessages(sock as never, messages as never, logger, 'conn-timeout', sqlStore as never)
 
-    await vi.waitFor(() => {
-      expect(logger.error).toHaveBeenCalledWith('command processing timed out', expect.objectContaining({
-        timeoutMs: 50,
-        messageId: 'hang',
-      }))
-    }, { timeout: 500 })
+    await vi.waitFor(
+      () => {
+        expect(logger.error).toHaveBeenCalledWith(
+          'command processing timed out',
+          expect.objectContaining({
+            timeoutMs: 50,
+            messageId: 'hang',
+          })
+        )
+      },
+      { timeout: 500 }
+    )
 
-    await vi.waitFor(() => {
-      expect(processMessage).toHaveBeenCalledTimes(2)
-    }, { timeout: 500 })
+    await vi.waitFor(
+      () => {
+        expect(processMessage).toHaveBeenCalledTimes(2)
+      },
+      { timeout: 500 }
+    )
 
     releaseHung?.()
     delete process.env.WA_COMMAND_TIMEOUT_MS

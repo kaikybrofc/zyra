@@ -266,7 +266,7 @@ describe('ConnectionManager', () => {
     mockConfig.connectionIds = ['explicit-a']
 
     const executeMock = vi.fn(async (query: string) => {
-      if (query.includes("FROM managed_connections") && query.includes("desired_state = 'running'")) {
+      if (query.includes('FROM managed_connections') && query.includes("desired_state = 'running'")) {
         return [[{ connection_id: 'managed-a' }], []]
       }
       if (query.includes('FROM auth_creds')) {
@@ -283,9 +283,7 @@ describe('ConnectionManager', () => {
     const ids = await manager.resolveStartupConnectionIds()
     expect(ids).toEqual(['managed-a', 'explicit-a', 'legacy-a'])
 
-    const migrationInsert = executeMock.mock.calls.find((call) =>
-      String(call[0]).includes('INSERT INTO managed_connections')
-    )
+    const migrationInsert = executeMock.mock.calls.find((call) => String(call[0]).includes('INSERT INTO managed_connections'))
     expect(migrationInsert).toBeTruthy()
   })
 

@@ -21,11 +21,11 @@ WA_API_KEY=sua-chave-secreta
 
 ## Variáveis de configuração do webhook
 
-| Variável | Padrão | Descrição |
-|---|---|---|
-| `WA_WEBHOOK_TIMEOUT_MS` | `10000` | Tempo máximo (ms) para aguardar resposta do endpoint receptor |
-| `WA_WEBHOOK_MAX_ATTEMPTS` | `4` | Número máximo de tentativas antes de marcar como `dead_letter` |
-| `WA_WEBHOOK_ALLOWED_TARGETS` | vazio | Lista CSV de URLs permitidas para entrega. A URL cadastrada no webhook precisa existir nesta lista |
+| Variável                     | Padrão  | Descrição                                                                                          |
+| ---------------------------- | ------- | -------------------------------------------------------------------------------------------------- |
+| `WA_WEBHOOK_TIMEOUT_MS`      | `10000` | Tempo máximo (ms) para aguardar resposta do endpoint receptor                                      |
+| `WA_WEBHOOK_MAX_ATTEMPTS`    | `4`     | Número máximo de tentativas antes de marcar como `dead_letter`                                     |
+| `WA_WEBHOOK_ALLOWED_TARGETS` | vazio   | Lista CSV de URLs permitidas para entrega. A URL cadastrada no webhook precisa existir nesta lista |
 
 Exemplo de configuração completa:
 
@@ -45,17 +45,17 @@ WA_WEBHOOK_ALLOWED_TARGETS=https://meu-sistema.com/webhook,https://hooks.meu-sis
 
 ## Eventos suportados
 
-| Evento | Descrição |
-|---|---|
-| `connection.update` | Mudança de status da conexão (conectando, aberto, fechado) |
-| `messages.upsert` | Nova mensagem recebida ou enviada |
-| `messages.update` | Atualização de status de mensagem (lida, entregue, etc.) |
-| `messages.delete` | Mensagem deletada |
-| `message-receipt.update` | Atualização de recibo de leitura/entrega |
-| `messages.reaction` | Reação adicionada ou removida de mensagem |
-| `groups.upsert` | Novo grupo criado ou metadados recebidos |
-| `groups.update` | Atualização de metadados de grupo |
-| `group-participants.update` | Entrada, saída ou promoção de participante |
+| Evento                      | Descrição                                                  |
+| --------------------------- | ---------------------------------------------------------- |
+| `connection.update`         | Mudança de status da conexão (conectando, aberto, fechado) |
+| `messages.upsert`           | Nova mensagem recebida ou enviada                          |
+| `messages.update`           | Atualização de status de mensagem (lida, entregue, etc.)   |
+| `messages.delete`           | Mensagem deletada                                          |
+| `message-receipt.update`    | Atualização de recibo de leitura/entrega                   |
+| `messages.reaction`         | Reação adicionada ou removida de mensagem                  |
+| `groups.upsert`             | Novo grupo criado ou metadados recebidos                   |
+| `groups.update`             | Atualização de metadados de grupo                          |
+| `group-participants.update` | Entrada, saída ou promoção de participante                 |
 
 ### Filtros de evento
 
@@ -82,6 +82,7 @@ curl -s -X POST http://localhost:3000/connections/minha-sessao/webhooks \
 ```
 
 **Resposta `201`:**
+
 ```json
 {
   "id": "wh_abc123",
@@ -131,20 +132,20 @@ Todo evento entregue tem o mesmo envelope:
 }
 ```
 
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `event` | string | Nome do evento Baileys |
-| `connectionId` | string | ID da conexão de origem |
-| `timestamp` | number | Unix timestamp em milissegundos |
-| `data` | object | Payload original do evento (estrutura varia por evento) |
+| Campo          | Tipo   | Descrição                                               |
+| -------------- | ------ | ------------------------------------------------------- |
+| `event`        | string | Nome do evento Baileys                                  |
+| `connectionId` | string | ID da conexão de origem                                 |
+| `timestamp`    | number | Unix timestamp em milissegundos                         |
+| `data`         | object | Payload original do evento (estrutura varia por evento) |
 
 ### Headers enviados pelo Zyra
 
-| Header | Descrição |
-|---|---|
-| `content-type` | `application/json` |
-| `x-webhook-event` | Nome do evento (ex: `messages.upsert`) |
-| `x-webhook-delivery` | ID único da entrega |
+| Header                | Descrição                                                         |
+| --------------------- | ----------------------------------------------------------------- |
+| `content-type`        | `application/json`                                                |
+| `x-webhook-event`     | Nome do evento (ex: `messages.upsert`)                            |
+| `x-webhook-delivery`  | ID único da entrega                                               |
 | `x-webhook-signature` | `sha256=<hmac>` — presente apenas quando `secret` foi configurado |
 
 ---
@@ -177,12 +178,12 @@ app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
 
 Quando o endpoint receptor retorna um status não-2xx (ou não responde no tempo limite), o Zyra reagendará a entrega automaticamente:
 
-| Tentativa | Aguarda |
-|---|---|
-| 1ª falha | 30 segundos |
-| 2ª falha | 5 minutos |
-| 3ª falha | 30 minutos |
-| 4ª falha | marcado como `dead_letter` |
+| Tentativa | Aguarda                    |
+| --------- | -------------------------- |
+| 1ª falha  | 30 segundos                |
+| 2ª falha  | 5 minutos                  |
+| 3ª falha  | 30 minutos                 |
+| 4ª falha  | marcado como `dead_letter` |
 
 O número máximo de tentativas é controlado por `WA_WEBHOOK_MAX_ATTEMPTS` (padrão: `4`).
 
@@ -254,6 +255,7 @@ curl -s http://localhost:3000/connections/minha-sessao/webhooks/wh_abc123/delive
 ```
 
 **Resposta:**
+
 ```json
 [
   {
@@ -275,12 +277,12 @@ curl -s http://localhost:3000/connections/minha-sessao/webhooks/wh_abc123/delive
 
 ### Status possíveis de uma entrega
 
-| Status | Significado |
-|---|---|
-| `pending` | Aguardando primeira tentativa |
-| `delivered` | Entregue com sucesso (2xx) |
-| `failed` | Falhou, mas ainda há tentativas disponíveis |
-| `dead_letter` | Esgotou todas as tentativas |
+| Status        | Significado                                 |
+| ------------- | ------------------------------------------- |
+| `pending`     | Aguardando primeira tentativa               |
+| `delivered`   | Entregue com sucesso (2xx)                  |
+| `failed`      | Falhou, mas ainda há tentativas disponíveis |
+| `dead_letter` | Esgotou todas as tentativas                 |
 
 ### Retentar manualmente uma entrega
 
@@ -378,19 +380,19 @@ Este endpoint recebe comandos administrativos autenticados por HMAC para gerenci
 
 ### Ações disponíveis (`action.type`)
 
-| Ação | Efeito |
-|------|--------|
-| `register` | Cria a conexão sem iniciar socket; aplica `display_name` se fornecido |
-| `start` | Cria a conexão se não existir e inicia o socket (gera QR) |
-| `reconnect` | Reinicia o socket (equivale a disconnect + connect) |
-| `disconnect` | Encerra o socket sem remover a instância |
-| `pause` | Pausa o processamento da conexão |
-| `resume` | Retoma uma conexão pausada |
-| `delete_soft` | Remove a instância do manager (socket encerrado antes) |
-| `delete_hard` | Idem ao `delete_soft` (comportamento idêntico atualmente) |
-| `sync_status` | No-op — apenas devolve o estado atual da conexão |
-| `pairing_start` | Inicia o fluxo de pairing remoto |
-| `pairing_cancel` | Cancela o pairing em andamento |
+| Ação             | Efeito                                                                |
+| ---------------- | --------------------------------------------------------------------- |
+| `register`       | Cria a conexão sem iniciar socket; aplica `display_name` se fornecido |
+| `start`          | Cria a conexão se não existir e inicia o socket (gera QR)             |
+| `reconnect`      | Reinicia o socket (equivale a disconnect + connect)                   |
+| `disconnect`     | Encerra o socket sem remover a instância                              |
+| `pause`          | Pausa o processamento da conexão                                      |
+| `resume`         | Retoma uma conexão pausada                                            |
+| `delete_soft`    | Remove a instância do manager (socket encerrado antes)                |
+| `delete_hard`    | Idem ao `delete_soft` (comportamento idêntico atualmente)             |
+| `sync_status`    | No-op — apenas devolve o estado atual da conexão                      |
+| `pairing_start`  | Inicia o fluxo de pairing remoto                                      |
+| `pairing_cancel` | Cancela o pairing em andamento                                        |
 
 ### Resposta de sucesso
 
@@ -408,12 +410,12 @@ Este endpoint recebe comandos administrativos autenticados por HMAC para gerenci
 
 **Valores possíveis de `desired_state`:**
 
-| Ação | `desired_state` |
-|------|----------------|
-| `pause` | `paused` |
-| `disconnect`, `pairing_cancel` | `stopped` |
-| `delete_soft`, `delete_hard` | `deleted` |
-| demais | `running` |
+| Ação                           | `desired_state` |
+| ------------------------------ | --------------- |
+| `pause`                        | `paused`        |
+| `disconnect`, `pairing_cancel` | `stopped`       |
+| `delete_soft`, `delete_hard`   | `deleted`       |
+| demais                         | `running`       |
 
 ### Deduplicação de comandos
 
@@ -426,15 +428,15 @@ Isso garante segurança em retentativas do lado do chamador.
 
 ### Erros do ingress
 
-| Código | Motivo |
-|--------|--------|
-| `400` | `event` não é `connection.command`, `command_id` ou `connection.id` ausentes |
-| `401` | Headers HMAC ausentes, timestamp inválido ou fora da janela, assinatura incorreta |
-| `405` | Método diferente de `POST` |
-| `413` | Payload maior que `WA_WEBHOOK_MAX_BODY_BYTES` |
-| `415` | `Content-Type` não é `application/json` |
-| `422` | `action.type` desconhecido |
-| `503` | `WA_WEBHOOK_SHARED_SECRET` não configurado |
+| Código | Motivo                                                                            |
+| ------ | --------------------------------------------------------------------------------- |
+| `400`  | `event` não é `connection.command`, `command_id` ou `connection.id` ausentes      |
+| `401`  | Headers HMAC ausentes, timestamp inválido ou fora da janela, assinatura incorreta |
+| `405`  | Método diferente de `POST`                                                        |
+| `413`  | Payload maior que `WA_WEBHOOK_MAX_BODY_BYTES`                                     |
+| `415`  | `Content-Type` não é `application/json`                                           |
+| `422`  | `action.type` desconhecido                                                        |
+| `503`  | `WA_WEBHOOK_SHARED_SECRET` não configurado                                        |
 
 ---
 
@@ -442,30 +444,30 @@ Isso garante segurança em retentativas do lado do chamador.
 
 ### Webhooks por conexão
 
-| Método | Rota | Descrição |
-|---|---|---|
-| `GET` | `/connections/:id/webhooks` | Lista todos os webhooks da conexão |
-| `POST` | `/connections/:id/webhooks` | Cria um novo webhook |
-| `GET` | `/connections/:id/webhooks/:wid` | Busca um webhook |
-| `PATCH` | `/connections/:id/webhooks/:wid` | Atualiza um webhook |
-| `DELETE` | `/connections/:id/webhooks/:wid` | Remove um webhook |
-| `GET` | `/connections/:id/webhooks/:wid/deliveries` | Histórico de entregas |
-| `POST` | `/connections/:id/webhooks/:wid/deliveries/:did/retry` | Reprocessa uma entrega |
+| Método   | Rota                                                   | Descrição                          |
+| -------- | ------------------------------------------------------ | ---------------------------------- |
+| `GET`    | `/connections/:id/webhooks`                            | Lista todos os webhooks da conexão |
+| `POST`   | `/connections/:id/webhooks`                            | Cria um novo webhook               |
+| `GET`    | `/connections/:id/webhooks/:wid`                       | Busca um webhook                   |
+| `PATCH`  | `/connections/:id/webhooks/:wid`                       | Atualiza um webhook                |
+| `DELETE` | `/connections/:id/webhooks/:wid`                       | Remove um webhook                  |
+| `GET`    | `/connections/:id/webhooks/:wid/deliveries`            | Histórico de entregas              |
+| `POST`   | `/connections/:id/webhooks/:wid/deliveries/:did/retry` | Reprocessa uma entrega             |
 
 ### Webhooks globais
 
-| Método | Rota | Descrição |
-|---|---|---|
-| `GET` | `/webhooks` | Lista todos os webhooks globais |
-| `POST` | `/webhooks` | Cria um webhook global |
-| `GET` | `/webhooks/:wid` | Busca um webhook global |
-| `PATCH` | `/webhooks/:wid` | Atualiza um webhook global |
-| `DELETE` | `/webhooks/:wid` | Remove um webhook global |
-| `GET` | `/webhooks/:wid/deliveries` | Histórico de entregas do webhook global |
-| `POST` | `/webhooks/:wid/deliveries/:did/retry` | Reprocessa uma entrega global |
+| Método   | Rota                                   | Descrição                               |
+| -------- | -------------------------------------- | --------------------------------------- |
+| `GET`    | `/webhooks`                            | Lista todos os webhooks globais         |
+| `POST`   | `/webhooks`                            | Cria um webhook global                  |
+| `GET`    | `/webhooks/:wid`                       | Busca um webhook global                 |
+| `PATCH`  | `/webhooks/:wid`                       | Atualiza um webhook global              |
+| `DELETE` | `/webhooks/:wid`                       | Remove um webhook global                |
+| `GET`    | `/webhooks/:wid/deliveries`            | Histórico de entregas do webhook global |
+| `POST`   | `/webhooks/:wid/deliveries/:did/retry` | Reprocessa uma entrega global           |
 
 ### Ingress de comandos
 
-| Método | Rota | Descrição |
-|---|---|---|
+| Método | Rota                    | Descrição                                           |
+| ------ | ----------------------- | --------------------------------------------------- |
 | `POST` | `/webhooks/connections` | Recebe comandos administrativos de conexão via HMAC |

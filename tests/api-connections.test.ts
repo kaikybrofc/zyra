@@ -104,8 +104,13 @@ const createResponse = (): FakeResponse => {
     headers: {},
     body: '',
     headersSent: false,
-    setHeader: vi.fn((key: string, value: string) => { res.headers[key] = value }),
-    end: vi.fn((body?: string) => { res.body = body ?? ''; res.headersSent = true }),
+    setHeader: vi.fn((key: string, value: string) => {
+      res.headers[key] = value
+    }),
+    end: vi.fn((body?: string) => {
+      res.body = body ?? ''
+      res.headersSent = true
+    }),
   }
   return res
 }
@@ -323,12 +328,7 @@ describe('handleConnectionsRoutes', () => {
     getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-pairing' }))
     const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
     const res = createResponse()
-    await handleConnectionsRoutes(
-      makeReq('POST', '/connections/sess-pairing/pairing/start') as never,
-      res as never,
-      '/connections/sess-pairing/pairing/start',
-      logger as never
-    )
+    await handleConnectionsRoutes(makeReq('POST', '/connections/sess-pairing/pairing/start') as never, res as never, '/connections/sess-pairing/pairing/start', logger as never)
 
     expect(res.statusCode).toBe(202)
     expect(startPairingMock).toHaveBeenCalledWith('sess-pairing')
@@ -338,12 +338,7 @@ describe('handleConnectionsRoutes', () => {
     getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-pairing' }))
     const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
     const res = createResponse()
-    await handleConnectionsRoutes(
-      makeReq('GET', '/connections/sess-pairing/pairing') as never,
-      res as never,
-      '/connections/sess-pairing/pairing',
-      logger as never
-    )
+    await handleConnectionsRoutes(makeReq('GET', '/connections/sess-pairing/pairing') as never, res as never, '/connections/sess-pairing/pairing', logger as never)
 
     expect(res.statusCode).toBe(200)
     expect(getPairingStateMock).toHaveBeenCalledWith('sess-pairing')
@@ -353,12 +348,7 @@ describe('handleConnectionsRoutes', () => {
     getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-pairing' }))
     const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
     const res = createResponse()
-    await handleConnectionsRoutes(
-      makeReq('POST', '/connections/sess-pairing/pairing/cancel') as never,
-      res as never,
-      '/connections/sess-pairing/pairing/cancel',
-      logger as never
-    )
+    await handleConnectionsRoutes(makeReq('POST', '/connections/sess-pairing/pairing/cancel') as never, res as never, '/connections/sess-pairing/pairing/cancel', logger as never)
 
     expect(res.statusCode).toBe(200)
     expect(cancelPairingMock).toHaveBeenCalledWith('sess-pairing')
@@ -380,12 +370,7 @@ describe('handleConnectionsRoutes', () => {
 
     const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
     const res = createResponse()
-    await handleConnectionsRoutes(
-      makeReq('POST', '/connections/sess-webhook/webhook/start', JSON.stringify({ label: 'Bot X' })) as never,
-      res as never,
-      '/connections/sess-webhook/webhook/start',
-      logger as never
-    )
+    await handleConnectionsRoutes(makeReq('POST', '/connections/sess-webhook/webhook/start', JSON.stringify({ label: 'Bot X' })) as never, res as never, '/connections/sess-webhook/webhook/start', logger as never)
 
     expect(res.statusCode).toBe(200)
     expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -407,12 +392,7 @@ describe('handleConnectionsRoutes', () => {
 
     const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
     const res = createResponse()
-    await handleConnectionsRoutes(
-      makeReq('POST', '/connections/sess-no-secret/webhook/start') as never,
-      res as never,
-      '/connections/sess-no-secret/webhook/start',
-      logger as never
-    )
+    await handleConnectionsRoutes(makeReq('POST', '/connections/sess-no-secret/webhook/start') as never, res as never, '/connections/sess-no-secret/webhook/start', logger as never)
 
     expect(res.statusCode).toBe(503)
     expect(fetchMock).not.toHaveBeenCalled()

@@ -45,9 +45,7 @@ const rowToWebhook = (row: WebhookRow): WebhookRecord => ({
   id: row.id,
   connectionId: row.connection_id,
   url: row.url,
-  eventsFilter: (typeof row.events_filter === 'string'
-    ? JSON.parse(row.events_filter)
-    : row.events_filter) as string[],
+  eventsFilter: (typeof row.events_filter === 'string' ? JSON.parse(row.events_filter) : row.events_filter) as string[],
   active: row.active === 1,
   secret: row.secret,
   createdAt: row.created_at.getTime(),
@@ -92,10 +90,7 @@ const loadWebhooksForConnection = async (connectionId: string): Promise<void> =>
 
 // ─── Webhook CRUD ──────────────────────────────────────────────────────────
 
-export const createWebhook = async (
-  connectionId: string,
-  data: { url: string; eventsFilter: string[]; secret?: string | null }
-): Promise<WebhookRecord> => {
+export const createWebhook = async (connectionId: string, data: { url: string; eventsFilter: string[]; secret?: string | null }): Promise<WebhookRecord> => {
   await loadWebhooksForConnection(connectionId)
   const id = randomUUID()
   const now = Date.now()
@@ -134,11 +129,7 @@ export const getWebhook = async (id: string, connectionId: string): Promise<Webh
   return wh && wh.connectionId === connectionId ? wh : null
 }
 
-export const updateWebhook = async (
-  id: string,
-  connectionId: string,
-  patch: Partial<Pick<WebhookRecord, 'url' | 'eventsFilter' | 'active' | 'secret'>>
-): Promise<WebhookRecord | null> => {
+export const updateWebhook = async (id: string, connectionId: string, patch: Partial<Pick<WebhookRecord, 'url' | 'eventsFilter' | 'active' | 'secret'>>): Promise<WebhookRecord | null> => {
   await loadWebhooksForConnection(connectionId)
   const existing = webhooks.get(id)
   if (!existing || existing.connectionId !== connectionId) return null
@@ -157,10 +148,22 @@ export const updateWebhook = async (
   if (pool) {
     const setClauses: string[] = ['updated_at = NOW()']
     const params: Array<string | number | null> = []
-    if (patch.url !== undefined) { setClauses.push('url = ?'); params.push(patch.url) }
-    if (patch.eventsFilter !== undefined) { setClauses.push('events_filter = ?'); params.push(JSON.stringify(patch.eventsFilter)) }
-    if (patch.active !== undefined) { setClauses.push('active = ?'); params.push(patch.active ? 1 : 0) }
-    if (patch.secret !== undefined) { setClauses.push('secret = ?'); params.push(patch.secret) }
+    if (patch.url !== undefined) {
+      setClauses.push('url = ?')
+      params.push(patch.url)
+    }
+    if (patch.eventsFilter !== undefined) {
+      setClauses.push('events_filter = ?')
+      params.push(JSON.stringify(patch.eventsFilter))
+    }
+    if (patch.active !== undefined) {
+      setClauses.push('active = ?')
+      params.push(patch.active ? 1 : 0)
+    }
+    if (patch.secret !== undefined) {
+      setClauses.push('secret = ?')
+      params.push(patch.secret)
+    }
     params.push(id)
     await pool.execute(`UPDATE webhooks SET ${setClauses.join(', ')} WHERE id = ?`, params)
   }
@@ -186,22 +189,12 @@ export const getActiveWebhooksForEvent = async (connectionId: string, event: str
   const { webhookMatchesEvent } = await import('./events.js')
   await loadWebhooksForConnection(connectionId)
   await loadWebhooksForConnection(GLOBAL_WEBHOOK_CONNECTION_ID)
-  return Array.from(webhooks.values()).filter(
-    (wh) =>
-      (wh.connectionId === connectionId || wh.connectionId === GLOBAL_WEBHOOK_CONNECTION_ID) &&
-      wh.active &&
-      webhookMatchesEvent(wh.eventsFilter, event)
-  )
+  return Array.from(webhooks.values()).filter((wh) => (wh.connectionId === connectionId || wh.connectionId === GLOBAL_WEBHOOK_CONNECTION_ID) && wh.active && webhookMatchesEvent(wh.eventsFilter, event))
 }
 
 // ─── Delivery CRUD ─────────────────────────────────────────────────────────
 
-export const createDelivery = async (data: {
-  webhookId: string
-  connectionId: string
-  eventType: string
-  payload: unknown
-}): Promise<DeliveryRecord> => {
+export const createDelivery = async (data: { webhookId: string; connectionId: string; eventType: string; payload: unknown }): Promise<DeliveryRecord> => {
   const id = randomUUID()
   const now = Date.now()
   const record: DeliveryRecord = {
@@ -265,16 +258,7 @@ export const updateDelivery = async (
            next_retry_at = IF(? IS NULL, NULL, FROM_UNIXTIME(?)),
            response_status = ?, response_body = ?
        WHERE id = ?`,
-      [
-        patch.status,
-        patch.attempts,
-        Math.floor(patch.lastAttemptAt / 1000),
-        patch.nextRetryAt,
-        patch.nextRetryAt !== null ? Math.floor(patch.nextRetryAt / 1000) : null,
-        patch.responseStatus,
-        patch.responseBody,
-        id,
-      ]
+      [patch.status, patch.attempts, Math.floor(patch.lastAttemptAt / 1000), patch.nextRetryAt, patch.nextRetryAt !== null ? Math.floor(patch.nextRetryAt / 1000) : null, patch.responseStatus, patch.responseBody, id]
     )
   }
 }
@@ -298,9 +282,7 @@ export const listDeliveries = async (webhookId: string): Promise<DeliveryRecord[
 
 export const getPendingRetries = async (): Promise<DeliveryRecord[]> => {
   const now = Date.now()
-  const inMemory = Array.from(deliveries.values()).filter(
-    (d) => d.status === 'failed' && d.nextRetryAt !== null && d.nextRetryAt <= now
-  )
+  const inMemory = Array.from(deliveries.values()).filter((d) => d.status === 'failed' && d.nextRetryAt !== null && d.nextRetryAt <= now)
   if (inMemory.length > 0) return inMemory
 
   const pool = getMysqlPool()

@@ -6,14 +6,7 @@ import { registerEvents } from '../../events/register.js'
 import { initMysqlSchema } from '../db/init.js'
 import { getMysqlPool } from '../db/mysql.js'
 import { config } from '../../config/index.js'
-import {
-  recordConnectionAdminEvent,
-  upsertManagedConnection,
-  type CreateConnectionAdminEventInput,
-  type ManagedConnectionDesiredState,
-  type ManagedConnectionStatus,
-  type UpsertManagedConnectionInput,
-} from '../../store/connection-admin-store.js'
+import { recordConnectionAdminEvent, upsertManagedConnection, type CreateConnectionAdminEventInput, type ManagedConnectionDesiredState, type ManagedConnectionStatus, type UpsertManagedConnectionInput } from '../../store/connection-admin-store.js'
 import { enqueueConnectionOutboxEvent } from '../webhooks/outbox-dispatcher.js'
 import { hardDeleteSessionArtifacts } from './session-cleanup.js'
 import { assertValidConnectionId } from './connection-id.js'
@@ -175,9 +168,7 @@ class DefaultConnectionManager implements ConnectionManager {
   private async loadConnectionIdsFromMysql(): Promise<string[]> {
     const pool = getMysqlPool()
     if (!pool) return []
-    const [rows] = await pool.execute<StartupConnectionRow[]>(
-      `SELECT connection_id FROM auth_creds ORDER BY updated_at ASC, connection_id ASC`
-    )
+    const [rows] = await pool.execute<StartupConnectionRow[]>(`SELECT connection_id FROM auth_creds ORDER BY updated_at ASC, connection_id ASC`)
     return normalizeConnectionIds(rows.map((row) => row.connection_id))
   }
 
@@ -210,9 +201,7 @@ class DefaultConnectionManager implements ConnectionManager {
     const pool = getMysqlPool()
     if (!pool) return []
     try {
-      const [rows] = await pool.execute<ManagedStartupConnectionRow[]>(
-        `SELECT connection_id FROM managed_connections ORDER BY updated_at ASC, connection_id ASC`
-      )
+      const [rows] = await pool.execute<ManagedStartupConnectionRow[]>(`SELECT connection_id FROM managed_connections ORDER BY updated_at ASC, connection_id ASC`)
       return normalizeConnectionIds(rows.map((row) => row.connection_id))
     } catch (error) {
       this.getLogger().warn('falha ao listar managed_connections durante migração híbrida', { err: error })
@@ -262,11 +251,7 @@ class DefaultConnectionManager implements ConnectionManager {
     })
   }
 
-  private async withConnectionLock<T>(
-    connectionId: string,
-    operation: string,
-    task: () => Promise<T>
-  ): Promise<T> {
+  private async withConnectionLock<T>(connectionId: string, operation: string, task: () => Promise<T>): Promise<T> {
     const previous = this.operationLocks.get(connectionId) ?? Promise.resolve()
     let release: () => void = () => undefined
     const current = new Promise<void>((resolve) => {
@@ -492,9 +477,7 @@ class DefaultConnectionManager implements ConnectionManager {
   }
 
   async replaceSocket(connectionId: string, reason: string): Promise<void> {
-    return this.withConnectionLock(connectionId, 'replace_socket', () =>
-      this.replaceSocketUnsafe(connectionId, reason)
-    )
+    return this.withConnectionLock(connectionId, 'replace_socket', () => this.replaceSocketUnsafe(connectionId, reason))
   }
 
   private async replaceSocketUnsafe(connectionId: string, reason: string): Promise<void> {
@@ -613,9 +596,7 @@ class DefaultConnectionManager implements ConnectionManager {
   }
 
   async connect(connectionId: string, logger: AppLogger): Promise<void> {
-    return this.withConnectionLock(connectionId, 'connect', () =>
-      this.connectUnsafe(connectionId, logger)
-    )
+    return this.withConnectionLock(connectionId, 'connect', () => this.connectUnsafe(connectionId, logger))
   }
 
   private async connectUnsafe(connectionId: string, logger: AppLogger): Promise<void> {
@@ -653,16 +634,10 @@ class DefaultConnectionManager implements ConnectionManager {
   }
 
   async disconnect(connectionId: string, logger: AppLogger): Promise<void> {
-    return this.withConnectionLock(connectionId, 'disconnect', () =>
-      this.disconnectUnsafe(connectionId, logger, { desiredState: 'stopped' })
-    )
+    return this.withConnectionLock(connectionId, 'disconnect', () => this.disconnectUnsafe(connectionId, logger, { desiredState: 'stopped' }))
   }
 
-  private async disconnectUnsafe(
-    connectionId: string,
-    logger: AppLogger,
-    options: { desiredState: ConnectionDesiredState }
-  ): Promise<void> {
+  private async disconnectUnsafe(connectionId: string, logger: AppLogger, options: { desiredState: ConnectionDesiredState }): Promise<void> {
     const runtime = this.runtimes.get(connectionId)
     if (!runtime) {
       logger.warn('disconnect chamado para connectionId inexistente', { connectionId })
@@ -711,9 +686,7 @@ class DefaultConnectionManager implements ConnectionManager {
   }
 
   async restart(connectionId: string, logger: AppLogger): Promise<void> {
-    return this.withConnectionLock(connectionId, 'restart', () =>
-      this.restartUnsafe(connectionId, logger)
-    )
+    return this.withConnectionLock(connectionId, 'restart', () => this.restartUnsafe(connectionId, logger))
   }
 
   private async restartUnsafe(connectionId: string, logger: AppLogger): Promise<void> {
@@ -746,9 +719,7 @@ class DefaultConnectionManager implements ConnectionManager {
   }
 
   async pause(connectionId: string, logger: AppLogger): Promise<void> {
-    return this.withConnectionLock(connectionId, 'pause', () =>
-      this.pauseUnsafe(connectionId, logger)
-    )
+    return this.withConnectionLock(connectionId, 'pause', () => this.pauseUnsafe(connectionId, logger))
   }
 
   private async pauseUnsafe(connectionId: string, logger: AppLogger): Promise<void> {
@@ -778,9 +749,7 @@ class DefaultConnectionManager implements ConnectionManager {
   }
 
   async resume(connectionId: string, logger: AppLogger): Promise<void> {
-    return this.withConnectionLock(connectionId, 'resume', () =>
-      this.resumeUnsafe(connectionId, logger)
-    )
+    return this.withConnectionLock(connectionId, 'resume', () => this.resumeUnsafe(connectionId, logger))
   }
 
   private async resumeUnsafe(connectionId: string, logger: AppLogger): Promise<void> {
@@ -813,9 +782,7 @@ class DefaultConnectionManager implements ConnectionManager {
   }
 
   async deleteConnection(connectionId: string, logger: AppLogger): Promise<void> {
-    return this.withConnectionLock(connectionId, 'delete', () =>
-      this.deleteConnectionUnsafe(connectionId, logger)
-    )
+    return this.withConnectionLock(connectionId, 'delete', () => this.deleteConnectionUnsafe(connectionId, logger))
   }
 
   private async deleteConnectionUnsafe(connectionId: string, logger: AppLogger): Promise<void> {
@@ -844,9 +811,7 @@ class DefaultConnectionManager implements ConnectionManager {
   }
 
   async hardDeleteConnection(connectionId: string, logger: AppLogger): Promise<void> {
-    return this.withConnectionLock(connectionId, 'hard_delete', () =>
-      this.hardDeleteConnectionUnsafe(connectionId, logger)
-    )
+    return this.withConnectionLock(connectionId, 'hard_delete', () => this.hardDeleteConnectionUnsafe(connectionId, logger))
   }
 
   private async hardDeleteConnectionUnsafe(connectionId: string, logger: AppLogger): Promise<void> {
@@ -922,10 +887,7 @@ class DefaultConnectionManager implements ConnectionManager {
     return output
   }
 
-  private syncManagedConnection(
-    connectionId: string,
-    patch: Omit<UpsertManagedConnectionInput, 'connectionId'>
-  ): void {
+  private syncManagedConnection(connectionId: string, patch: Omit<UpsertManagedConnectionInput, 'connectionId'>): void {
     const previous = this.managedSyncByConnection.get(connectionId) ?? Promise.resolve()
     const next = previous
       .catch(() => undefined)
@@ -962,13 +924,7 @@ class DefaultConnectionManager implements ConnectionManager {
     })
   }
 
-  private emitStatusChanged(
-    connectionId: string,
-    previous: string | null,
-    current: string,
-    desired: 'running' | 'stopped' | 'paused' | 'deleted',
-    reason: string
-  ): void {
+  private emitStatusChanged(connectionId: string, previous: string | null, current: string, desired: 'running' | 'stopped' | 'paused' | 'deleted', reason: string): void {
     this.emitOutbox(connectionId, 'connection.status.changed', {
       previous,
       current,
@@ -998,70 +954,55 @@ export const getLogger = (): AppLogger => managerInstance.getLogger()
 
 export const resolveStartupConnectionIds = (): Promise<string[]> => connectionManager.resolveStartupConnectionIds()
 
-export const getOrCreateRuntime = (connectionId: string): ConnectionRuntime =>
-  connectionManager.getOrCreateRuntime(connectionId)
+export const getOrCreateRuntime = (connectionId: string): ConnectionRuntime => connectionManager.getOrCreateRuntime(connectionId)
 
 /** Cria uma entrada de conexão no manager sem iniciar o socket. */
-export const createConnection = (connectionId: string): ConnectionInfo =>
-  connectionManager.createConnection(connectionId)
+export const createConnection = (connectionId: string): ConnectionInfo => connectionManager.createConnection(connectionId)
 
 /** Retorna informações públicas de todas as conexões registradas. */
 export const listConnections = (): ConnectionInfo[] => connectionManager.listConnections()
 
 /** Retorna informações públicas de uma conexão, ou null se não existir. */
-export const getConnection = (connectionId: string): ConnectionInfo | null =>
-  connectionManager.getConnection(connectionId)
+export const getConnection = (connectionId: string): ConnectionInfo | null => connectionManager.getConnection(connectionId)
 
 /** Atualiza o rótulo de uma conexão. */
-export const setConnectionLabel = (connectionId: string, label: string | null): void =>
-  connectionManager.setConnectionLabel(connectionId, label)
+export const setConnectionLabel = (connectionId: string, label: string | null): void => connectionManager.setConnectionLabel(connectionId, label)
 
 /** Armazena o QR code recebido e atualiza o status para 'qr'. */
 export const setQrCode = (connectionId: string, qr: string): void => connectionManager.setQrCode(connectionId, qr)
 
 /** Atualiza o status de uma conexão baseado em eventos de conexão do Baileys. */
-export const setConnectionStatus = (connectionId: string, status: 'open' | 'close'): void =>
-  connectionManager.setConnectionStatus(connectionId, status)
+export const setConnectionStatus = (connectionId: string, status: 'open' | 'close'): void => connectionManager.setConnectionStatus(connectionId, status)
 
 /** Retorna o socket ativo de uma conexão, se disponível. */
-export const getActiveSocket = (connectionId: string): WASocket | null =>
-  connectionManager.getActiveSocket(connectionId)
+export const getActiveSocket = (connectionId: string): WASocket | null => connectionManager.getActiveSocket(connectionId)
 
 /** Substitui o socket ativo de uma conexão por uma nova geração. */
-export const replaceSocket = (connectionId: string, reason: string): Promise<void> =>
-  connectionManager.replaceSocket(connectionId, reason)
+export const replaceSocket = (connectionId: string, reason: string): Promise<void> => connectionManager.replaceSocket(connectionId, reason)
 
 /** Agenda uma reconexão com janela mínima e exclusão mútua por connectionId. */
-export const scheduleReconnect = (connectionId: string, reason: string): Promise<void> =>
-  connectionManager.scheduleReconnect(connectionId, reason)
+export const scheduleReconnect = (connectionId: string, reason: string): Promise<void> => connectionManager.scheduleReconnect(connectionId, reason)
 
 /** Inicia a conexão de uma instância existente, disparando criação de socket e QR. */
-export const connect = (connectionId: string, logger: AppLogger): Promise<void> =>
-  connectionManager.connect(connectionId, logger)
+export const connect = (connectionId: string, logger: AppLogger): Promise<void> => connectionManager.connect(connectionId, logger)
 
 /** Desconecta uma instância, encerrando o socket sem agendar reconexão. */
-export const disconnect = (connectionId: string, logger: AppLogger): Promise<void> =>
-  connectionManager.disconnect(connectionId, logger)
+export const disconnect = (connectionId: string, logger: AppLogger): Promise<void> => connectionManager.disconnect(connectionId, logger)
 
 /** Reinicia uma instância: desconecta e reconecta. */
-export const restart = (connectionId: string, logger: AppLogger): Promise<void> =>
-  connectionManager.restart(connectionId, logger)
+export const restart = (connectionId: string, logger: AppLogger): Promise<void> => connectionManager.restart(connectionId, logger)
 
 /** Pausa uma instância: encerra socket e marca estado administrativo como paused. */
-export const pause = (connectionId: string, logger: AppLogger): Promise<void> =>
-  connectionManager.pause(connectionId, logger)
+export const pause = (connectionId: string, logger: AppLogger): Promise<void> => connectionManager.pause(connectionId, logger)
 
 /** Retoma uma instância pausada: define desired_state running e reconecta. */
-export const resume = (connectionId: string, logger: AppLogger): Promise<void> =>
-  connectionManager.resume(connectionId, logger)
+export const resume = (connectionId: string, logger: AppLogger): Promise<void> => connectionManager.resume(connectionId, logger)
 
 /** Remove uma instância do manager, desconectando-a se ativa. */
-export const deleteConnection = (connectionId: string, logger: AppLogger): Promise<void> =>
-  connectionManager.deleteConnection(connectionId, logger)
+export const deleteConnection = (connectionId: string, logger: AppLogger): Promise<void> => connectionManager.deleteConnection(connectionId, logger)
 
 /** Remove uma instância e limpa credenciais/sessão persistidas (hard delete). */
-export const hardDeleteConnection = (connectionId: string, logger: AppLogger): Promise<void> =>
-  connectionManager.hardDeleteConnection(connectionId, logger)
+export const hardDeleteConnection = (connectionId: string, logger: AppLogger): Promise<void> => connectionManager.hardDeleteConnection(connectionId, logger)
 
 /** Retorna os snapshots operacionais para o servidor de métricas do antiban. */
 export const getOperationalSnapshots = () => connectionManager.getOperationalSnapshots()
@@ -1070,5 +1011,4 @@ export const getOperationalSnapshots = () => connectionManager.getOperationalSna
 export const getAntiBanStats = (): unknown => connectionManager.getAntiBanStats()
 
 /** Retorna as estatísticas antiban por connection_id para observabilidade multi-conexão. */
-export const getAntiBanStatsByConnection = (): Record<string, unknown> =>
-  connectionManager.getAntiBanStatsByConnection()
+export const getAntiBanStatsByConnection = (): Record<string, unknown> => connectionManager.getAntiBanStatsByConnection()

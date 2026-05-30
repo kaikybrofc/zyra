@@ -40,4 +40,3 @@ describe('history-sync', () => {
     expect(policyB.shouldSyncHistoryMessage({} as never)).toBe(false)
   })
 })
-

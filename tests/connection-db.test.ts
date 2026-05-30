@@ -45,16 +45,8 @@ describe('ensureMysqlConnection', () => {
     await ensureMysqlConnection(pool as never, 'conn-b')
 
     expect(pool.execute).toHaveBeenCalledTimes(2)
-    expect(pool.execute).toHaveBeenNthCalledWith(
-      1,
-      expect.stringContaining('INSERT INTO connections'),
-      ['conn-a', 'conn-a']
-    )
-    expect(pool.execute).toHaveBeenNthCalledWith(
-      2,
-      expect.stringContaining('INSERT INTO connections'),
-      ['conn-b', 'conn-b']
-    )
+    expect(pool.execute).toHaveBeenNthCalledWith(1, expect.stringContaining('INSERT INTO connections'), ['conn-a', 'conn-a'])
+    expect(pool.execute).toHaveBeenNthCalledWith(2, expect.stringContaining('INSERT INTO connections'), ['conn-b', 'conn-b'])
   })
 
   it('não reinserta a mesma conexão depois do primeiro sucesso', async () => {

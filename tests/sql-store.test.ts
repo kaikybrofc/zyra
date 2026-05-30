@@ -220,7 +220,9 @@ describe('sql-store', () => {
 
     const executionLog: string[] = []
     let unblockFirst!: () => void
-    const firstBarrier = new Promise<void>((res) => { unblockFirst = res })
+    const firstBarrier = new Promise<void>((res) => {
+      unblockFirst = res
+    })
     let executeCount = 0
 
     const pool = {
@@ -253,7 +255,7 @@ describe('sql-store', () => {
     unblockFirst()
     await Promise.all([p1, p2])
 
-    const firstP2Start = executionLog.indexOf('start-' + String(executionLog.filter(e => e.startsWith('start-')).length))
+    const firstP2Start = executionLog.indexOf('start-' + String(executionLog.filter((e) => e.startsWith('start-')).length))
     const lastP1End = executionLog.lastIndexOf('end-1')
     expect(lastP1End).toBeLessThan(firstP2Start === -1 ? Infinity : firstP2Start)
     expect(pool.execute).toHaveBeenCalled()
@@ -262,7 +264,8 @@ describe('sql-store', () => {
   it('nao degrada users.display_name quando o candidato e pior', async () => {
     mockConfig.mysqlUrl = 'mysql://test'
     const pool = {
-      execute: vi.fn()
+      execute: vi
+        .fn()
         .mockResolvedValueOnce([[{ user_id: '11111111-1111-1111-1111-111111111111' }]])
         .mockResolvedValueOnce([[{ display_name: 'João Silva' }]])
         .mockResolvedValue([[]]),
@@ -286,16 +289,15 @@ describe('sql-store', () => {
       name: '5511999999999',
     } as never)
 
-    const updateUserCall = pool.execute.mock.calls.find(([sql]) =>
-      typeof sql === 'string' && sql.includes('UPDATE users') && sql.includes('SET display_name = ?')
-    )
+    const updateUserCall = pool.execute.mock.calls.find(([sql]) => typeof sql === 'string' && sql.includes('UPDATE users') && sql.includes('SET display_name = ?'))
     expect(updateUserCall).toBeUndefined()
   })
 
   it('persiste nome melhor no cache de contato quando o existente e pior', async () => {
     mockConfig.mysqlUrl = 'mysql://test'
     const pool = {
-      execute: vi.fn()
+      execute: vi
+        .fn()
         .mockResolvedValueOnce([[{ user_id: '11111111-1111-1111-1111-111111111111' }]])
         .mockResolvedValueOnce([[{ display_name: '5511999999999' }]])
         .mockResolvedValueOnce([[]])
@@ -322,9 +324,7 @@ describe('sql-store', () => {
       notify: 'João Silva',
     } as never)
 
-    const upsertContactCall = pool.execute.mock.calls.find(([sql]) =>
-      typeof sql === 'string' && sql.includes('INSERT INTO wa_contacts_cache')
-    )
+    const upsertContactCall = pool.execute.mock.calls.find(([sql]) => typeof sql === 'string' && sql.includes('INSERT INTO wa_contacts_cache'))
     expect(upsertContactCall).toBeTruthy()
     expect(upsertContactCall?.[1]).toContain('João Silva')
   })
@@ -332,7 +332,8 @@ describe('sql-store', () => {
   it('setChat preserva display_name melhor quando chega candidato pior', async () => {
     mockConfig.mysqlUrl = 'mysql://test'
     const pool = {
-      execute: vi.fn()
+      execute: vi
+        .fn()
         .mockResolvedValueOnce([[{ display_name: 'João Silva' }]])
         .mockResolvedValueOnce([[{ user_id: '11111111-1111-1111-1111-111111111111' }]])
         .mockResolvedValueOnce([[{ display_name: 'João Silva' }]])
@@ -357,9 +358,7 @@ describe('sql-store', () => {
       name: '5511999999999',
     } as never)
 
-    const upsertChatCall = pool.execute.mock.calls.find(([sql]) =>
-      typeof sql === 'string' && sql.includes('INSERT INTO chats')
-    )
+    const upsertChatCall = pool.execute.mock.calls.find(([sql]) => typeof sql === 'string' && sql.includes('INSERT INTO chats'))
     expect(upsertChatCall?.[1]).toContain('João Silva')
     expect(upsertChatCall?.[1]).not.toContain('5511999999999')
   })
@@ -367,7 +366,8 @@ describe('sql-store', () => {
   it('setChat promove display_name melhor quando chega candidato melhor', async () => {
     mockConfig.mysqlUrl = 'mysql://test'
     const pool = {
-      execute: vi.fn()
+      execute: vi
+        .fn()
         .mockResolvedValueOnce([[{ display_name: '5511999999999' }]])
         .mockResolvedValueOnce([[{ user_id: '11111111-1111-1111-1111-111111111111' }]])
         .mockResolvedValueOnce([[{ display_name: '5511999999999' }]])
@@ -392,16 +392,15 @@ describe('sql-store', () => {
       name: 'João Silva',
     } as never)
 
-    const upsertChatCall = pool.execute.mock.calls.find(([sql]) =>
-      typeof sql === 'string' && sql.includes('INSERT INTO chats')
-    )
+    const upsertChatCall = pool.execute.mock.calls.find(([sql]) => typeof sql === 'string' && sql.includes('INSERT INTO chats'))
     expect(upsertChatCall?.[1]).toContain('João Silva')
   })
 
   it('setContact melhora chats.display_name quando o valor atual e pior', async () => {
     mockConfig.mysqlUrl = 'mysql://test'
     const pool = {
-      execute: vi.fn()
+      execute: vi
+        .fn()
         .mockResolvedValueOnce([[{ user_id: '11111111-1111-1111-1111-111111111111' }]])
         .mockResolvedValueOnce([[{ display_name: '5511999999999' }]])
         .mockResolvedValueOnce([[]])
@@ -428,21 +427,14 @@ describe('sql-store', () => {
       notify: 'João Silva',
     } as never)
 
-    const updateChatCall = pool.execute.mock.calls.find(([sql]) =>
-      typeof sql === 'string' && sql.includes('UPDATE chats') && sql.includes('SET display_name = ?')
-    )
+    const updateChatCall = pool.execute.mock.calls.find(([sql]) => typeof sql === 'string' && sql.includes('UPDATE chats') && sql.includes('SET display_name = ?'))
     expect(updateChatCall?.[1]).toContain('João Silva')
   })
 
   it('confirma materializacao atomica de usuario ao persistir contato', async () => {
     mockConfig.mysqlUrl = 'mysql://test'
     const connection = {
-      execute: vi.fn()
-        .mockResolvedValueOnce([[]])
-        .mockResolvedValueOnce([[]])
-        .mockResolvedValueOnce([[]])
-        .mockResolvedValueOnce([[]])
-        .mockResolvedValueOnce([[]]),
+      execute: vi.fn().mockResolvedValueOnce([[]]).mockResolvedValueOnce([[]]).mockResolvedValueOnce([[]]).mockResolvedValueOnce([[]]).mockResolvedValueOnce([[]]),
       query: vi.fn().mockResolvedValue([[{ acquired: 1 }]]),
       beginTransaction: vi.fn().mockResolvedValue(undefined),
       commit: vi.fn().mockResolvedValue(undefined),
@@ -450,7 +442,8 @@ describe('sql-store', () => {
       release: vi.fn(),
     }
     const pool = {
-      execute: vi.fn()
+      execute: vi
+        .fn()
         .mockResolvedValueOnce([[{ display_name: null }]])
         .mockResolvedValueOnce([[{ display_name: null }]])
         .mockResolvedValue([[]]),
@@ -475,12 +468,8 @@ describe('sql-store', () => {
     expect(connection.query).toHaveBeenNthCalledWith(1, 'SELECT GET_LOCK(?, 10) AS acquired', [expect.stringContaining('zyra:user:')])
     expect(connection.query).toHaveBeenNthCalledWith(2, 'SELECT RELEASE_LOCK(?)', [expect.stringContaining('zyra:user:')])
 
-    const insertUserCall = connection.execute.mock.calls.find(([sql]) =>
-      typeof sql === 'string' && sql.includes('INSERT INTO users')
-    )
-    const insertIdentifierCall = connection.execute.mock.calls.find(([sql]) =>
-      typeof sql === 'string' && sql.includes('INSERT INTO user_identifiers')
-    )
+    const insertUserCall = connection.execute.mock.calls.find(([sql]) => typeof sql === 'string' && sql.includes('INSERT INTO users'))
+    const insertIdentifierCall = connection.execute.mock.calls.find(([sql]) => typeof sql === 'string' && sql.includes('INSERT INTO user_identifiers'))
     expect(insertUserCall).toBeTruthy()
     expect(insertIdentifierCall).toBeTruthy()
   })
@@ -488,10 +477,7 @@ describe('sql-store', () => {
   it('faz rollback da materializacao de usuario quando a transacao falha', async () => {
     mockConfig.mysqlUrl = 'mysql://test'
     const connection = {
-      execute: vi.fn()
-        .mockResolvedValueOnce([[]])
-        .mockResolvedValueOnce([[]])
-        .mockRejectedValueOnce(new Error('boom')),
+      execute: vi.fn().mockResolvedValueOnce([[]]).mockResolvedValueOnce([[]]).mockRejectedValueOnce(new Error('boom')),
       query: vi.fn().mockResolvedValue([[{ acquired: 1 }]]),
       beginTransaction: vi.fn().mockResolvedValue(undefined),
       commit: vi.fn().mockResolvedValue(undefined),
@@ -508,11 +494,13 @@ describe('sql-store', () => {
     const { createSqlStore } = await import('../src/store/sql-store.ts')
     const store = createSqlStore('tenant')
 
-    await expect(store.setContact('5511999999999@s.whatsapp.net', {
-      id: '5511999999999@s.whatsapp.net',
-      name: 'João Silva',
-      notify: 'João Silva',
-    } as never)).resolves.toBeUndefined()
+    await expect(
+      store.setContact('5511999999999@s.whatsapp.net', {
+        id: '5511999999999@s.whatsapp.net',
+        name: 'João Silva',
+        notify: 'João Silva',
+      } as never)
+    ).resolves.toBeUndefined()
 
     expect(connection.beginTransaction).toHaveBeenCalledOnce()
     expect(connection.commit).not.toHaveBeenCalled()
@@ -527,7 +515,8 @@ describe('sql-store', () => {
     mockConfig.mysqlUrl = 'mysql://test'
     const senderUserId = '11111111-1111-1111-1111-111111111111'
     const pool = {
-      execute: vi.fn()
+      execute: vi
+        .fn()
         .mockResolvedValueOnce([[{ id: 321 }]])
         .mockResolvedValueOnce([[{ sender_user_id: senderUserId }]])
         .mockResolvedValueOnce([[]]),
@@ -551,29 +540,17 @@ describe('sql-store', () => {
       type: 'delete',
     })
 
-    const insertEventCall = pool.execute.mock.calls.find(([sql]) =>
-      typeof sql === 'string' && sql.includes('INSERT INTO message_events')
-    )
+    const insertEventCall = pool.execute.mock.calls.find(([sql]) => typeof sql === 'string' && sql.includes('INSERT INTO message_events'))
     expect(insertEventCall).toBeTruthy()
-    expect(insertEventCall?.[1]).toEqual([
-      'tenant',
-      'chat@s.whatsapp.net',
-      'msg-1',
-      'delete',
-      0,
-      null,
-      1,
-      senderUserId,
-      321,
-      null,
-    ])
+    expect(insertEventCall?.[1]).toEqual(['tenant', 'chat@s.whatsapp.net', 'msg-1', 'delete', 0, null, 1, senderUserId, 321, null])
   })
 
   it('recordEvent nao inventa actor_user_id e usa sender apenas como target fallback', async () => {
     mockConfig.mysqlUrl = 'mysql://test'
     const senderUserId = '11111111-1111-1111-1111-111111111111'
     const pool = {
-      execute: vi.fn()
+      execute: vi
+        .fn()
         .mockResolvedValueOnce([[{ id: 654 }]])
         .mockResolvedValueOnce([[{ sender_user_id: senderUserId }]])
         .mockResolvedValueOnce([[]]),
@@ -597,22 +574,9 @@ describe('sql-store', () => {
       messageKey: { chatJid: 'chat@s.whatsapp.net', messageId: 'msg-1', fromMe: false },
     })
 
-    const insertEventCall = pool.execute.mock.calls.find(([sql]) =>
-      typeof sql === 'string' && sql.includes('INSERT INTO events_log')
-    )
+    const insertEventCall = pool.execute.mock.calls.find(([sql]) => typeof sql === 'string' && sql.includes('INSERT INTO events_log'))
     expect(insertEventCall).toBeTruthy()
-    expect(insertEventCall?.[1]).toEqual([
-      'tenant',
-      'message.delete',
-      0,
-      null,
-      1,
-      senderUserId,
-      'chat@s.whatsapp.net',
-      null,
-      654,
-      null,
-    ])
+    expect(insertEventCall?.[1]).toEqual(['tenant', 'message.delete', 0, null, 1, senderUserId, 'chat@s.whatsapp.net', null, 654, null])
   })
 
   it('setMessage nao apaga timestamp existente com payload parcial', async () => {
@@ -640,9 +604,7 @@ describe('sql-store', () => {
       message: undefined,
     } as never)
 
-    const insertMessageCall = pool.execute.mock.calls.find(([sql]) =>
-      typeof sql === 'string' && sql.includes('INSERT INTO messages')
-    )
+    const insertMessageCall = pool.execute.mock.calls.find(([sql]) => typeof sql === 'string' && sql.includes('INSERT INTO messages'))
     expect(insertMessageCall?.[0]).toContain('timestamp = COALESCE(VALUES(timestamp), timestamp)')
   })
 
@@ -670,9 +632,7 @@ describe('sql-store', () => {
       message: undefined,
     } as never)
 
-    const insertMessageCall = pool.execute.mock.calls.find(([sql]) =>
-      typeof sql === 'string' && sql.includes('INSERT INTO messages')
-    )
+    const insertMessageCall = pool.execute.mock.calls.find(([sql]) => typeof sql === 'string' && sql.includes('INSERT INTO messages'))
     expect(insertMessageCall?.[0]).toContain('is_ephemeral = COALESCE(VALUES(is_ephemeral), is_ephemeral)')
   })
 })

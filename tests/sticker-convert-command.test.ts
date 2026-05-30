@@ -28,11 +28,7 @@ describe('sticker convert commands', () => {
 
     await toImageCommand.execute(ctx as never)
 
-    expect(ctx.reply).toHaveBeenCalledWith(
-      'Não encontrei mídia para converter.\n'
-      + 'Use o comando respondendo uma figurinha.\n'
-      + 'Dica: se houver figurinha recente no chat, o bot tenta usar automaticamente.'
-    )
+    expect(ctx.reply).toHaveBeenCalledWith('Não encontrei mídia para converter.\n' + 'Use o comando respondendo uma figurinha.\n' + 'Dica: se houver figurinha recente no chat, o bot tenta usar automaticamente.')
     expect(convertStickerWebpMock).not.toHaveBeenCalled()
   })
 

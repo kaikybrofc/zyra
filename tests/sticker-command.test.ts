@@ -42,12 +42,7 @@ describe('sticker command', () => {
 
     await stickerCommand.execute(ctx as never)
 
-    expect(ctx.reply).toHaveBeenCalledWith(
-      'Não encontrei mídia para converter em figurinha.\n'
-      + 'Use `!s` na legenda da mídia ou respondendo uma imagem/vídeo/sticker.\n'
-      + 'Dica: `!s` sozinho reutiliza seu template salvo.\n'
-      + 'Para ajuda completa use `!s -h`.'
-    )
+    expect(ctx.reply).toHaveBeenCalledWith('Não encontrei mídia para converter em figurinha.\n' + 'Use `!s` na legenda da mídia ou respondendo uma imagem/vídeo/sticker.\n' + 'Dica: `!s` sozinho reutiliza seu template salvo.\n' + 'Para ajuda completa use `!s -h`.')
     expect(ctx.sendSticker).not.toHaveBeenCalled()
   })
 

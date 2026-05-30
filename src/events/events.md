@@ -3,6 +3,7 @@
 Este arquivo mostra exemplos de **payload recebido do Baileys** em `register.ts`.
 
 Importante:
+
 - Os exemplos abaixo representam o objeto que chega no callback `sock.ev.on(...)`.
 - Dados sensíveis foram anonimizados.
 - Onde havia confirmação em logs reais, foi mantido o padrão observado em produção.
@@ -73,9 +74,7 @@ Importante:
 ## 7) `chats.delete`
 
 ```json
-[
-  "12***59@g.us"
-]
+["12***59@g.us"]
 ```
 
 ## 8) `presence.update`
@@ -302,9 +301,7 @@ Importante:
 
 ```json
 {
-  "blocklist": [
-    "55***88@s.whatsapp.net"
-  ]
+  "blocklist": ["55***88@s.whatsapp.net"]
 }
 ```
 
@@ -313,9 +310,7 @@ Importante:
 ```json
 {
   "type": "add",
-  "blocklist": [
-    "55***88@s.whatsapp.net"
-  ]
+  "blocklist": ["55***88@s.whatsapp.net"]
 }
 ```
 

@@ -98,9 +98,7 @@ export const validateWebhookUrl = (value: string): WebhookUrlValidationResult =>
   return { ok: true, parsedUrl }
 }
 
-export type WebhookTargetResolution =
-  | { ok: true; targetUrl: string; parsedUrl: URL }
-  | { ok: false; reason: string }
+export type WebhookTargetResolution = { ok: true; targetUrl: string; parsedUrl: URL } | { ok: false; reason: string }
 
 /**
  * Resolve um destino seguro de webhook a partir de uma allowlist de servidor.

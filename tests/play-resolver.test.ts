@@ -1,12 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  __playResolverInternals,
-  buildPlayFileName,
-  formatDurationMs,
-  isLikelyTransientPlayStreamError,
-  refreshTrackIfNeeded,
-  resolvePlayInput,
-} from '../src/utils/play-resolver.ts'
+import { __playResolverInternals, buildPlayFileName, formatDurationMs, isLikelyTransientPlayStreamError, refreshTrackIfNeeded, resolvePlayInput } from '../src/utils/play-resolver.ts'
 
 const fetchMock = vi.fn<typeof fetch>()
 
@@ -30,15 +23,9 @@ describe('play resolver', () => {
   })
 
   it('nao aceita hosts que apenas terminam com youtube.com', () => {
-    expect(__playResolverInternals.normalizeLookupKey('https://evil-youtube.com/watch?v=dQw4w9WgXcQ')).toBe(
-      'url:https://evil-youtube.com/watch?v=dQw4w9WgXcQ'
-    )
-    expect(__playResolverInternals.normalizeLookupKey('https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ')).toBe(
-      'url:https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ'
-    )
-    expect(__playResolverInternals.normalizeLookupKey('https://example.com/path/youtube.com/watch?v=dQw4w9WgXcQ')).toBe(
-      'url:https://example.com/path/youtube.com/watch?v=dQw4w9WgXcQ'
-    )
+    expect(__playResolverInternals.normalizeLookupKey('https://evil-youtube.com/watch?v=dQw4w9WgXcQ')).toBe('url:https://evil-youtube.com/watch?v=dQw4w9WgXcQ')
+    expect(__playResolverInternals.normalizeLookupKey('https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ')).toBe('url:https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ')
+    expect(__playResolverInternals.normalizeLookupKey('https://example.com/path/youtube.com/watch?v=dQw4w9WgXcQ')).toBe('url:https://example.com/path/youtube.com/watch?v=dQw4w9WgXcQ')
   })
 
   it('extrai candidatos da busca e limita a cinco itens únicos', () => {
@@ -56,39 +43,42 @@ describe('play resolver', () => {
       ],
     }
 
-    expect(__playResolverInternals.extractSearchCandidateUrls(payload)).toEqual([
-      'https://www.youtube.com/watch?v=sVx1mJDeUjY',
-      'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-      'https://example.com/1',
-      'https://example.com/2',
-      'https://example.com/3',
-    ])
+    expect(__playResolverInternals.extractSearchCandidateUrls(payload)).toEqual(['https://www.youtube.com/watch?v=sVx1mJDeUjY', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 'https://example.com/1', 'https://example.com/2', 'https://example.com/3'])
   })
 
   it('resolve busca textual até obter um downloadUrl final', async () => {
     fetchMock
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({
-          results: [{ id: 'dQw4w9WgXcQ', type: 'video' }],
-        }), { status: 200 })
+        new Response(
+          JSON.stringify({
+            results: [{ id: 'dQw4w9WgXcQ', type: 'video' }],
+          }),
+          { status: 200 }
+        )
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({
-          statusUrl: 'https://hub.ytconvert.org/api/status/abc',
-          title: 'Never Gonna Give You Up',
-          duration: 213,
-          thumbnail: 'https://img.example/create.jpg',
-        }), { status: 200 })
+        new Response(
+          JSON.stringify({
+            statusUrl: 'https://hub.ytconvert.org/api/status/abc',
+            title: 'Never Gonna Give You Up',
+            duration: 213,
+            thumbnail: 'https://img.example/create.jpg',
+          }),
+          { status: 200 }
+        )
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({
-          status: 'completed',
-          downloadUrl: 'https://cdn.example/audio.mp3?exp=4102444800',
-          title: 'Never Gonna Give You Up',
-          duration: 213,
-          webpage_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-          thumbnail_url: 'https://img.example/final.jpg',
-        }), { status: 200 })
+        new Response(
+          JSON.stringify({
+            status: 'completed',
+            downloadUrl: 'https://cdn.example/audio.mp3?exp=4102444800',
+            title: 'Never Gonna Give You Up',
+            duration: 213,
+            webpage_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+            thumbnail_url: 'https://img.example/final.jpg',
+          }),
+          { status: 200 }
+        )
       )
 
     const track = await resolvePlayInput('rick astley')
@@ -124,25 +114,29 @@ describe('play resolver', () => {
   it('faz fallback sequencial quando o primeiro candidato falha', async () => {
     fetchMock
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({
-          results: [
-            { url: 'https://example.com/first', type: 'video' },
-            { url: 'https://example.com/second', type: 'video' },
-          ],
-        }), { status: 200 })
+        new Response(
+          JSON.stringify({
+            results: [
+              { url: 'https://example.com/first', type: 'video' },
+              { url: 'https://example.com/second', type: 'video' },
+            ],
+          }),
+          { status: 200 }
+        )
       )
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'bad candidate' }), { status: 500 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ statusUrl: 'https://hub.ytconvert.org/api/status/ok' }), { status: 200 }))
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ statusUrl: 'https://hub.ytconvert.org/api/status/ok' }), { status: 200 })
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({
-          status: 'completed',
-          downloadUrl: 'https://cdn.example/final.mp3?expires=4102444800',
-          title: 'Track',
-          duration: '03:15',
-          url: 'https://example.com/second',
-        }), { status: 200 })
+        new Response(
+          JSON.stringify({
+            status: 'completed',
+            downloadUrl: 'https://cdn.example/final.mp3?expires=4102444800',
+            title: 'Track',
+            duration: '03:15',
+            url: 'https://example.com/second',
+          }),
+          { status: 200 }
+        )
       )
 
     const track = await resolvePlayInput('fallback query')
@@ -155,30 +149,28 @@ describe('play resolver', () => {
   it('deduplica resoluções concorrentes pela mesma chave', async () => {
     let resolveSearch: ((value: Response) => void) | null = null
     fetchMock.mockImplementationOnce(
-      () => new Promise<Response>((resolve) => {
-        resolveSearch = resolve
-      })
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveSearch = resolve
+        })
     )
-    fetchMock
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ statusUrl: 'https://hub.ytconvert.org/api/status/abc' }), { status: 200 })
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ statusUrl: 'https://hub.ytconvert.org/api/status/abc' }), { status: 200 })).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
           status: 'completed',
           downloadUrl: 'https://cdn.example/audio.mp3?exp=4102444800',
           title: 'Title',
           duration: 60,
           url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-        }), { status: 200 })
+        }),
+        { status: 200 }
       )
+    )
 
     const first = resolvePlayInput('same query')
     const second = resolvePlayInput('same query')
 
-    resolveSearch?.(
-      new Response(JSON.stringify({ results: [{ id: 'dQw4w9WgXcQ', type: 'video' }] }), { status: 200 })
-    )
+    resolveSearch?.(new Response(JSON.stringify({ results: [{ id: 'dQw4w9WgXcQ', type: 'video' }] }), { status: 200 }))
 
     const [trackA, trackB] = await Promise.all([first, second])
     expect(trackA.streamUrl).toBe(trackB.streamUrl)
@@ -187,20 +179,19 @@ describe('play resolver', () => {
 
   it('usa cache para não refazer resolução idêntica', async () => {
     fetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [{ id: 'dQw4w9WgXcQ', type: 'video' }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ statusUrl: 'https://hub.ytconvert.org/api/status/abc' }), { status: 200 }))
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ results: [{ id: 'dQw4w9WgXcQ', type: 'video' }] }), { status: 200 })
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ statusUrl: 'https://hub.ytconvert.org/api/status/abc' }), { status: 200 })
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({
-          status: 'completed',
-          downloadUrl: 'https://cdn.example/audio.mp3?exp=4102444800',
-          title: 'Cached title',
-          duration: 120,
-          url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-        }), { status: 200 })
+        new Response(
+          JSON.stringify({
+            status: 'completed',
+            downloadUrl: 'https://cdn.example/audio.mp3?exp=4102444800',
+            title: 'Cached title',
+            duration: 120,
+            url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          }),
+          { status: 200 }
+        )
       )
 
     const first = await resolvePlayInput('cached query')
@@ -230,20 +221,19 @@ describe('play resolver', () => {
     }
 
     fetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [{ url: 'https://example.com/source', type: 'video' }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ statusUrl: 'https://hub.ytconvert.org/api/status/refresh' }), { status: 200 }))
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ results: [{ url: 'https://example.com/source', type: 'video' }] }), { status: 200 })
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ statusUrl: 'https://hub.ytconvert.org/api/status/refresh' }), { status: 200 })
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({
-          status: 'completed',
-          downloadUrl: 'https://cdn.example/new.mp3?exp=4102444800',
-          title: 'Atualizada',
-          duration: 11,
-          url: 'https://example.com/source',
-        }), { status: 200 })
+        new Response(
+          JSON.stringify({
+            status: 'completed',
+            downloadUrl: 'https://cdn.example/new.mp3?exp=4102444800',
+            title: 'Atualizada',
+            duration: 11,
+            url: 'https://example.com/source',
+          }),
+          { status: 200 }
+        )
       )
 
     const refreshed = await refreshTrackIfNeeded(track)
@@ -254,26 +244,32 @@ describe('play resolver', () => {
   it('reaproveita metadados do candidato quando o status final não os traz', async () => {
     fetchMock
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({
-          items: [{
-            id: 'https://www.youtube.com/watch?v=xm7TWFiZgTw',
-            type: 'stream',
-            title: 'Bala Love',
-            uploaderName: 'MC ANJIM',
-            duration: 252,
-            thumbnailUrl: 'https://img.example/bala.jpg',
-          }],
-        }), { status: 200 })
+        new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: 'https://www.youtube.com/watch?v=xm7TWFiZgTw',
+                type: 'stream',
+                title: 'Bala Love',
+                uploaderName: 'MC ANJIM',
+                duration: 252,
+                thumbnailUrl: 'https://img.example/bala.jpg',
+              },
+            ],
+          }),
+          { status: 200 }
+        )
       )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ statusUrl: 'https://hub.ytconvert.org/api/status/meta' }), { status: 200 }))
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ statusUrl: 'https://hub.ytconvert.org/api/status/meta' }), { status: 200 })
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({
-          status: 'completed',
-          downloadUrl: 'https://cdn.example/bala.mp3?exp=4102444800',
-          url: 'https://www.youtube.com/watch?v=xm7TWFiZgTw',
-        }), { status: 200 })
+        new Response(
+          JSON.stringify({
+            status: 'completed',
+            downloadUrl: 'https://cdn.example/bala.mp3?exp=4102444800',
+            url: 'https://www.youtube.com/watch?v=xm7TWFiZgTw',
+          }),
+          { status: 200 }
+        )
       )
 
     const track = await resolvePlayInput('bala love')

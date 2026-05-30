@@ -13,7 +13,12 @@ const normalizeDomain = (value: string | undefined): string | null => {
   if (!value) return null
   const raw = value.trim().toLowerCase()
   if (!raw) return null
-  return raw.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0] ?? null
+  return (
+    raw
+      .replace(/^https?:\/\//, '')
+      .replace(/^www\./, '')
+      .split('/')[0] ?? null
+  )
 }
 
 /**
@@ -78,12 +83,7 @@ export const antilinkCommand: Command = {
       const enabled = await groupFeatureStore.isAntilinkEnabled(ctx.chatId)
       const domains = await groupFeatureStore.getAntilinkAllowedDomains(ctx.chatId)
       const allowOwnInvite = await groupFeatureStore.isAntilinkAllowOwnGroupInviteEnabled(ctx.chatId)
-      await ctx.reply(
-        `ℹ️ Status do antilink: *${enabled ? 'ATIVADO' : 'DESATIVADO'}*\n` +
-          `ℹ️ Convite do próprio grupo: *${allowOwnInvite ? 'PERMITIDO' : 'BLOQUEADO'}*\n` +
-          `ℹ️ Whitelist: ${domains.length ? domains.join(', ') : 'vazia'}\n` +
-          'Uso: !antilink on|off | !antilink allow add|remove|list dominio.com | !antilink invite on|off'
-      )
+      await ctx.reply(`ℹ️ Status do antilink: *${enabled ? 'ATIVADO' : 'DESATIVADO'}*\n` + `ℹ️ Convite do próprio grupo: *${allowOwnInvite ? 'PERMITIDO' : 'BLOQUEADO'}*\n` + `ℹ️ Whitelist: ${domains.length ? domains.join(', ') : 'vazia'}\n` + 'Uso: !antilink on|off | !antilink allow add|remove|list dominio.com | !antilink invite on|off')
       return
     }
 

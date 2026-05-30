@@ -4,14 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       commit_message:
-        description: "Mensagem de commit para a wiki"
+        description: 'Mensagem de commit para a wiki'
         required: false
-        default: "docs(wiki): sincroniza conteúdo a partir de docs/wiki"
+        default: 'docs(wiki): sincroniza conteúdo a partir de docs/wiki'
         type: string
   schedule:
-    - cron: "0 9 * * 1"
+    - cron: '0 9 * * 1'
   push:
-    branches: [ master ]
+    branches: [master]
 
 permissions:
   contents: write

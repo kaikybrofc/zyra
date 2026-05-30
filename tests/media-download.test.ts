@@ -45,16 +45,12 @@ afterEach(async () => {
 describe('media-download', () => {
   it('retorna classificacao de payload invalido quando mediaKey esta ausente', async () => {
     const { inspectIncomingMediaDownload } = await import('../src/utils/media-download.ts')
-    expect(inspectIncomingMediaDownload('imageMessage', { url: 'https://cdn.example/file' })).toEqual(
-      expect.objectContaining({ downloadable: false, reason: 'missing-media-key', hasUrl: true, hasMediaKey: false })
-    )
+    expect(inspectIncomingMediaDownload('imageMessage', { url: 'https://cdn.example/file' })).toEqual(expect.objectContaining({ downloadable: false, reason: 'missing-media-key', hasUrl: true, hasMediaKey: false }))
   })
 
   it('retorna classificacao de payload invalido quando mediaKey esta vazia', async () => {
     const { inspectIncomingMediaDownload } = await import('../src/utils/media-download.ts')
-    expect(inspectIncomingMediaDownload('imageMessage', { directPath: '/m', mediaKey: Buffer.alloc(0) })).toEqual(
-      expect.objectContaining({ downloadable: false, reason: 'empty-media-key', hasDirectPath: true, hasMediaKey: false, mediaKeyLength: 0 })
-    )
+    expect(inspectIncomingMediaDownload('imageMessage', { directPath: '/m', mediaKey: Buffer.alloc(0) })).toEqual(expect.objectContaining({ downloadable: false, reason: 'empty-media-key', hasDirectPath: true, hasMediaKey: false, mediaKeyLength: 0 }))
   })
   it('retorna null quando auto download esta desativado', async () => {
     const { downloadIncomingMediaToDisk } = await import('../src/utils/media-download.ts')
@@ -137,7 +133,10 @@ describe('media-download', () => {
     expect(localPath).toBeNull()
     // file must not have been written
     const dir = path.join(tempDir, 'default')
-    const exists = await fs.access(dir).then(() => true).catch(() => false)
+    const exists = await fs
+      .access(dir)
+      .then(() => true)
+      .catch(() => false)
     expect(exists).toBe(false)
   })
 

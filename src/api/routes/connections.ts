@@ -2,26 +2,9 @@ import { createHmac, randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { config } from '../../config/index.js'
 import type { AppLogger } from '../../observability/logger.js'
-import {
-  type ConnectionInfo,
-  createConnection,
-  listConnections,
-  getConnection,
-  setConnectionLabel,
-  connect,
-  disconnect,
-  restart,
-  deleteConnection,
-} from '../../core/connection/manager.js'
+import { type ConnectionInfo, createConnection, listConnections, getConnection, setConnectionLabel, connect, disconnect, restart, deleteConnection } from '../../core/connection/manager.js'
 import { startPairing, getPairingState, cancelPairing } from '../../core/connection/pairing-service.js'
-import {
-  getManagedConnection,
-  listManagedConnections,
-  upsertManagedConnection,
-  type ManagedConnectionRecord,
-  type ManagedConnectionPairingState,
-  type ManagedConnectionStatus,
-} from '../../store/connection-admin-store.js'
+import { getManagedConnection, listManagedConnections, upsertManagedConnection, type ManagedConnectionRecord, type ManagedConnectionPairingState, type ManagedConnectionStatus } from '../../store/connection-admin-store.js'
 import { validateConnectionId } from '../../core/connection/connection-id.js'
 import { readBody, parseJson, sendJson, sendError, matchRoute } from '../http.js'
 
@@ -59,9 +42,7 @@ type ConnectionWithAdmin = ConnectionInfo & {
 }
 
 const signWebhookCommand = (secret: string, timestamp: string, body: string): string => {
-  const digest = createHmac('sha256', secret)
-    .update(`${timestamp}.${body}`)
-    .digest('hex')
+  const digest = createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex')
   return `sha256=${digest}`
 }
 
@@ -71,10 +52,7 @@ const resolveLocalWebhookIngressUrl = (): string => {
   return `http://${host}:${config.apiPort}/webhooks/connections`
 }
 
-const dispatchStartCommandViaWebhook = async (
-  connectionId: string,
-  label: string | null
-): Promise<{ status: number; payload: WebhookCommandResponse | { error: string } }> => {
+const dispatchStartCommandViaWebhook = async (connectionId: string, label: string | null): Promise<{ status: number; payload: WebhookCommandResponse | { error: string } }> => {
   const sharedSecret = config.webhookSharedSecret?.trim() ?? ''
   if (!sharedSecret) {
     return {
@@ -174,10 +152,7 @@ const toIso = (value: number | null | undefined): string | null => {
   return new Date(value).toISOString()
 }
 
-const mapRuntimeStatusToManaged = (
-  status: ConnectionInfo['status'],
-  desiredState: ConnectionAdminStatusView['desired_state']
-): ManagedConnectionStatus => {
+const mapRuntimeStatusToManaged = (status: ConnectionInfo['status'], desiredState: ConnectionAdminStatusView['desired_state']): ManagedConnectionStatus => {
   if (status === 'created') {
     if (desiredState === 'deleted') return 'deleted'
     if (desiredState === 'paused') return 'paused'
@@ -192,20 +167,12 @@ const mapRuntimeStatusToManaged = (
   return 'closed'
 }
 
-const buildAdminStatus = (
-  runtime: ConnectionInfo | null,
-  managed: ManagedConnectionRecord | null
-): ConnectionAdminStatusView => {
+const buildAdminStatus = (runtime: ConnectionInfo | null, managed: ManagedConnectionRecord | null): ConnectionAdminStatusView => {
   const connectionId = runtime?.connectionId ?? managed?.connectionId ?? ''
   const desiredState = managed?.desiredState ?? 'running'
   const runtimeStatus = runtime?.status ?? null
-  const resolvedStatus = runtimeStatus
-    ? mapRuntimeStatusToManaged(runtimeStatus, desiredState)
-    : (managed?.status ?? 'closed')
-  const pairingState =
-    runtimeStatus === 'qr'
-      ? 'qr_ready'
-      : (managed?.pairingState ?? 'not_required')
+  const resolvedStatus = runtimeStatus ? mapRuntimeStatusToManaged(runtimeStatus, desiredState) : (managed?.status ?? 'closed')
+  const pairingState = runtimeStatus === 'qr' ? 'qr_ready' : (managed?.pairingState ?? 'not_required')
   const socketActive = runtime?.socketActive ?? managed?.status === 'open'
 
   return {
@@ -225,10 +192,7 @@ const buildAdminStatus = (
   }
 }
 
-const buildConnectionWithAdmin = (
-  runtime: ConnectionInfo | null,
-  managed: ManagedConnectionRecord | null
-): ConnectionWithAdmin | null => {
+const buildConnectionWithAdmin = (runtime: ConnectionInfo | null, managed: ManagedConnectionRecord | null): ConnectionWithAdmin | null => {
   const base = runtime ?? (managed ? managedRecordToConnectionInfo(managed) : null)
   if (!base) return null
   return {
@@ -271,10 +235,7 @@ const listConnectionsWithManagedFallback = async (logger: AppLogger): Promise<Co
   return merged.sort((a, b) => a.connectionId.localeCompare(b.connectionId))
 }
 
-const getConnectionWithManagedFallback = async (
-  connectionId: string,
-  logger: AppLogger
-): Promise<ConnectionWithAdmin | null> => {
+const getConnectionWithManagedFallback = async (connectionId: string, logger: AppLogger): Promise<ConnectionWithAdmin | null> => {
   const runtime = getConnection(connectionId)
   if (runtime) {
     let managed: ManagedConnectionRecord | null = null
@@ -303,10 +264,7 @@ const getConnectionWithManagedFallback = async (
 
 const managerCanExecuteRuntimeActions = () => config.bootstrapConnectionsEnabled
 
-const parseConnectionIdOrReply = (
-  res: ServerResponse,
-  rawConnectionId: string | null | undefined
-): string | null => {
+const parseConnectionIdOrReply = (res: ServerResponse, rawConnectionId: string | null | undefined): string | null => {
   const parsed = validateConnectionId(rawConnectionId)
   if (!parsed.ok) {
     sendError(res, 400, parsed.reason)
@@ -319,12 +277,7 @@ const parseConnectionIdOrReply = (
  * Trata requisições HTTP para os endpoints de gerenciamento de conexões.
  * Retorna `true` se a rota foi reconhecida e tratada, `false` caso contrário.
  */
-export async function handleConnectionsRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  pathname: string,
-  logger: AppLogger
-): Promise<boolean> {
+export async function handleConnectionsRoutes(req: IncomingMessage, res: ServerResponse, pathname: string, logger: AppLogger): Promise<boolean> {
   const method = req.method ?? 'GET'
 
   // GET /connections
@@ -375,7 +328,10 @@ export async function handleConnectionsRoutes(
     const id = parseConnectionIdOrReply(res, single.params['id'])
     if (!id) return true
     const info = await getConnectionWithManagedFallback(id, logger)
-    if (!info) { sendError(res, 404, 'conexão não encontrada'); return true }
+    if (!info) {
+      sendError(res, 404, 'conexão não encontrada')
+      return true
+    }
     sendJson(res, 200, info)
     return true
   }
@@ -385,11 +341,14 @@ export async function handleConnectionsRoutes(
     const id = parseConnectionIdOrReply(res, single.params['id'])
     if (!id) return true
     const body = parseJson<{ label?: string | null }>(await readBody(req))
-    const label = body && 'label' in body ? body.label ?? null : null
+    const label = body && 'label' in body ? (body.label ?? null) : null
 
     if (!managerCanExecuteRuntimeActions()) {
       const existing = await getManagedConnection(id)
-      if (!existing) { sendError(res, 404, 'conexão não encontrada'); return true }
+      if (!existing) {
+        sendError(res, 404, 'conexão não encontrada')
+        return true
+      }
       const updated = await upsertManagedConnection({
         connectionId: id,
         displayName: label,
@@ -398,7 +357,10 @@ export async function handleConnectionsRoutes(
       return true
     }
 
-    if (!getConnection(id)) { sendError(res, 404, 'conexão não encontrada'); return true }
+    if (!getConnection(id)) {
+      sendError(res, 404, 'conexão não encontrada')
+      return true
+    }
     if (body && 'label' in body) setConnectionLabel(id, label)
     sendJson(res, 200, await getConnectionWithManagedFallback(id, logger))
     return true
@@ -411,7 +373,10 @@ export async function handleConnectionsRoutes(
 
     if (!managerCanExecuteRuntimeActions()) {
       const existing = await getManagedConnection(id)
-      if (!existing) { sendError(res, 404, 'conexão não encontrada'); return true }
+      if (!existing) {
+        sendError(res, 404, 'conexão não encontrada')
+        return true
+      }
       await upsertManagedConnection({
         connectionId: id,
         status: 'deleted',
@@ -424,7 +389,10 @@ export async function handleConnectionsRoutes(
       return true
     }
 
-    if (!getConnection(id)) { sendError(res, 404, 'conexão não encontrada'); return true }
+    if (!getConnection(id)) {
+      sendError(res, 404, 'conexão não encontrada')
+      return true
+    }
     await deleteConnection(id, logger)
     res.statusCode = 204
     res.end()
@@ -436,8 +404,14 @@ export async function handleConnectionsRoutes(
   if (method === 'POST' && connectMatch) {
     const id = parseConnectionIdOrReply(res, connectMatch.params['id'])
     if (!id) return true
-    if (!managerCanExecuteRuntimeActions()) { sendError(res, 409, MANAGER_DISABLED_ERROR); return true }
-    if (!getConnection(id)) { sendError(res, 404, 'conexão não encontrada'); return true }
+    if (!managerCanExecuteRuntimeActions()) {
+      sendError(res, 409, MANAGER_DISABLED_ERROR)
+      return true
+    }
+    if (!getConnection(id)) {
+      sendError(res, 404, 'conexão não encontrada')
+      return true
+    }
     await connect(id, logger)
     sendJson(res, 200, await getConnectionWithManagedFallback(id, logger))
     return true
@@ -481,8 +455,14 @@ export async function handleConnectionsRoutes(
   if (method === 'POST' && disconnectMatch) {
     const id = parseConnectionIdOrReply(res, disconnectMatch.params['id'])
     if (!id) return true
-    if (!managerCanExecuteRuntimeActions()) { sendError(res, 409, MANAGER_DISABLED_ERROR); return true }
-    if (!getConnection(id)) { sendError(res, 404, 'conexão não encontrada'); return true }
+    if (!managerCanExecuteRuntimeActions()) {
+      sendError(res, 409, MANAGER_DISABLED_ERROR)
+      return true
+    }
+    if (!getConnection(id)) {
+      sendError(res, 404, 'conexão não encontrada')
+      return true
+    }
     await disconnect(id, logger)
     sendJson(res, 200, getConnection(id))
     return true
@@ -493,8 +473,14 @@ export async function handleConnectionsRoutes(
   if (method === 'POST' && restartMatch) {
     const id = parseConnectionIdOrReply(res, restartMatch.params['id'])
     if (!id) return true
-    if (!managerCanExecuteRuntimeActions()) { sendError(res, 409, MANAGER_DISABLED_ERROR); return true }
-    if (!getConnection(id)) { sendError(res, 404, 'conexão não encontrada'); return true }
+    if (!managerCanExecuteRuntimeActions()) {
+      sendError(res, 409, MANAGER_DISABLED_ERROR)
+      return true
+    }
+    if (!getConnection(id)) {
+      sendError(res, 404, 'conexão não encontrada')
+      return true
+    }
     await restart(id, logger)
     sendJson(res, 200, await getConnectionWithManagedFallback(id, logger))
     return true
@@ -505,7 +491,10 @@ export async function handleConnectionsRoutes(
   if (method === 'POST' && pairingStartMatch) {
     const id = parseConnectionIdOrReply(res, pairingStartMatch.params['id'])
     if (!id) return true
-    if (!managerCanExecuteRuntimeActions()) { sendError(res, 409, MANAGER_DISABLED_ERROR); return true }
+    if (!managerCanExecuteRuntimeActions()) {
+      sendError(res, 409, MANAGER_DISABLED_ERROR)
+      return true
+    }
     if (!getConnection(id)) {
       createConnection(id)
     }
@@ -519,8 +508,14 @@ export async function handleConnectionsRoutes(
   if (method === 'POST' && pairingCancelMatch) {
     const id = parseConnectionIdOrReply(res, pairingCancelMatch.params['id'])
     if (!id) return true
-    if (!managerCanExecuteRuntimeActions()) { sendError(res, 409, MANAGER_DISABLED_ERROR); return true }
-    if (!getConnection(id)) { sendError(res, 404, 'conexão não encontrada'); return true }
+    if (!managerCanExecuteRuntimeActions()) {
+      sendError(res, 409, MANAGER_DISABLED_ERROR)
+      return true
+    }
+    if (!getConnection(id)) {
+      sendError(res, 404, 'conexão não encontrada')
+      return true
+    }
     const state = await cancelPairing(id)
     sendJson(res, 200, state)
     return true
@@ -531,8 +526,14 @@ export async function handleConnectionsRoutes(
   if (method === 'GET' && pairingGetMatch) {
     const id = parseConnectionIdOrReply(res, pairingGetMatch.params['id'])
     if (!id) return true
-    if (!managerCanExecuteRuntimeActions()) { sendError(res, 409, MANAGER_DISABLED_ERROR); return true }
-    if (!getConnection(id)) { sendError(res, 404, 'conexão não encontrada'); return true }
+    if (!managerCanExecuteRuntimeActions()) {
+      sendError(res, 409, MANAGER_DISABLED_ERROR)
+      return true
+    }
+    if (!getConnection(id)) {
+      sendError(res, 404, 'conexão não encontrada')
+      return true
+    }
     const state = await getPairingState(id)
     sendJson(res, 200, state)
     return true
@@ -544,7 +545,10 @@ export async function handleConnectionsRoutes(
     const id = parseConnectionIdOrReply(res, statusMatch.params['id'])
     if (!id) return true
     const info = await getConnectionWithManagedFallback(id, logger)
-    if (!info) { sendError(res, 404, 'conexão não encontrada'); return true }
+    if (!info) {
+      sendError(res, 404, 'conexão não encontrada')
+      return true
+    }
     sendJson(res, 200, {
       ...info.admin,
       connectionId: info.connectionId,
@@ -562,8 +566,14 @@ export async function handleConnectionsRoutes(
     const id = parseConnectionIdOrReply(res, qrMatch.params['id'])
     if (!id) return true
     const info = getConnection(id)
-    if (!info) { sendError(res, 404, 'conexão não encontrada'); return true }
-    if (!info.qrCode) { sendError(res, 404, 'QR code não disponível'); return true }
+    if (!info) {
+      sendError(res, 404, 'conexão não encontrada')
+      return true
+    }
+    if (!info.qrCode) {
+      sendError(res, 404, 'QR code não disponível')
+      return true
+    }
     sendJson(res, 200, { connectionId: info.connectionId, qrCode: info.qrCode, qrCodeAt: info.qrCodeAt })
     return true
   }

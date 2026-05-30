@@ -162,10 +162,7 @@ describe('antiban metrics server', () => {
     await serverHandler?.({ url: '/metrics?format=json' }, res)
 
     const payload = JSON.parse(res.body) as { operations: Array<{ connectionId: string; socketActive?: boolean }> }
-    expect(payload.operations).toEqual([
-      expect.objectContaining({ connectionId: 'conn-a', socketActive: false }),
-      expect.objectContaining({ connectionId: 'conn-b', socketActive: true }),
-    ])
+    expect(payload.operations).toEqual([expect.objectContaining({ connectionId: 'conn-a', socketActive: false }), expect.objectContaining({ connectionId: 'conn-b', socketActive: true })])
   })
 
   it('responde 404 para rotas desconhecidas', async () => {

@@ -1,18 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import {
-  addCommand,
-  banCommand,
-  demoteCommand,
-  descriptionCommand,
-  ephemeralCommand,
-  groupCommand,
-  inviteCommand,
-  kickCommand,
-  lockCommand,
-  promoteCommand,
-  revokeInviteCommand,
-  subjectCommand,
-} from '../src/commands/admin.ts'
+import { addCommand, banCommand, demoteCommand, descriptionCommand, ephemeralCommand, groupCommand, inviteCommand, kickCommand, lockCommand, promoteCommand, revokeInviteCommand, subjectCommand } from '../src/commands/admin.ts'
 
 type AdminCtx = {
   isGroup: boolean
@@ -96,9 +83,7 @@ describe('admin commands', () => {
 
     await banCommand.execute(ctx as never)
 
-    expect(ctx.reply).toHaveBeenCalledWith(
-      'Uso: !ban 5511999999999, @usuario ou respondendo a mensagem do usuário'
-    )
+    expect(ctx.reply).toHaveBeenCalledWith('Uso: !ban 5511999999999, @usuario ou respondendo a mensagem do usuário')
     expect(ctx.ban).not.toHaveBeenCalled()
   })
 
@@ -157,9 +142,7 @@ describe('admin commands', () => {
 
     await expect(banCommand.execute(ctx as never)).resolves.toBeUndefined()
 
-    expect(ctx.reply).toHaveBeenCalledWith(
-      '❌ Falha ao aplicar banimento: erro interno temporário do WhatsApp. Tente novamente em instantes.'
-    )
+    expect(ctx.reply).toHaveBeenCalledWith('❌ Falha ao aplicar banimento: erro interno temporário do WhatsApp. Tente novamente em instantes.')
   })
 
   it('confirma sucesso quando API retorna erro mas o usuario ja foi removido', async () => {
@@ -195,9 +178,7 @@ describe('admin commands', () => {
     await kickCommand.execute(notAuthorizedCtx as never)
     await promoteCommand.execute(notFoundCtx as never)
 
-    expect(notAuthorizedCtx.reply).toHaveBeenCalledWith(
-      '❌ Falha ao aplicar remoção: sem permissão para executar esta ação. Verifique se o bot é admin do grupo.'
-    )
+    expect(notAuthorizedCtx.reply).toHaveBeenCalledWith('❌ Falha ao aplicar remoção: sem permissão para executar esta ação. Verifique se o bot é admin do grupo.')
     expect(notFoundCtx.reply).toHaveBeenCalledWith('❌ Falha ao aplicar promoção: participante não encontrado no grupo.')
   })
 
@@ -213,9 +194,7 @@ describe('admin commands', () => {
 
     await banCommand.execute(ctx as never)
 
-    expect(ctx.reply).toHaveBeenCalledWith(
-      '❌ Falha ao aplicar banimento: erro interno temporário do WhatsApp. Tente novamente em instantes.'
-    )
+    expect(ctx.reply).toHaveBeenCalledWith('❌ Falha ao aplicar banimento: erro interno temporário do WhatsApp. Tente novamente em instantes.')
   })
 
   it('grupo aplica announcement mode e aceita sinonimos de on/off', async () => {

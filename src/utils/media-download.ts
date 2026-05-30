@@ -262,15 +262,7 @@ const pruneMediaStorage = async (baseDir: string): Promise<void> => {
  *
  * @returns Caminho relativo do arquivo salvo, ou `null` quando não aplicável/falha de validação.
  */
-export async function downloadIncomingMediaToDisk(params: {
-  messageId: string
-  messageDbId: number
-  mediaType: MediaMessageType
-  mediaNode: unknown
-  fileName?: string | null
-  mimeType?: string | null
-  connectionId: string
-}): Promise<string | null> {
+export async function downloadIncomingMediaToDisk(params: { messageId: string; messageDbId: number; mediaType: MediaMessageType; mediaNode: unknown; fileName?: string | null; mimeType?: string | null; connectionId: string }): Promise<string | null> {
   if (!config.mediaAutoDownload) return null
   const streamType = MEDIA_STREAM_TYPE[params.mediaType]
   const inspection = inspectIncomingMediaDownload(params.mediaType, params.mediaNode)

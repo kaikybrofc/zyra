@@ -1,6 +1,7 @@
 # Zyra Platform Guide
 
 Guia técnico unificado da plataforma Zyra, consolidando:
+
 - arquitetura modular de comandos
 - modelo de dados MySQL
 - práticas de operação e evolução
@@ -10,6 +11,7 @@ Este documento é a visão de alto nível para desenvolvimento e manutenção.
 ## Escopo
 
 O Zyra foi projetado para:
+
 - processar eventos WhatsApp em tempo real com Baileys
 - executar comandos desacoplados do transporte
 - manter persistência híbrida e auditável
@@ -23,6 +25,7 @@ A camada de comandos remove o acoplamento direto com `WASocket`.
 Cada comando recebe um `CommandContext` (`ctx`) com APIs estáveis.
 
 Benefícios:
+
 1. desacoplamento da lib de transporte
 2. manutenção centralizada de regras comuns
 3. evolução segura para middlewares, plugins e hot-reload
@@ -36,6 +39,7 @@ Benefícios:
 4. Tratamento de erro e observabilidade ficam centralizados.
 
 Componentes principais:
+
 - `src/core/command-runtime/context.ts`
 - `src/core/command-runtime/processor.ts`
 - `src/core/command-runtime/admin.ts`
@@ -122,11 +126,13 @@ export const ola: Command = {
 ## Operação e Manutenção
 
 Comandos úteis:
+
 - `npm run db:init`: cria tabelas ausentes a partir do schema documentado
 - `npm run db:verify`: valida tabelas e contagens
 - `npm run pm2:start`: sobe runtime de produção
 
 Configurações relevantes:
+
 - `WA_COMMAND_PREFIX`
 - `WA_CONNECTION_ID`
 - `WA_CONNECTION_IDS`

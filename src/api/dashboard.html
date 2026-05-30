@@ -1,707 +1,1030 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Zyra — Dashboard</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0 }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Zyra — Dashboard</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
 
-    :root {
-      --bg: #0d0d12;
-      --surface: #161620;
-      --surface2: #1e1e2c;
-      --border: #2a2a3d;
-      --text: #ddddf0;
-      --muted: #7070a0;
-      --green: #22c55e;
-      --green-dim: #16a34a22;
-      --yellow: #f59e0b;
-      --yellow-dim: #d9770622;
-      --red: #ef4444;
-      --red-dim: #dc262622;
-      --blue: #3b82f6;
-      --blue-dim: #1d4ed822;
-      --purple: #8b5cf6;
-      --radius: 8px;
-    }
+      :root {
+        --bg: #0d0d12;
+        --surface: #161620;
+        --surface2: #1e1e2c;
+        --border: #2a2a3d;
+        --text: #ddddf0;
+        --muted: #7070a0;
+        --green: #22c55e;
+        --green-dim: #16a34a22;
+        --yellow: #f59e0b;
+        --yellow-dim: #d9770622;
+        --red: #ef4444;
+        --red-dim: #dc262622;
+        --blue: #3b82f6;
+        --blue-dim: #1d4ed822;
+        --purple: #8b5cf6;
+        --radius: 8px;
+      }
 
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: system-ui, -apple-system, sans-serif;
-      font-size: 14px;
-      min-height: 100vh;
-    }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        font-size: 14px;
+        min-height: 100vh;
+      }
 
-    /* ── Auth ───────────────────────────────────────────────────── */
-    .overlay {
-      position: fixed; inset: 0;
-      background: rgba(0,0,0,0.88);
-      display: flex; align-items: center; justify-content: center;
-      z-index: 1000;
-    }
-    .overlay.hidden { display: none }
+      /* ── Auth ───────────────────────────────────────────────────── */
+      .overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.88);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+      }
+      .overlay.hidden {
+        display: none;
+      }
 
-    .auth-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 36px 32px;
-      width: 360px;
-      text-align: center;
-    }
-    .auth-card .logo-big { font-size: 36px; margin-bottom: 8px }
-    .auth-card h2 { font-size: 20px; margin-bottom: 6px; color: var(--purple) }
-    .auth-card p { color: var(--muted); margin-bottom: 24px; font-size: 13px }
+      .auth-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 36px 32px;
+        width: 360px;
+        text-align: center;
+      }
+      .auth-card .logo-big {
+        font-size: 36px;
+        margin-bottom: 8px;
+      }
+      .auth-card h2 {
+        font-size: 20px;
+        margin-bottom: 6px;
+        color: var(--purple);
+      }
+      .auth-card p {
+        color: var(--muted);
+        margin-bottom: 24px;
+        font-size: 13px;
+      }
 
-    /* ── Header ─────────────────────────────────────────────────── */
-    header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 0 24px;
-      height: 54px;
-      display: flex; align-items: center; justify-content: space-between;
-      position: sticky; top: 0; z-index: 100;
-    }
+      /* ── Header ─────────────────────────────────────────────────── */
+      header {
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        padding: 0 24px;
+        height: 54px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+      }
 
-    .logo { font-size: 17px; font-weight: 700; color: var(--purple) }
+      .logo {
+        font-size: 17px;
+        font-weight: 700;
+        color: var(--purple);
+      }
 
-    .header-right { display: flex; align-items: center; gap: 16px }
+      .header-right {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
 
-    .last-updated { color: var(--muted); font-size: 12px }
+      .last-updated {
+        color: var(--muted);
+        font-size: 12px;
+      }
 
-    .toggle-label {
-      display: flex; align-items: center; gap: 6px;
-      color: var(--muted); font-size: 13px; cursor: pointer;
-    }
-    .toggle-label input { cursor: pointer; accent-color: var(--purple) }
+      .toggle-label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 13px;
+        cursor: pointer;
+      }
+      .toggle-label input {
+        cursor: pointer;
+        accent-color: var(--purple);
+      }
 
-    /* ── Tabs ───────────────────────────────────────────────────── */
-    nav.tabs {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 0 24px;
-      display: flex; gap: 2px;
-    }
+      /* ── Tabs ───────────────────────────────────────────────────── */
+      nav.tabs {
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        padding: 0 24px;
+        display: flex;
+        gap: 2px;
+      }
 
-    .tab-btn {
-      background: none; border: none;
-      color: var(--muted);
-      padding: 14px 16px;
-      cursor: pointer; font-size: 14px; font-family: inherit;
-      border-bottom: 2px solid transparent;
-      transition: color 0.15s, border-color 0.15s;
-    }
-    .tab-btn:hover { color: var(--text) }
-    .tab-btn.active { color: var(--text); border-bottom-color: var(--purple) }
+      .tab-btn {
+        background: none;
+        border: none;
+        color: var(--muted);
+        padding: 14px 16px;
+        cursor: pointer;
+        font-size: 14px;
+        font-family: inherit;
+        border-bottom: 2px solid transparent;
+        transition:
+          color 0.15s,
+          border-color 0.15s;
+      }
+      .tab-btn:hover {
+        color: var(--text);
+      }
+      .tab-btn.active {
+        color: var(--text);
+        border-bottom-color: var(--purple);
+      }
 
-    /* ── Main ───────────────────────────────────────────────────── */
-    main { padding: 24px; max-width: 960px; margin: 0 auto }
+      /* ── Main ───────────────────────────────────────────────────── */
+      main {
+        padding: 24px;
+        max-width: 960px;
+        margin: 0 auto;
+      }
 
-    .tab-content { display: none }
-    .tab-content.active { display: block }
+      .tab-content {
+        display: none;
+      }
+      .tab-content.active {
+        display: block;
+      }
 
-    /* ── Section header ─────────────────────────────────────────── */
-    .section-hdr {
-      display: flex; align-items: center; justify-content: space-between;
-      margin-bottom: 20px;
-    }
-    .section-hdr h2 { font-size: 16px; font-weight: 600 }
+      /* ── Section header ─────────────────────────────────────────── */
+      .section-hdr {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 20px;
+      }
+      .section-hdr h2 {
+        font-size: 16px;
+        font-weight: 600;
+      }
 
-    .section-desc { color: var(--muted); font-size: 13px; margin-bottom: 20px; line-height: 1.5 }
-    .section-desc code {
-      background: var(--surface2); padding: 1px 5px;
-      border-radius: 4px; font-family: monospace; font-size: 12px;
-    }
+      .section-desc {
+        color: var(--muted);
+        font-size: 13px;
+        margin-bottom: 20px;
+        line-height: 1.5;
+      }
+      .section-desc code {
+        background: var(--surface2);
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 12px;
+      }
 
-    /* ── Cards ──────────────────────────────────────────────────── */
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      margin-bottom: 12px;
-      overflow: hidden;
-    }
+      /* ── Cards ──────────────────────────────────────────────────── */
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        margin-bottom: 12px;
+        overflow: hidden;
+      }
 
-    .card-header {
-      padding: 14px 16px;
-      display: flex; align-items: center; gap: 12px;
-    }
+      .card-header {
+        padding: 14px 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
 
-    .card-title {
-      flex: 1; font-weight: 600; font-size: 14px;
-      word-break: break-all; font-family: monospace;
-    }
+      .card-title {
+        flex: 1;
+        font-weight: 600;
+        font-size: 14px;
+        word-break: break-all;
+        font-family: monospace;
+      }
 
-    .card-sub { color: var(--muted); font-size: 12px; margin-top: 3px; font-family: sans-serif }
+      .card-sub {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 3px;
+        font-family: sans-serif;
+      }
 
-    .muted-note { color: var(--muted); font-size: 12px; margin-bottom: 12px; line-height: 1.5 }
-    .meta-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 8px;
-    }
-    .meta-item {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 10px;
-    }
-    .meta-k {
-      color: var(--muted);
-      font-size: 11px;
-      margin-bottom: 4px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .meta-v { font-family: monospace; font-size: 13px; word-break: break-word }
+      .muted-note {
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 12px;
+        line-height: 1.5;
+      }
+      .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 8px;
+      }
+      .meta-item {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 10px;
+      }
+      .meta-k {
+        color: var(--muted);
+        font-size: 11px;
+        margin-bottom: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .meta-v {
+        font-family: monospace;
+        font-size: 13px;
+        word-break: break-word;
+      }
 
-    /* ── Badges ─────────────────────────────────────────────────── */
-    .badge {
-      padding: 2px 8px; border-radius: 20px;
-      font-size: 11px; font-weight: 600; white-space: nowrap;
-    }
-    .badge-green { background: var(--green-dim); color: var(--green) }
-    .badge-yellow { background: var(--yellow-dim); color: var(--yellow) }
-    .badge-red { background: var(--red-dim); color: var(--red) }
-    .badge-blue { background: var(--blue-dim); color: var(--blue) }
-    .badge-muted { background: var(--border); color: var(--muted) }
+      /* ── Badges ─────────────────────────────────────────────────── */
+      .badge {
+        padding: 2px 8px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .badge-green {
+        background: var(--green-dim);
+        color: var(--green);
+      }
+      .badge-yellow {
+        background: var(--yellow-dim);
+        color: var(--yellow);
+      }
+      .badge-red {
+        background: var(--red-dim);
+        color: var(--red);
+      }
+      .badge-blue {
+        background: var(--blue-dim);
+        color: var(--blue);
+      }
+      .badge-muted {
+        background: var(--border);
+        color: var(--muted);
+      }
 
-    /* ── Buttons ────────────────────────────────────────────────── */
-    button {
-      border: none; border-radius: 6px;
-      padding: 6px 14px; font-size: 13px;
-      cursor: pointer; font-family: inherit;
-      transition: opacity 0.15s;
-    }
-    button:hover:not(:disabled) { opacity: 0.82 }
-    button:disabled { opacity: 0.35; cursor: not-allowed }
+      /* ── Buttons ────────────────────────────────────────────────── */
+      button {
+        border: none;
+        border-radius: 6px;
+        padding: 6px 14px;
+        font-size: 13px;
+        cursor: pointer;
+        font-family: inherit;
+        transition: opacity 0.15s;
+      }
+      button:hover:not(:disabled) {
+        opacity: 0.82;
+      }
+      button:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+      }
 
-    .btn-primary { background: var(--purple); color: #fff }
-    .btn-green { background: var(--green); color: #000 }
-    .btn-red { background: var(--red); color: #fff }
-    .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border) }
-    .btn-sm { padding: 4px 10px; font-size: 12px }
+      .btn-primary {
+        background: var(--purple);
+        color: #fff;
+      }
+      .btn-green {
+        background: var(--green);
+        color: #000;
+      }
+      .btn-red {
+        background: var(--red);
+        color: #fff;
+      }
+      .btn-ghost {
+        background: var(--surface2);
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+      .btn-sm {
+        padding: 4px 10px;
+        font-size: 12px;
+      }
 
-    /* ── Actions row ────────────────────────────────────────────── */
-    .actions {
-      display: flex; gap: 8px; flex-wrap: wrap;
-      padding: 4px 16px 12px; align-items: center;
-    }
-    .actions-sep { flex: 1 }
+      /* ── Actions row ────────────────────────────────────────────── */
+      .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        padding: 4px 16px 12px;
+        align-items: center;
+      }
+      .actions-sep {
+        flex: 1;
+      }
 
-    /* ── Inputs ─────────────────────────────────────────────────── */
-    input, select, textarea {
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 6px; color: var(--text);
-      padding: 8px 12px; font-size: 14px; font-family: inherit; width: 100%;
-      outline: none; transition: border-color 0.15s;
-    }
-    input:focus, select:focus, textarea:focus { border-color: var(--purple) }
-    input::placeholder, textarea::placeholder { color: var(--muted) }
+      /* ── Inputs ─────────────────────────────────────────────────── */
+      input,
+      select,
+      textarea {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: var(--text);
+        padding: 8px 12px;
+        font-size: 14px;
+        font-family: inherit;
+        width: 100%;
+        outline: none;
+        transition: border-color 0.15s;
+      }
+      input:focus,
+      select:focus,
+      textarea:focus {
+        border-color: var(--purple);
+      }
+      input::placeholder,
+      textarea::placeholder {
+        color: var(--muted);
+      }
 
-    .form-row { margin-bottom: 14px }
-    .form-label { display: block; color: var(--muted); margin-bottom: 6px; font-size: 12px; font-weight: 500 }
-    .form-hint { color: var(--muted); font-size: 11px; margin-top: 4px }
+      .form-row {
+        margin-bottom: 14px;
+      }
+      .form-label {
+        display: block;
+        color: var(--muted);
+        margin-bottom: 6px;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .form-hint {
+        color: var(--muted);
+        font-size: 11px;
+        margin-top: 4px;
+      }
 
-    /* ── Modals ─────────────────────────────────────────────────── */
-    dialog {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 12px; color: var(--text);
-      padding: 24px; min-width: 340px; max-width: 480px; width: 92vw;
-      /* Force true centering across all browsers */
-      position: fixed; inset: 0; margin: auto; height: fit-content;
-    }
-    dialog::backdrop { background: rgba(0,0,0,0.7) }
+      /* ── Modals ─────────────────────────────────────────────────── */
+      dialog {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        color: var(--text);
+        padding: 24px;
+        min-width: 340px;
+        max-width: 480px;
+        width: 92vw;
+        /* Force true centering across all browsers */
+        position: fixed;
+        inset: 0;
+        margin: auto;
+        height: fit-content;
+      }
+      dialog::backdrop {
+        background: rgba(0, 0, 0, 0.7);
+      }
 
-    .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 20px }
+      .modal-title {
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 20px;
+      }
 
-    .modal-footer {
-      display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px;
-    }
+      .modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 20px;
+      }
 
-    /* ── QR code ────────────────────────────────────────────────── */
-    #qr-img { width: 240px; height: 240px; display: block; margin: 16px auto; border-radius: 8px }
-    .qr-hint { text-align: center; color: var(--muted); font-size: 12px; margin-top: 6px }
+      /* ── QR code ────────────────────────────────────────────────── */
+      #qr-img {
+        width: 240px;
+        height: 240px;
+        display: block;
+        margin: 16px auto;
+        border-radius: 8px;
+      }
+      .qr-hint {
+        text-align: center;
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 6px;
+      }
 
-    /* ── Nested webhook section ─────────────────────────────────── */
-    .nested-section {
-      background: var(--bg);
-      border-top: 1px solid var(--border);
-      padding: 12px 16px;
-    }
+      /* ── Nested webhook section ─────────────────────────────────── */
+      .nested-section {
+        background: var(--bg);
+        border-top: 1px solid var(--border);
+        padding: 12px 16px;
+      }
 
-    .nested-hdr {
-      display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;
-    }
-    .nested-hdr span {
-      color: var(--muted); font-size: 11px; font-weight: 600;
-      text-transform: uppercase; letter-spacing: 0.6px;
-    }
+      .nested-hdr {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+      .nested-hdr span {
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+      }
 
-    /* ── Webhook items ──────────────────────────────────────────── */
-    .wh-item {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 6px; margin-bottom: 8px; overflow: hidden;
-    }
+      /* ── Webhook items ──────────────────────────────────────────── */
+      .wh-item {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        margin-bottom: 8px;
+        overflow: hidden;
+      }
 
-    .wh-header {
-      padding: 10px 12px; display: flex; align-items: flex-start; gap: 10px;
-    }
+      .wh-header {
+        padding: 10px 12px;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+      }
 
-    .wh-info { flex: 1 }
-    .wh-url { font-size: 13px; word-break: break-all; font-weight: 500 }
-    .wh-meta { color: var(--muted); font-size: 11px; margin-top: 3px }
+      .wh-info {
+        flex: 1;
+      }
+      .wh-url {
+        font-size: 13px;
+        word-break: break-all;
+        font-weight: 500;
+      }
+      .wh-meta {
+        color: var(--muted);
+        font-size: 11px;
+        margin-top: 3px;
+      }
 
-    .wh-actions { display: flex; gap: 6px; padding: 0 12px 10px; flex-wrap: wrap }
+      .wh-actions {
+        display: flex;
+        gap: 6px;
+        padding: 0 12px 10px;
+        flex-wrap: wrap;
+      }
 
-    /* ── Connection details ─────────────────────────────────────── */
-    .details-section {
-      background: var(--bg);
-      border-top: 1px solid var(--border);
-      padding: 12px 16px;
-    }
-    .details-block { margin-top: 10px }
-    .endpoint-list {
-      margin-top: 12px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      overflow: hidden;
-    }
-    .endpoint-row {
-      display: grid;
-      grid-template-columns: 90px 1fr;
-      gap: 10px;
-      align-items: center;
-      padding: 8px 10px;
-      border-bottom: 1px solid var(--border);
-      background: var(--surface);
-    }
-    .endpoint-row:last-child { border-bottom: none }
-    .endpoint-method { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; color: var(--blue) }
-    .endpoint-main { min-width: 0 }
-    .endpoint-path {
-      font-family: monospace;
-      font-size: 12px;
-      color: var(--text);
-      word-break: break-all;
-    }
-    .endpoint-note {
-      margin-top: 3px;
-      color: var(--muted);
-      font-size: 11px;
-    }
-    .endpoint-tags {
-      margin-top: 6px;
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
+      /* ── Connection details ─────────────────────────────────────── */
+      .details-section {
+        background: var(--bg);
+        border-top: 1px solid var(--border);
+        padding: 12px 16px;
+      }
+      .details-block {
+        margin-top: 10px;
+      }
+      .endpoint-list {
+        margin-top: 12px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .endpoint-row {
+        display: grid;
+        grid-template-columns: 90px 1fr;
+        gap: 10px;
+        align-items: center;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+      }
+      .endpoint-row:last-child {
+        border-bottom: none;
+      }
+      .endpoint-method {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        color: var(--blue);
+      }
+      .endpoint-main {
+        min-width: 0;
+      }
+      .endpoint-path {
+        font-family: monospace;
+        font-size: 12px;
+        color: var(--text);
+        word-break: break-all;
+      }
+      .endpoint-note {
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .endpoint-tags {
+        margin-top: 6px;
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
 
-    /* ── Deliveries ─────────────────────────────────────────────── */
-    .deliveries-section {
-      background: var(--bg); border-top: 1px solid var(--border); padding: 8px 12px;
-    }
+      /* ── Deliveries ─────────────────────────────────────────────── */
+      .deliveries-section {
+        background: var(--bg);
+        border-top: 1px solid var(--border);
+        padding: 8px 12px;
+      }
 
-    .delivery-row {
-      display: flex; align-items: center; gap: 10px;
-      padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px;
-    }
-    .delivery-row:last-child { border-bottom: none }
-    .delivery-event { color: var(--muted); flex: 1; font-family: monospace; font-size: 11px }
-    .delivery-time { color: var(--muted); font-size: 11px; white-space: nowrap }
+      .delivery-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 12px;
+      }
+      .delivery-row:last-child {
+        border-bottom: none;
+      }
+      .delivery-event {
+        color: var(--muted);
+        flex: 1;
+        font-family: monospace;
+        font-size: 11px;
+      }
+      .delivery-time {
+        color: var(--muted);
+        font-size: 11px;
+        white-space: nowrap;
+      }
 
-    /* ── Empty / spinner ────────────────────────────────────────── */
-    .empty {
-      text-align: center; color: var(--muted);
-      padding: 48px 20px; font-size: 14px; line-height: 1.8;
-    }
+      /* ── Empty / spinner ────────────────────────────────────────── */
+      .empty {
+        text-align: center;
+        color: var(--muted);
+        padding: 48px 20px;
+        font-size: 14px;
+        line-height: 1.8;
+      }
 
-    .spinner {
-      display: inline-block; width: 18px; height: 18px;
-      border: 2px solid var(--border); border-top-color: var(--purple);
-      border-radius: 50%; animation: spin 0.6s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg) } }
+      .spinner {
+        display: inline-block;
+        width: 18px;
+        height: 18px;
+        border: 2px solid var(--border);
+        border-top-color: var(--purple);
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
 
-    /* ── Status dot ─────────────────────────────────────────────── */
-    .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0 }
-    .dot-green { background: var(--green) }
-    .dot-yellow { background: var(--yellow); animation: pulse 1.5s ease infinite }
-    .dot-gray { background: var(--muted) }
-    @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.35 } }
+      /* ── Status dot ─────────────────────────────────────────────── */
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .dot-green {
+        background: var(--green);
+      }
+      .dot-yellow {
+        background: var(--yellow);
+        animation: pulse 1.5s ease infinite;
+      }
+      .dot-gray {
+        background: var(--muted);
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.35;
+        }
+      }
 
-    /* ── Toast ──────────────────────────────────────────────────── */
-    #toast-container {
-      position: fixed; bottom: 24px; right: 24px;
-      display: flex; flex-direction: column; gap: 8px; z-index: 9999;
-    }
-    .toast {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 8px; padding: 12px 16px; font-size: 13px;
-      animation: slideIn 0.2s ease; min-width: 220px; max-width: 360px;
-    }
-    .toast-success { border-left: 3px solid var(--green) }
-    .toast-error { border-left: 3px solid var(--red) }
-    .toast-info { border-left: 3px solid var(--blue) }
-    @keyframes slideIn { from { transform: translateX(16px); opacity:0 } to { transform: translateX(0); opacity:1 } }
+      /* ── Toast ──────────────────────────────────────────────────── */
+      #toast-container {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        z-index: 9999;
+      }
+      .toast {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px 16px;
+        font-size: 13px;
+        animation: slideIn 0.2s ease;
+        min-width: 220px;
+        max-width: 360px;
+      }
+      .toast-success {
+        border-left: 3px solid var(--green);
+      }
+      .toast-error {
+        border-left: 3px solid var(--red);
+      }
+      .toast-info {
+        border-left: 3px solid var(--blue);
+      }
+      @keyframes slideIn {
+        from {
+          transform: translateX(16px);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
 
-    /* ── Responsive ─────────────────────────────────────────────── */
-    @media (max-width: 600px) {
-      main { padding: 16px }
-      .actions { flex-direction: column; align-items: stretch }
-    }
-  </style>
-</head>
-<body>
-
-<!-- Auth overlay -->
-<div id="auth-overlay" class="overlay">
-  <div class="auth-card">
-    <div class="logo-big">⚡</div>
-    <h2>Zyra Dashboard</h2>
-    <p>Digite a API key para acessar.<br>Deixe em branco se <code style="font-family:monospace;font-size:11px">WA_API_KEY</code> não estiver configurada.</p>
-    <div class="form-row">
-      <input id="api-key-input" type="password" placeholder="Bearer token"
-             onkeydown="if(event.key==='Enter')saveApiKey()">
+      /* ── Responsive ─────────────────────────────────────────────── */
+      @media (max-width: 600px) {
+        main {
+          padding: 16px;
+        }
+        .actions {
+          flex-direction: column;
+          align-items: stretch;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Auth overlay -->
+    <div id="auth-overlay" class="overlay">
+      <div class="auth-card">
+        <div class="logo-big">⚡</div>
+        <h2>Zyra Dashboard</h2>
+        <p>Digite a API key para acessar.<br />Deixe em branco se <code style="font-family: monospace; font-size: 11px">WA_API_KEY</code> não estiver configurada.</p>
+        <div class="form-row">
+          <input id="api-key-input" type="password" placeholder="Bearer token" onkeydown="if (event.key === 'Enter') saveApiKey()" />
+        </div>
+        <button class="btn-primary" style="width: 100%; padding: 10px 0" onclick="saveApiKey()">Entrar</button>
+      </div>
     </div>
-    <button class="btn-primary" style="width:100%;padding:10px 0" onclick="saveApiKey()">Entrar</button>
-  </div>
-</div>
 
-<!-- Header -->
-<header>
-  <div class="logo">⚡ Zyra</div>
-  <div class="header-right">
-    <span class="last-updated" id="last-updated">—</span>
-    <label class="toggle-label">
-      <input type="checkbox" id="auto-refresh-toggle" checked onchange="setAutoRefresh(this.checked)">
-      Auto-refresh
-    </label>
-  </div>
-</header>
+    <!-- Header -->
+    <header>
+      <div class="logo">⚡ Zyra</div>
+      <div class="header-right">
+        <span class="last-updated" id="last-updated">—</span>
+        <label class="toggle-label">
+          <input type="checkbox" id="auto-refresh-toggle" checked onchange="setAutoRefresh(this.checked)" />
+          Auto-refresh
+        </label>
+      </div>
+    </header>
 
-<!-- Tabs -->
-<nav class="tabs">
-  <button class="tab-btn active" onclick="switchTab('instances')">Instâncias</button>
-  <button class="tab-btn" onclick="switchTab('global-webhooks')">Webhooks Globais</button>
-  <button class="tab-btn" onclick="switchTab('runtime')">API & Webhook</button>
-</nav>
+    <!-- Tabs -->
+    <nav class="tabs">
+      <button class="tab-btn active" onclick="switchTab('instances')">Instâncias</button>
+      <button class="tab-btn" onclick="switchTab('global-webhooks')">Webhooks Globais</button>
+      <button class="tab-btn" onclick="switchTab('runtime')">API & Webhook</button>
+    </nav>
 
-<!-- Main -->
-<main>
+    <!-- Main -->
+    <main>
+      <!-- Tab: Instâncias -->
+      <section id="tab-instances" class="tab-content active">
+        <div class="section-hdr">
+          <h2>Instâncias</h2>
+          <button class="btn-primary" onclick="openModal('create-instance-modal')">+ Nova Instância</button>
+        </div>
+        <div id="instances-list">
+          <div class="empty"><div class="spinner"></div></div>
+        </div>
+      </section>
 
-  <!-- Tab: Instâncias -->
-  <section id="tab-instances" class="tab-content active">
-    <div class="section-hdr">
-      <h2>Instâncias</h2>
-      <button class="btn-primary" onclick="openModal('create-instance-modal')">+ Nova Instância</button>
-    </div>
-    <div id="instances-list"><div class="empty"><div class="spinner"></div></div></div>
-  </section>
+      <!-- Tab: Webhooks Globais -->
+      <section id="tab-global-webhooks" class="tab-content">
+        <div class="section-hdr">
+          <h2>Webhooks Globais</h2>
+          <button class="btn-primary" onclick="openCreateWebhook('__global__')">+ Novo Webhook</button>
+        </div>
+        <p class="section-desc">Webhooks globais recebem eventos de <strong>todas</strong> as instâncias. O payload inclui <code>connectionId</code> para identificar a origem.</p>
+        <div id="global-webhooks-list">
+          <div class="empty"><div class="spinner"></div></div>
+        </div>
+      </section>
 
-  <!-- Tab: Webhooks Globais -->
-  <section id="tab-global-webhooks" class="tab-content">
-    <div class="section-hdr">
-      <h2>Webhooks Globais</h2>
-      <button class="btn-primary" onclick="openCreateWebhook('__global__')">+ Novo Webhook</button>
-    </div>
-    <p class="section-desc">
-      Webhooks globais recebem eventos de <strong>todas</strong> as instâncias.
-      O payload inclui <code>connectionId</code> para identificar a origem.
-    </p>
-    <div id="global-webhooks-list"><div class="empty"><div class="spinner"></div></div></div>
-  </section>
+      <!-- Tab: Runtime/API -->
+      <section id="tab-runtime" class="tab-content">
+        <div class="section-hdr">
+          <h2>API & Webhook</h2>
+          <button class="btn-ghost" onclick="loadRuntime()">Atualizar</button>
+        </div>
+        <p class="section-desc">Visão operacional deste processo: perfil de runtime, workers ativos e configuração da API para uso do dashboard e automações.</p>
+        <div id="runtime-panel">
+          <div class="empty"><div class="spinner"></div></div>
+        </div>
+      </section>
+    </main>
 
-  <!-- Tab: Runtime/API -->
-  <section id="tab-runtime" class="tab-content">
-    <div class="section-hdr">
-      <h2>API & Webhook</h2>
-      <button class="btn-ghost" onclick="loadRuntime()">Atualizar</button>
-    </div>
-    <p class="section-desc">
-      Visão operacional deste processo: perfil de runtime, workers ativos e configuração da API para uso do dashboard e automações.
-    </p>
-    <div id="runtime-panel"><div class="empty"><div class="spinner"></div></div></div>
-  </section>
+    <!-- Modal: criar instância -->
+    <dialog id="create-instance-modal">
+      <div class="modal-title">Nova Instância</div>
+      <div class="form-row">
+        <label class="form-label">Connection ID *</label>
+        <input id="new-conn-id" placeholder="ex: minha-sessao" onkeydown="if (event.key === 'Enter') createInstance()" />
+      </div>
+      <div class="form-row">
+        <label class="form-label">Label (opcional)</label>
+        <input id="new-conn-label" placeholder="ex: Bot de Suporte" />
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ghost" onclick="closeModal('create-instance-modal')">Cancelar</button>
+        <button class="btn-primary" onclick="createInstance()">Criar</button>
+      </div>
+    </dialog>
 
-</main>
+    <!-- Modal: editar instância -->
+    <dialog id="edit-instance-modal">
+      <div class="modal-title">Editar Instância</div>
+      <input type="hidden" id="edit-conn-id" />
+      <div class="form-row">
+        <label class="form-label">Connection ID</label>
+        <input id="edit-conn-id-display" disabled style="opacity: 0.5; cursor: not-allowed" />
+      </div>
+      <div class="form-row">
+        <label class="form-label">Label</label>
+        <input id="edit-conn-label" placeholder="Nome legível (opcional)" onkeydown="if (event.key === 'Enter') saveInstance()" />
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ghost" onclick="closeModal('edit-instance-modal')">Cancelar</button>
+        <button class="btn-primary" onclick="saveInstance()">Salvar</button>
+      </div>
+    </dialog>
 
-<!-- Modal: criar instância -->
-<dialog id="create-instance-modal">
-  <div class="modal-title">Nova Instância</div>
-  <div class="form-row">
-    <label class="form-label">Connection ID *</label>
-    <input id="new-conn-id" placeholder="ex: minha-sessao"
-           onkeydown="if(event.key==='Enter')createInstance()">
-  </div>
-  <div class="form-row">
-    <label class="form-label">Label (opcional)</label>
-    <input id="new-conn-label" placeholder="ex: Bot de Suporte">
-  </div>
-  <div class="modal-footer">
-    <button class="btn-ghost" onclick="closeModal('create-instance-modal')">Cancelar</button>
-    <button class="btn-primary" onclick="createInstance()">Criar</button>
-  </div>
-</dialog>
+    <!-- Modal: criar webhook -->
+    <dialog id="create-webhook-modal">
+      <div class="modal-title" id="wh-modal-title">Novo Webhook</div>
+      <input type="hidden" id="wh-modal-conn-id" />
+      <div class="form-row">
+        <label class="form-label">URL *</label>
+        <input id="wh-url" placeholder="https://meu-sistema.com/webhook" />
+      </div>
+      <div class="form-row">
+        <label class="form-label">Filtros de evento *</label>
+        <input id="wh-filters" value='["*"]' />
+        <div class="form-hint">Grupos: <code>connection</code> <code>messages</code> <code>groups</code> — ou evento específico. Use <code>["*"]</code> para todos.</div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Secret HMAC (opcional)</label>
+        <input id="wh-secret" placeholder="deixe vazio para desabilitar assinatura" />
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ghost" onclick="closeModal('create-webhook-modal')">Cancelar</button>
+        <button class="btn-primary" onclick="createWebhook()">Criar</button>
+      </div>
+    </dialog>
 
-<!-- Modal: editar instância -->
-<dialog id="edit-instance-modal">
-  <div class="modal-title">Editar Instância</div>
-  <input type="hidden" id="edit-conn-id">
-  <div class="form-row">
-    <label class="form-label">Connection ID</label>
-    <input id="edit-conn-id-display" disabled style="opacity:.5;cursor:not-allowed">
-  </div>
-  <div class="form-row">
-    <label class="form-label">Label</label>
-    <input id="edit-conn-label" placeholder="Nome legível (opcional)"
-           onkeydown="if(event.key==='Enter')saveInstance()">
-  </div>
-  <div class="modal-footer">
-    <button class="btn-ghost" onclick="closeModal('edit-instance-modal')">Cancelar</button>
-    <button class="btn-primary" onclick="saveInstance()">Salvar</button>
-  </div>
-</dialog>
+    <!-- Modal: QR code -->
+    <dialog id="qr-modal">
+      <div class="modal-title" id="qr-modal-title">Conectar instância</div>
+      <p id="qr-status" style="text-align: center; color: var(--muted); font-size: 13px">Aguardando QR code...</p>
+      <img id="qr-img" alt="QR Code" style="display: none" />
+      <p class="qr-hint">Escaneie com WhatsApp → Aparelhos conectados → Conectar aparelho</p>
+      <div class="modal-footer">
+        <button class="btn-ghost" onclick="closeQrModal()">Fechar</button>
+      </div>
+    </dialog>
 
-<!-- Modal: criar webhook -->
-<dialog id="create-webhook-modal">
-  <div class="modal-title" id="wh-modal-title">Novo Webhook</div>
-  <input type="hidden" id="wh-modal-conn-id">
-  <div class="form-row">
-    <label class="form-label">URL *</label>
-    <input id="wh-url" placeholder="https://meu-sistema.com/webhook">
-  </div>
-  <div class="form-row">
-    <label class="form-label">Filtros de evento *</label>
-    <input id="wh-filters" value='["*"]'>
-    <div class="form-hint">Grupos: <code>connection</code> <code>messages</code> <code>groups</code> — ou evento específico. Use <code>["*"]</code> para todos.</div>
-  </div>
-  <div class="form-row">
-    <label class="form-label">Secret HMAC (opcional)</label>
-    <input id="wh-secret" placeholder="deixe vazio para desabilitar assinatura">
-  </div>
-  <div class="modal-footer">
-    <button class="btn-ghost" onclick="closeModal('create-webhook-modal')">Cancelar</button>
-    <button class="btn-primary" onclick="createWebhook()">Criar</button>
-  </div>
-</dialog>
+    <!-- Toast container -->
+    <div id="toast-container"></div>
 
-<!-- Modal: QR code -->
-<dialog id="qr-modal">
-  <div class="modal-title" id="qr-modal-title">Conectar instância</div>
-  <p id="qr-status" style="text-align:center;color:var(--muted);font-size:13px">Aguardando QR code...</p>
-  <img id="qr-img" alt="QR Code" style="display:none">
-  <p class="qr-hint">Escaneie com WhatsApp → Aparelhos conectados → Conectar aparelho</p>
-  <div class="modal-footer">
-    <button class="btn-ghost" onclick="closeQrModal()">Fechar</button>
-  </div>
-</dialog>
+    <script>
+      // ────────────────────────────────────────────────────────────────────────────
+      // State
+      // ────────────────────────────────────────────────────────────────────────────
+      const S = {
+        apiKey: null,
+        instances: [],
+        globalWebhooks: [],
+        runtime: null,
+        connectionDetails: {},
+        instanceWebhooks: {}, // { [connId]: WebhookRecord[] }
+        deliveries: {}, // { [webhookId]: DeliveryRecord[] }
+        expandedDetails: new Set(), // connIds with details panel open
+        expandedWebhooks: new Set(), // connIds with webhook panel open
+        expandedDeliveries: new Set(), // webhookIds with deliveries panel open
+        qrTimer: null,
+        autoRefreshTimer: null,
+      }
 
-<!-- Toast container -->
-<div id="toast-container"></div>
+      // ────────────────────────────────────────────────────────────────────────────
+      // API
+      // ────────────────────────────────────────────────────────────────────────────
+      async function api(method, path, body) {
+        const headers = { 'content-type': 'application/json' }
+        if (S.apiKey) headers['authorization'] = `Bearer ${S.apiKey}`
+        const r = await fetch(path, {
+          method,
+          headers,
+          body: body !== undefined ? JSON.stringify(body) : undefined,
+        })
+        if (r.status === 401) {
+          showAuthOverlay()
+          throw new Error('401')
+        }
+        return r
+      }
 
-<script>
-// ────────────────────────────────────────────────────────────────────────────
-// State
-// ────────────────────────────────────────────────────────────────────────────
-const S = {
-  apiKey: null,
-  instances: [],
-  globalWebhooks: [],
-  runtime: null,
-  connectionDetails: {},
-  instanceWebhooks: {},    // { [connId]: WebhookRecord[] }
-  deliveries: {},          // { [webhookId]: DeliveryRecord[] }
-  expandedDetails: new Set(),   // connIds with details panel open
-  expandedWebhooks: new Set(),   // connIds with webhook panel open
-  expandedDeliveries: new Set(), // webhookIds with deliveries panel open
-  qrTimer: null,
-  autoRefreshTimer: null,
-}
+      async function apiJson(method, path, body) {
+        const r = await api(method, path, body)
+        if (!r.ok) {
+          let msg = `Erro ${r.status}`
+          try {
+            msg = (await r.json()).error ?? msg
+          } catch {}
+          throw new Error(msg)
+        }
+        if (r.status === 204) return null
+        return r.json()
+      }
 
-// ────────────────────────────────────────────────────────────────────────────
-// API
-// ────────────────────────────────────────────────────────────────────────────
-async function api(method, path, body) {
-  const headers = { 'content-type': 'application/json' }
-  if (S.apiKey) headers['authorization'] = `Bearer ${S.apiKey}`
-  const r = await fetch(path, {
-    method, headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
-  if (r.status === 401) { showAuthOverlay(); throw new Error('401') }
-  return r
-}
+      // ────────────────────────────────────────────────────────────────────────────
+      // Auth
+      // ────────────────────────────────────────────────────────────────────────────
+      function showAuthOverlay() {
+        document.getElementById('auth-overlay').classList.remove('hidden')
+      }
 
-async function apiJson(method, path, body) {
-  const r = await api(method, path, body)
-  if (!r.ok) {
-    let msg = `Erro ${r.status}`
-    try { msg = (await r.json()).error ?? msg } catch {}
-    throw new Error(msg)
-  }
-  if (r.status === 204) return null
-  return r.json()
-}
+      async function saveApiKey() {
+        const val = document.getElementById('api-key-input').value.trim()
+        S.apiKey = val || null
+        try {
+          const r = await fetch('/connections', {
+            headers: S.apiKey ? { authorization: `Bearer ${S.apiKey}` } : {},
+          })
+          if (r.status === 401) {
+            toast('API key incorreta', 'error')
+            return
+          }
+        } catch {}
+        document.getElementById('auth-overlay').classList.add('hidden')
+        loadAll()
+      }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Auth
-// ────────────────────────────────────────────────────────────────────────────
-function showAuthOverlay() {
-  document.getElementById('auth-overlay').classList.remove('hidden')
-}
+      // ────────────────────────────────────────────────────────────────────────────
+      // Toast
+      // ────────────────────────────────────────────────────────────────────────────
+      function toast(msg, type = 'info') {
+        const c = document.getElementById('toast-container')
+        const el = document.createElement('div')
+        el.className = `toast toast-${type}`
+        el.textContent = msg
+        c.appendChild(el)
+        setTimeout(() => el.remove(), 3500)
+      }
 
-async function saveApiKey() {
-  const val = document.getElementById('api-key-input').value.trim()
-  S.apiKey = val || null
-  try {
-    const r = await fetch('/connections', {
-      headers: S.apiKey ? { authorization: `Bearer ${S.apiKey}` } : {},
-    })
-    if (r.status === 401) { toast('API key incorreta', 'error'); return }
-  } catch {}
-  document.getElementById('auth-overlay').classList.add('hidden')
-  loadAll()
-}
+      // ────────────────────────────────────────────────────────────────────────────
+      // Tabs
+      // ────────────────────────────────────────────────────────────────────────────
+      function switchTab(name) {
+        document.querySelectorAll('.tab-content').forEach((e) => e.classList.remove('active'))
+        document.querySelectorAll('.tab-btn').forEach((e) => e.classList.remove('active'))
+        document.getElementById(`tab-${name}`).classList.add('active')
+        const idx = ['instances', 'global-webhooks', 'runtime'].indexOf(name)
+        document.querySelectorAll('.tab-btn')[idx]?.classList.add('active')
+        if (name === 'global-webhooks') loadGlobalWebhooks()
+        if (name === 'runtime') loadRuntime()
+      }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Toast
-// ────────────────────────────────────────────────────────────────────────────
-function toast(msg, type = 'info') {
-  const c = document.getElementById('toast-container')
-  const el = document.createElement('div')
-  el.className = `toast toast-${type}`
-  el.textContent = msg
-  c.appendChild(el)
-  setTimeout(() => el.remove(), 3500)
-}
+      // ────────────────────────────────────────────────────────────────────────────
+      // Modals
+      // ────────────────────────────────────────────────────────────────────────────
+      function openModal(id) {
+        document.getElementById(id).showModal()
+      }
+      function closeModal(id) {
+        document.getElementById(id).close()
+      }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Tabs
-// ────────────────────────────────────────────────────────────────────────────
-function switchTab(name) {
-  document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'))
-  document.querySelectorAll('.tab-btn').forEach(e => e.classList.remove('active'))
-  document.getElementById(`tab-${name}`).classList.add('active')
-  const idx = ['instances', 'global-webhooks', 'runtime'].indexOf(name)
-  document.querySelectorAll('.tab-btn')[idx]?.classList.add('active')
-  if (name === 'global-webhooks') loadGlobalWebhooks()
-  if (name === 'runtime') loadRuntime()
-}
+      // ────────────────────────────────────────────────────────────────────────────
+      // Helpers
+      // ────────────────────────────────────────────────────────────────────────────
+      function statusBadge(st) {
+        const m = {
+          open: ['badge-green', '● open'],
+          connecting: ['badge-yellow', '◌ conectando'],
+          close: ['badge-muted', '○ fechado'],
+        }
+        const [cls, lbl] = m[st] ?? ['badge-muted', '○ desconhecido']
+        return `<span class="badge ${cls}">${lbl}</span>`
+      }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Modals
-// ────────────────────────────────────────────────────────────────────────────
-function openModal(id) { document.getElementById(id).showModal() }
-function closeModal(id) { document.getElementById(id).close() }
+      function deliveryBadge(st) {
+        const m = { delivered: 'badge-green', failed: 'badge-yellow', dead_letter: 'badge-red', pending: 'badge-blue' }
+        return `<span class="badge ${m[st] ?? 'badge-muted'}">${st}</span>`
+      }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ────────────────────────────────────────────────────────────────────────────
-function statusBadge(st) {
-  const m = {
-    open: ['badge-green', '● open'],
-    connecting: ['badge-yellow', '◌ conectando'],
-    close: ['badge-muted', '○ fechado'],
-  }
-  const [cls, lbl] = m[st] ?? ['badge-muted', '○ desconhecido']
-  return `<span class="badge ${cls}">${lbl}</span>`
-}
+      function statusDot(st) {
+        const m = { open: 'dot-green', connecting: 'dot-yellow' }
+        return `<div class="dot ${m[st] ?? 'dot-gray'}"></div>`
+      }
 
-function deliveryBadge(st) {
-  const m = { delivered: 'badge-green', failed: 'badge-yellow', dead_letter: 'badge-red', pending: 'badge-blue' }
-  return `<span class="badge ${m[st] ?? 'badge-muted'}">${st}</span>`
-}
+      function timeAgo(ts) {
+        if (!ts) return '—'
+        const d = Date.now() - ts
+        if (d < 60000) return 'agora'
+        if (d < 3600000) return `${Math.floor(d / 60000)}m atrás`
+        return new Date(ts).toLocaleTimeString('pt-BR')
+      }
 
-function statusDot(st) {
-  const m = { open: 'dot-green', connecting: 'dot-yellow' }
-  return `<div class="dot ${m[st] ?? 'dot-gray'}"></div>`
-}
+      function esc(s) {
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+      }
 
-function timeAgo(ts) {
-  if (!ts) return '—'
-  const d = Date.now() - ts
-  if (d < 60000) return 'agora'
-  if (d < 3600000) return `${Math.floor(d / 60000)}m atrás`
-  return new Date(ts).toLocaleTimeString('pt-BR')
-}
+      function formatDateTime(ts) {
+        if (!ts) return '—'
+        return new Date(ts).toLocaleString('pt-BR')
+      }
 
-function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
-}
+      // ────────────────────────────────────────────────────────────────────────────
+      // Load all
+      // ────────────────────────────────────────────────────────────────────────────
+      async function loadAll() {
+        await Promise.allSettled([loadInstances(), loadGlobalWebhooks(), loadRuntime()])
+        if (S.expandedDetails.size > 0) {
+          await Promise.allSettled([...S.expandedDetails].map((id) => loadConnectionDetails(id, { silent: true })))
+        }
+        // Refresh webhook data for any panels already expanded
+        if (S.expandedWebhooks.size > 0) {
+          await Promise.allSettled([...S.expandedWebhooks].map(loadInstanceWebhooks))
+          renderInstances()
+        }
+        document.getElementById('last-updated').textContent = `atualizado ${new Date().toLocaleTimeString('pt-BR')}`
+      }
 
-function formatDateTime(ts) {
-  if (!ts) return '—'
-  return new Date(ts).toLocaleString('pt-BR')
-}
+      // ────────────────────────────────────────────────────────────────────────────
+      // Runtime panel
+      // ────────────────────────────────────────────────────────────────────────────
+      function runtimeStatusBadge(enabled, on, off = 'desligado') {
+        return `<span class="badge ${enabled ? 'badge-green' : 'badge-muted'}">${enabled ? on : off}</span>`
+      }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Load all
-// ────────────────────────────────────────────────────────────────────────────
-async function loadAll() {
-  await Promise.allSettled([loadInstances(), loadGlobalWebhooks(), loadRuntime()])
-  if (S.expandedDetails.size > 0) {
-    await Promise.allSettled([...S.expandedDetails].map((id) => loadConnectionDetails(id, { silent: true })))
-  }
-  // Refresh webhook data for any panels already expanded
-  if (S.expandedWebhooks.size > 0) {
-    await Promise.allSettled([...S.expandedWebhooks].map(loadInstanceWebhooks))
-    renderInstances()
-  }
-  document.getElementById('last-updated').textContent =
-    `atualizado ${new Date().toLocaleTimeString('pt-BR')}`
-}
+      function canUseWebhookConnectionFlow() {
+        return S.runtime?.capabilities?.connectionWebhookIngress === true
+      }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Runtime panel
-// ────────────────────────────────────────────────────────────────────────────
-function runtimeStatusBadge(enabled, on, off = 'desligado') {
-  return `<span class="badge ${enabled ? 'badge-green' : 'badge-muted'}">${enabled ? on : off}</span>`
-}
+      async function loadRuntime() {
+        try {
+          S.runtime = await apiJson('GET', '/system/runtime')
+          renderRuntimePanel()
+          renderInstances()
+        } catch (e) {
+          if (e.message !== '401') {
+            S.runtime = null
+            renderRuntimePanel()
+            console.error(e)
+          }
+        }
+      }
 
-function canUseWebhookConnectionFlow() {
-  return S.runtime?.capabilities?.connectionWebhookIngress === true
-}
+      function renderRuntimePanel() {
+        const el = document.getElementById('runtime-panel')
+        const r = S.runtime
+        if (!r) {
+          el.innerHTML = '<div class="empty">Não foi possível carregar o status operacional.</div>'
+          return
+        }
+        const managesConnections = !!r?.capabilities?.managesConnections
+        const profile = esc(r.profile ?? 'desconhecido')
+        const processName = esc(r?.process?.pm2?.appName ?? '—')
+        const processId = esc(r?.process?.pm2?.processId ?? '—')
+        const uptime = esc(String(r?.process?.uptimeSec ?? 0) + 's')
+        const hostPort = `${esc(r?.api?.host ?? '0.0.0.0')}:${esc(String(r?.api?.port ?? '—'))}`
+        const allowedTargets = esc(String(r?.webhook?.allowedTargetsCount ?? 0))
+        const maxAttempts = esc(String(r?.webhook?.maxAttempts ?? 0))
+        const timeout = esc(String(r?.webhook?.timeoutMs ?? 0) + 'ms')
+        const auth = runtimeStatusBadge(!!r?.api?.authRequired, 'obrigatória', 'desativada')
+        const retry = runtimeStatusBadge(!!r?.webhook?.retryWorkerEnabled, 'ativo')
+        const outbox = runtimeStatusBadge(!!r?.webhook?.outboxWorkerEnabled, 'ativo')
+        const ingress = runtimeStatusBadge(!!r?.capabilities?.connectionWebhookIngress, 'habilitado')
+        const connMode = runtimeStatusBadge(managesConnections, 'ativo', 'somente leitura')
 
-async function loadRuntime() {
-  try {
-    S.runtime = await apiJson('GET', '/system/runtime')
-    renderRuntimePanel()
-    renderInstances()
-  } catch (e) {
-    if (e.message !== '401') {
-      S.runtime = null
-      renderRuntimePanel()
-      console.error(e)
-    }
-  }
-}
-
-function renderRuntimePanel() {
-  const el = document.getElementById('runtime-panel')
-  const r = S.runtime
-  if (!r) {
-    el.innerHTML = '<div class="empty">Não foi possível carregar o status operacional.</div>'
-    return
-  }
-  const managesConnections = !!r?.capabilities?.managesConnections
-  const profile = esc(r.profile ?? 'desconhecido')
-  const processName = esc(r?.process?.pm2?.appName ?? '—')
-  const processId = esc(r?.process?.pm2?.processId ?? '—')
-  const uptime = esc(String(r?.process?.uptimeSec ?? 0) + 's')
-  const hostPort = `${esc(r?.api?.host ?? '0.0.0.0')}:${esc(String(r?.api?.port ?? '—'))}`
-  const allowedTargets = esc(String(r?.webhook?.allowedTargetsCount ?? 0))
-  const maxAttempts = esc(String(r?.webhook?.maxAttempts ?? 0))
-  const timeout = esc(String(r?.webhook?.timeoutMs ?? 0) + 'ms')
-  const auth = runtimeStatusBadge(!!r?.api?.authRequired, 'obrigatória', 'desativada')
-  const retry = runtimeStatusBadge(!!r?.webhook?.retryWorkerEnabled, 'ativo')
-  const outbox = runtimeStatusBadge(!!r?.webhook?.outboxWorkerEnabled, 'ativo')
-  const ingress = runtimeStatusBadge(!!r?.capabilities?.connectionWebhookIngress, 'habilitado')
-  const connMode = runtimeStatusBadge(managesConnections, 'ativo', 'somente leitura')
-
-  el.innerHTML = `
+        el.innerHTML = `
     <div class="card">
       <div class="card-header">
         <div style="flex:1;min-width:0">
@@ -755,52 +1078,46 @@ function renderRuntimePanel() {
         </div>
       </div>
     </div>
-    ${managesConnections
-      ? ''
-      : '<p class="muted-note">Este runtime está em modo API/Webhook. Operações de socket (conectar, reiniciar, QR e pairing) ficam desativadas no dashboard.</p>'}
+    ${managesConnections ? '' : '<p class="muted-note">Este runtime está em modo API/Webhook. Operações de socket (conectar, reiniciar, QR e pairing) ficam desativadas no dashboard.</p>'}
   `
-}
+      }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Instances
-// ────────────────────────────────────────────────────────────────────────────
-async function loadInstances() {
-  try {
-    const data = await apiJson('GET', '/connections')
-    S.instances = Array.isArray(data) ? data : Object.values(data ?? {})
-    renderInstances()
-  } catch (e) {
-    if (e.message !== '401') console.error(e)
-  }
-}
+      // ────────────────────────────────────────────────────────────────────────────
+      // Instances
+      // ────────────────────────────────────────────────────────────────────────────
+      async function loadInstances() {
+        try {
+          const data = await apiJson('GET', '/connections')
+          S.instances = Array.isArray(data) ? data : Object.values(data ?? {})
+          renderInstances()
+        } catch (e) {
+          if (e.message !== '401') console.error(e)
+        }
+      }
 
-function renderInstances() {
-  const el = document.getElementById('instances-list')
-  const managesConnections = S.runtime?.capabilities?.managesConnections !== false
-  const webhookFlow = canUseWebhookConnectionFlow()
-  if (!S.instances.length) {
-    el.innerHTML = '<div class="empty">Nenhuma instância criada.<br>Clique em <strong>+ Nova Instância</strong> para começar.</div>'
-    return
-  }
-  const note = managesConnections
-    ? ''
-    : webhookFlow
-      ? '<p class="muted-note">Modo API/Webhook ativo: use o botão de conexão via webhook para gerar QR neste dashboard.</p>'
-      : '<p class="muted-note">Modo API/Webhook ativo: o dashboard lista instâncias e webhooks, mas ações de conexão em tempo real ficam indisponíveis neste processo.</p>'
-  el.innerHTML = note + S.instances.map(renderInstanceCard).join('')
-}
+      function renderInstances() {
+        const el = document.getElementById('instances-list')
+        const managesConnections = S.runtime?.capabilities?.managesConnections !== false
+        const webhookFlow = canUseWebhookConnectionFlow()
+        if (!S.instances.length) {
+          el.innerHTML = '<div class="empty">Nenhuma instância criada.<br>Clique em <strong>+ Nova Instância</strong> para começar.</div>'
+          return
+        }
+        const note = managesConnections ? '' : webhookFlow ? '<p class="muted-note">Modo API/Webhook ativo: use o botão de conexão via webhook para gerar QR neste dashboard.</p>' : '<p class="muted-note">Modo API/Webhook ativo: o dashboard lista instâncias e webhooks, mas ações de conexão em tempo real ficam indisponíveis neste processo.</p>'
+        el.innerHTML = note + S.instances.map(renderInstanceCard).join('')
+      }
 
-function renderInstanceCard(inst) {
-  const id = esc(inst.connectionId)
-  const st = inst.status ?? 'undefined'
-  const canDirectManage = S.runtime?.capabilities?.managesConnections !== false
-  const canWebhookManage = canUseWebhookConnectionFlow()
-  const detailsExpanded = S.expandedDetails.has(inst.connectionId)
-  const whExpanded = S.expandedWebhooks.has(inst.connectionId)
-  const whs = S.instanceWebhooks[inst.connectionId]
-  const whCount = whs ? ` (${whs.length})` : ''
+      function renderInstanceCard(inst) {
+        const id = esc(inst.connectionId)
+        const st = inst.status ?? 'undefined'
+        const canDirectManage = S.runtime?.capabilities?.managesConnections !== false
+        const canWebhookManage = canUseWebhookConnectionFlow()
+        const detailsExpanded = S.expandedDetails.has(inst.connectionId)
+        const whExpanded = S.expandedWebhooks.has(inst.connectionId)
+        const whs = S.instanceWebhooks[inst.connectionId]
+        const whCount = whs ? ` (${whs.length})` : ''
 
-  return `
+        return `
   <div class="card">
     <div class="card-header">
       ${statusDot(st)}
@@ -811,12 +1128,14 @@ function renderInstanceCard(inst) {
       ${statusBadge(st)}
     </div>
     <div class="actions">
-      ${st !== 'open'
-        ? `<button class="btn-green btn-sm" onclick="connectInstance('${id}')"
+      ${
+        st !== 'open'
+          ? `<button class="btn-green btn-sm" onclick="connectInstance('${id}')"
             ${canDirectManage || canWebhookManage ? '' : 'disabled'}>
             ${canDirectManage ? 'Conectar' : 'Conectar (Webhook)'}
           </button>`
-        : `<button class="btn-ghost btn-sm" onclick="disconnectInstance('${id}')" ${canDirectManage ? '' : 'disabled'}>Desconectar</button>`}
+          : `<button class="btn-ghost btn-sm" onclick="disconnectInstance('${id}')" ${canDirectManage ? '' : 'disabled'}>Desconectar</button>`
+      }
       <button class="btn-ghost btn-sm" onclick="restartInstance('${id}')" ${canDirectManage ? '' : 'disabled'}>Reiniciar</button>
       <button class="btn-ghost btn-sm" onclick="openEditInstance('${id}','${esc(inst.label ?? '')}')">Editar</button>
       <div class="actions-sep"></div>
@@ -831,120 +1150,122 @@ function renderInstanceCard(inst) {
     ${detailsExpanded ? renderConnectionDetailsSection(inst.connectionId) : ''}
     ${whExpanded ? renderInstanceWebhooksSection(inst.connectionId) : ''}
   </div>`
-}
+      }
 
-function buildConnectionEndpoints(connId) {
-  const id = encodeURIComponent(connId)
-  const base = `/connections/${id}`
-  const direct = S.runtime?.capabilities?.managesConnections !== false
-  const webhookFlow = canUseWebhookConnectionFlow()
+      function buildConnectionEndpoints(connId) {
+        const id = encodeURIComponent(connId)
+        const base = `/connections/${id}`
+        const direct = S.runtime?.capabilities?.managesConnections !== false
+        const webhookFlow = canUseWebhookConnectionFlow()
 
-  return [
-    { method: 'GET', path: `${base}`, note: 'Detalhes completos da conexão', available: true },
-    { method: 'GET', path: `${base}/status`, note: 'Status resumido', available: true },
-    { method: 'GET', path: `${base}/qr`, note: 'QR atual (quando disponível)', available: true },
-    {
-      method: 'POST',
-      path: `${base}/connect`,
-      note: direct ? 'Conexão direta via manager' : 'Requer processo com bootstrap habilitado',
-      available: direct,
-    },
-    {
-      method: 'POST',
-      path: `${base}/webhook/start`,
-      note: webhookFlow ? 'Conexão via comando webhook assinado' : 'Requer WA_WEBHOOK_SHARED_SECRET',
-      available: webhookFlow,
-    },
-    {
-      method: 'POST',
-      path: `${base}/disconnect`,
-      note: direct ? 'Desconecta sessão ativa' : 'Requer processo com bootstrap habilitado',
-      available: direct,
-    },
-    {
-      method: 'POST',
-      path: `${base}/restart`,
-      note: direct ? 'Reinicia sessão' : 'Requer processo com bootstrap habilitado',
-      available: direct,
-    },
-    {
-      method: 'POST',
-      path: `${base}/pairing/start`,
-      note: direct ? 'Inicia pairing remoto' : 'Requer processo com bootstrap habilitado',
-      available: direct,
-    },
-    {
-      method: 'POST',
-      path: `${base}/pairing/cancel`,
-      note: direct ? 'Cancela pairing remoto' : 'Requer processo com bootstrap habilitado',
-      available: direct,
-    },
-    {
-      method: 'GET',
-      path: `${base}/pairing`,
-      note: direct ? 'Estado atual do pairing' : 'Requer processo com bootstrap habilitado',
-      available: direct,
-    },
-    {
-      method: 'POST',
-      path: `${base}/messages/send`,
-      note: 'Envia mensagem (instância precisa estar open)',
-      available: true,
-    },
-    {
-      method: 'GET',
-      path: `${base}/groups`,
-      note: 'Lista grupos (instância precisa estar open)',
-      available: true,
-    },
-    {
-      method: 'GET',
-      path: `${base}/webhooks`,
-      note: 'Lista webhooks da conexão',
-      available: true,
-    },
-    {
-      method: 'POST',
-      path: `${base}/webhooks`,
-      note: 'Cria webhook da conexão',
-      available: true,
-    },
-    {
-      method: 'GET',
-      path: `${base}/webhooks/:webhookId`,
-      note: 'Detalha webhook específico',
-      available: true,
-    },
-    {
-      method: 'PATCH',
-      path: `${base}/webhooks/:webhookId`,
-      note: 'Atualiza webhook específico',
-      available: true,
-    },
-    {
-      method: 'DELETE',
-      path: `${base}/webhooks/:webhookId`,
-      note: 'Remove webhook específico',
-      available: true,
-    },
-    {
-      method: 'GET',
-      path: `${base}/webhooks/:webhookId/deliveries`,
-      note: 'Lista entregas do webhook',
-      available: true,
-    },
-    {
-      method: 'POST',
-      path: `${base}/webhooks/:webhookId/deliveries/:deliveryId/retry`,
-      note: 'Reenvia entrega específica',
-      available: true,
-    },
-  ]
-}
+        return [
+          { method: 'GET', path: `${base}`, note: 'Detalhes completos da conexão', available: true },
+          { method: 'GET', path: `${base}/status`, note: 'Status resumido', available: true },
+          { method: 'GET', path: `${base}/qr`, note: 'QR atual (quando disponível)', available: true },
+          {
+            method: 'POST',
+            path: `${base}/connect`,
+            note: direct ? 'Conexão direta via manager' : 'Requer processo com bootstrap habilitado',
+            available: direct,
+          },
+          {
+            method: 'POST',
+            path: `${base}/webhook/start`,
+            note: webhookFlow ? 'Conexão via comando webhook assinado' : 'Requer WA_WEBHOOK_SHARED_SECRET',
+            available: webhookFlow,
+          },
+          {
+            method: 'POST',
+            path: `${base}/disconnect`,
+            note: direct ? 'Desconecta sessão ativa' : 'Requer processo com bootstrap habilitado',
+            available: direct,
+          },
+          {
+            method: 'POST',
+            path: `${base}/restart`,
+            note: direct ? 'Reinicia sessão' : 'Requer processo com bootstrap habilitado',
+            available: direct,
+          },
+          {
+            method: 'POST',
+            path: `${base}/pairing/start`,
+            note: direct ? 'Inicia pairing remoto' : 'Requer processo com bootstrap habilitado',
+            available: direct,
+          },
+          {
+            method: 'POST',
+            path: `${base}/pairing/cancel`,
+            note: direct ? 'Cancela pairing remoto' : 'Requer processo com bootstrap habilitado',
+            available: direct,
+          },
+          {
+            method: 'GET',
+            path: `${base}/pairing`,
+            note: direct ? 'Estado atual do pairing' : 'Requer processo com bootstrap habilitado',
+            available: direct,
+          },
+          {
+            method: 'POST',
+            path: `${base}/messages/send`,
+            note: 'Envia mensagem (instância precisa estar open)',
+            available: true,
+          },
+          {
+            method: 'GET',
+            path: `${base}/groups`,
+            note: 'Lista grupos (instância precisa estar open)',
+            available: true,
+          },
+          {
+            method: 'GET',
+            path: `${base}/webhooks`,
+            note: 'Lista webhooks da conexão',
+            available: true,
+          },
+          {
+            method: 'POST',
+            path: `${base}/webhooks`,
+            note: 'Cria webhook da conexão',
+            available: true,
+          },
+          {
+            method: 'GET',
+            path: `${base}/webhooks/:webhookId`,
+            note: 'Detalha webhook específico',
+            available: true,
+          },
+          {
+            method: 'PATCH',
+            path: `${base}/webhooks/:webhookId`,
+            note: 'Atualiza webhook específico',
+            available: true,
+          },
+          {
+            method: 'DELETE',
+            path: `${base}/webhooks/:webhookId`,
+            note: 'Remove webhook específico',
+            available: true,
+          },
+          {
+            method: 'GET',
+            path: `${base}/webhooks/:webhookId/deliveries`,
+            note: 'Lista entregas do webhook',
+            available: true,
+          },
+          {
+            method: 'POST',
+            path: `${base}/webhooks/:webhookId/deliveries/:deliveryId/retry`,
+            note: 'Reenvia entrega específica',
+            available: true,
+          },
+        ]
+      }
 
-function renderConnectionEndpoints(connId) {
-  const origin = window.location.origin
-  return buildConnectionEndpoints(connId).map((endpoint) => `
+      function renderConnectionEndpoints(connId) {
+        const origin = window.location.origin
+        return buildConnectionEndpoints(connId)
+          .map(
+            (endpoint) => `
     <div class="endpoint-row">
       <div class="endpoint-method">${endpoint.method}</div>
       <div class="endpoint-main">
@@ -957,13 +1278,15 @@ function renderConnectionEndpoints(connId) {
         </div>
       </div>
     </div>
-  `).join('')
-}
+  `
+          )
+          .join('')
+      }
 
-function renderConnectionDetailsSection(connId) {
-  const details = S.connectionDetails[connId]
-  if (!details?.loaded) {
-    return `
+      function renderConnectionDetailsSection(connId) {
+        const details = S.connectionDetails[connId]
+        if (!details?.loaded) {
+          return `
       <div class="details-section">
         <div class="nested-hdr">
           <span>Detalhes & Endpoints</span>
@@ -974,19 +1297,17 @@ function renderConnectionDetailsSection(connId) {
         </div>
       </div>
     `
-  }
+        }
 
-  const info = details.info ?? {}
-  const pairing = details.pairing
-  return `
+        const info = details.info ?? {}
+        const pairing = details.pairing
+        return `
     <div class="details-section">
       <div class="nested-hdr">
         <span>Detalhes & Endpoints</span>
         <button class="btn-ghost btn-sm" onclick="refreshConnectionDetails('${esc(connId)}')">Atualizar</button>
       </div>
-      ${details.error
-        ? `<div style="color:var(--yellow);font-size:12px;padding:4px 0">${esc(details.error)}</div>`
-        : ''}
+      ${details.error ? `<div style="color:var(--yellow);font-size:12px;padding:4px 0">${esc(details.error)}</div>` : ''}
       <div class="details-block">
         <div class="meta-grid">
           <div class="meta-item"><div class="meta-k">Connection ID</div><div class="meta-v">${esc(info.connectionId ?? connId)}</div></div>
@@ -1009,297 +1330,311 @@ function renderConnectionDetailsSection(connId) {
       </div>
     </div>
   `
-}
-
-async function toggleConnectionDetails(connId) {
-  if (S.expandedDetails.has(connId)) {
-    S.expandedDetails.delete(connId)
-    renderInstances()
-    return
-  }
-  S.expandedDetails.add(connId)
-  renderInstances()
-  await loadConnectionDetails(connId)
-  renderInstances()
-}
-
-async function refreshConnectionDetails(connId) {
-  await loadConnectionDetails(connId, { force: true })
-  renderInstances()
-}
-
-async function loadConnectionDetails(connId, options = {}) {
-  const force = options.force === true
-  const silent = options.silent === true
-  if (!force && S.connectionDetails[connId]?.loaded) return
-
-  const details = {
-    loaded: false,
-    loadedAt: Date.now(),
-    info: null,
-    status: null,
-    pairing: null,
-    pairingUnavailableReason: null,
-    webhooksCount: 0,
-    error: null,
-  }
-
-  try {
-    details.info = await apiJson('GET', `/connections/${connId}`)
-  } catch (e) {
-    details.error = e.message || 'Falha ao carregar conexão'
-  }
-
-  try {
-    details.status = await apiJson('GET', `/connections/${connId}/status`)
-  } catch {}
-
-  const direct = S.runtime?.capabilities?.managesConnections !== false
-  if (direct) {
-    try {
-      details.pairing = await apiJson('GET', `/connections/${connId}/pairing`)
-    } catch {
-      details.pairingUnavailableReason = 'indisponível'
-    }
-  } else {
-    details.pairingUnavailableReason = 'somente no processo de conexões'
-  }
-
-  try {
-    const webhooks = await apiJson('GET', `/connections/${connId}/webhooks`)
-    details.webhooksCount = Array.isArray(webhooks) ? webhooks.length : 0
-  } catch {}
-
-  details.loaded = true
-  details.loadedAt = Date.now()
-  S.connectionDetails[connId] = details
-
-  if (!silent && details.error) {
-    toast(`Detalhes de ${connId}: ${details.error}`, 'error')
-  }
-}
-
-async function createInstance() {
-  const id = document.getElementById('new-conn-id').value.trim()
-  const label = document.getElementById('new-conn-label').value.trim()
-  if (!id) { toast('Connection ID é obrigatório', 'error'); return }
-  const shouldAutoStartViaWebhook =
-    S.runtime?.capabilities?.managesConnections === false &&
-    canUseWebhookConnectionFlow()
-
-  try {
-    await apiJson('POST', '/connections', { connectionId: id, label: label || undefined })
-    toast(`Instância "${id}" criada`, 'success')
-    closeModal('create-instance-modal')
-    document.getElementById('new-conn-id').value = ''
-    document.getElementById('new-conn-label').value = ''
-    if (shouldAutoStartViaWebhook) {
-      await connectInstanceViaWebhook(id, { label: label || null, silentToast: true })
-    }
-    await loadInstances()
-  } catch (e) { toast(e.message, 'error') }
-}
-
-async function connectInstance(id) {
-  if (S.runtime?.capabilities?.managesConnections === false) {
-    if (!canUseWebhookConnectionFlow()) {
-      toast('Este processo não executa bootstrap de conexões', 'error')
-      return
-    }
-    await connectInstanceViaWebhook(id)
-    return
-  }
-  try {
-    await apiJson('POST', `/connections/${id}/connect`)
-    toast(`Conectando ${id}...`, 'info')
-    openQrModal(id)
-    await loadInstances()
-  } catch (e) { toast(e.message, 'error') }
-}
-
-async function connectInstanceViaWebhook(id, options = {}) {
-  const { label = null, silentToast = false } = options
-  try {
-    const response = await apiJson('POST', `/connections/${id}/webhook/start`, { label })
-    if (!silentToast) {
-      const accepted = response?.accepted === true
-      toast(
-        accepted
-          ? `Comando enviado via webhook para ${id}`
-          : `Webhook respondeu sem aceite para ${id}`,
-        accepted ? 'success' : 'info'
-      )
-    }
-    openQrModal(id)
-  } catch (e) {
-    toast(e.message, 'error')
-  }
-}
-
-async function disconnectInstance(id) {
-  if (S.runtime?.capabilities?.managesConnections === false) {
-    toast('Este processo não executa bootstrap de conexões', 'error')
-    return
-  }
-  if (!confirm(`Desconectar ${id}?`)) return
-  try {
-    await apiJson('POST', `/connections/${id}/disconnect`)
-    toast(`${id} desconectado`, 'success')
-    await loadInstances()
-  } catch (e) { toast(e.message, 'error') }
-}
-
-async function restartInstance(id) {
-  if (S.runtime?.capabilities?.managesConnections === false) {
-    toast('Este processo não executa bootstrap de conexões', 'error')
-    return
-  }
-  try {
-    await apiJson('POST', `/connections/${id}/restart`)
-    toast(`${id} reiniciando...`, 'info')
-    await loadInstances()
-  } catch (e) { toast(e.message, 'error') }
-}
-
-async function deleteInstance(id) {
-  if (!confirm(`Deletar "${id}"? Esta ação não pode ser desfeita.`)) return
-  try {
-    await api('DELETE', `/connections/${id}`)
-    toast(`${id} deletado`, 'success')
-    S.expandedDetails.delete(id)
-    delete S.connectionDetails[id]
-    S.expandedWebhooks.delete(id)
-    delete S.instanceWebhooks[id]
-    await loadInstances()
-  } catch (e) { toast(e.message, 'error') }
-}
-
-function openEditInstance(id, currentLabel) {
-  document.getElementById('edit-conn-id').value = id
-  document.getElementById('edit-conn-id-display').value = id
-  document.getElementById('edit-conn-label').value = currentLabel
-  openModal('edit-instance-modal')
-  setTimeout(() => document.getElementById('edit-conn-label').focus(), 50)
-}
-
-async function saveInstance() {
-  const id = document.getElementById('edit-conn-id').value
-  const label = document.getElementById('edit-conn-label').value.trim()
-  try {
-    await apiJson('PATCH', `/connections/${id}`, { label: label || null })
-    toast('Instância atualizada', 'success')
-    closeModal('edit-instance-modal')
-    await loadInstances()
-  } catch (e) { toast(e.message, 'error') }
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// QR Modal
-// ────────────────────────────────────────────────────────────────────────────
-function openQrModal(connId) {
-  document.getElementById('qr-modal-title').textContent = `Conectar — ${connId}`
-  document.getElementById('qr-status').textContent = 'Aguardando QR code...'
-  document.getElementById('qr-img').style.display = 'none'
-  openModal('qr-modal')
-  S.qrTimer = setInterval(() => pollQr(connId), 2500)
-  pollQr(connId)
-}
-
-function closeQrModal() {
-  if (S.qrTimer) { clearInterval(S.qrTimer); S.qrTimer = null }
-  closeModal('qr-modal')
-}
-
-async function pollQr(connId) {
-  try {
-    const r = await api('GET', `/connections/${connId}/qr`)
-    if (r.status === 404 || r.status === 204) {
-      const st = await apiJson('GET', `/connections/${connId}/status`)
-      if (st?.status === 'open') {
-        document.getElementById('qr-status').textContent = '✓ Conectado com sucesso!'
-        document.getElementById('qr-img').style.display = 'none'
-        if (S.qrTimer) { clearInterval(S.qrTimer); S.qrTimer = null }
-        setTimeout(() => { closeQrModal(); loadInstances() }, 1800)
       }
-      return
-    }
-    if (!r.ok) return
-    const data = await r.json()
-    const qr = data.qr ?? data
-    if (qr && typeof qr === 'string') {
-      const img = document.getElementById('qr-img')
-      img.src = qr.startsWith('data:')
-        ? qr
-        : `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(qr)}`
-      img.style.display = 'block'
-      document.getElementById('qr-status').textContent = 'Escaneie com o WhatsApp'
-    }
-  } catch {}
-}
 
-// ────────────────────────────────────────────────────────────────────────────
-// Instance webhooks (expandable panel)
-// ────────────────────────────────────────────────────────────────────────────
-async function toggleInstanceWebhooks(connId) {
-  if (S.expandedWebhooks.has(connId)) {
-    S.expandedWebhooks.delete(connId)
-  } else {
-    S.expandedWebhooks.add(connId)
-    await loadInstanceWebhooks(connId)
-  }
-  renderInstances()
-}
+      async function toggleConnectionDetails(connId) {
+        if (S.expandedDetails.has(connId)) {
+          S.expandedDetails.delete(connId)
+          renderInstances()
+          return
+        }
+        S.expandedDetails.add(connId)
+        renderInstances()
+        await loadConnectionDetails(connId)
+        renderInstances()
+      }
 
-async function loadInstanceWebhooks(connId) {
-  try {
-    S.instanceWebhooks[connId] = await apiJson('GET', `/connections/${connId}/webhooks`) ?? []
-  } catch { S.instanceWebhooks[connId] = [] }
-}
+      async function refreshConnectionDetails(connId) {
+        await loadConnectionDetails(connId, { force: true })
+        renderInstances()
+      }
 
-function renderInstanceWebhooksSection(connId) {
-  const list = S.instanceWebhooks[connId] ?? []
-  return `
+      async function loadConnectionDetails(connId, options = {}) {
+        const force = options.force === true
+        const silent = options.silent === true
+        if (!force && S.connectionDetails[connId]?.loaded) return
+
+        const details = {
+          loaded: false,
+          loadedAt: Date.now(),
+          info: null,
+          status: null,
+          pairing: null,
+          pairingUnavailableReason: null,
+          webhooksCount: 0,
+          error: null,
+        }
+
+        try {
+          details.info = await apiJson('GET', `/connections/${connId}`)
+        } catch (e) {
+          details.error = e.message || 'Falha ao carregar conexão'
+        }
+
+        try {
+          details.status = await apiJson('GET', `/connections/${connId}/status`)
+        } catch {}
+
+        const direct = S.runtime?.capabilities?.managesConnections !== false
+        if (direct) {
+          try {
+            details.pairing = await apiJson('GET', `/connections/${connId}/pairing`)
+          } catch {
+            details.pairingUnavailableReason = 'indisponível'
+          }
+        } else {
+          details.pairingUnavailableReason = 'somente no processo de conexões'
+        }
+
+        try {
+          const webhooks = await apiJson('GET', `/connections/${connId}/webhooks`)
+          details.webhooksCount = Array.isArray(webhooks) ? webhooks.length : 0
+        } catch {}
+
+        details.loaded = true
+        details.loadedAt = Date.now()
+        S.connectionDetails[connId] = details
+
+        if (!silent && details.error) {
+          toast(`Detalhes de ${connId}: ${details.error}`, 'error')
+        }
+      }
+
+      async function createInstance() {
+        const id = document.getElementById('new-conn-id').value.trim()
+        const label = document.getElementById('new-conn-label').value.trim()
+        if (!id) {
+          toast('Connection ID é obrigatório', 'error')
+          return
+        }
+        const shouldAutoStartViaWebhook = S.runtime?.capabilities?.managesConnections === false && canUseWebhookConnectionFlow()
+
+        try {
+          await apiJson('POST', '/connections', { connectionId: id, label: label || undefined })
+          toast(`Instância "${id}" criada`, 'success')
+          closeModal('create-instance-modal')
+          document.getElementById('new-conn-id').value = ''
+          document.getElementById('new-conn-label').value = ''
+          if (shouldAutoStartViaWebhook) {
+            await connectInstanceViaWebhook(id, { label: label || null, silentToast: true })
+          }
+          await loadInstances()
+        } catch (e) {
+          toast(e.message, 'error')
+        }
+      }
+
+      async function connectInstance(id) {
+        if (S.runtime?.capabilities?.managesConnections === false) {
+          if (!canUseWebhookConnectionFlow()) {
+            toast('Este processo não executa bootstrap de conexões', 'error')
+            return
+          }
+          await connectInstanceViaWebhook(id)
+          return
+        }
+        try {
+          await apiJson('POST', `/connections/${id}/connect`)
+          toast(`Conectando ${id}...`, 'info')
+          openQrModal(id)
+          await loadInstances()
+        } catch (e) {
+          toast(e.message, 'error')
+        }
+      }
+
+      async function connectInstanceViaWebhook(id, options = {}) {
+        const { label = null, silentToast = false } = options
+        try {
+          const response = await apiJson('POST', `/connections/${id}/webhook/start`, { label })
+          if (!silentToast) {
+            const accepted = response?.accepted === true
+            toast(accepted ? `Comando enviado via webhook para ${id}` : `Webhook respondeu sem aceite para ${id}`, accepted ? 'success' : 'info')
+          }
+          openQrModal(id)
+        } catch (e) {
+          toast(e.message, 'error')
+        }
+      }
+
+      async function disconnectInstance(id) {
+        if (S.runtime?.capabilities?.managesConnections === false) {
+          toast('Este processo não executa bootstrap de conexões', 'error')
+          return
+        }
+        if (!confirm(`Desconectar ${id}?`)) return
+        try {
+          await apiJson('POST', `/connections/${id}/disconnect`)
+          toast(`${id} desconectado`, 'success')
+          await loadInstances()
+        } catch (e) {
+          toast(e.message, 'error')
+        }
+      }
+
+      async function restartInstance(id) {
+        if (S.runtime?.capabilities?.managesConnections === false) {
+          toast('Este processo não executa bootstrap de conexões', 'error')
+          return
+        }
+        try {
+          await apiJson('POST', `/connections/${id}/restart`)
+          toast(`${id} reiniciando...`, 'info')
+          await loadInstances()
+        } catch (e) {
+          toast(e.message, 'error')
+        }
+      }
+
+      async function deleteInstance(id) {
+        if (!confirm(`Deletar "${id}"? Esta ação não pode ser desfeita.`)) return
+        try {
+          await api('DELETE', `/connections/${id}`)
+          toast(`${id} deletado`, 'success')
+          S.expandedDetails.delete(id)
+          delete S.connectionDetails[id]
+          S.expandedWebhooks.delete(id)
+          delete S.instanceWebhooks[id]
+          await loadInstances()
+        } catch (e) {
+          toast(e.message, 'error')
+        }
+      }
+
+      function openEditInstance(id, currentLabel) {
+        document.getElementById('edit-conn-id').value = id
+        document.getElementById('edit-conn-id-display').value = id
+        document.getElementById('edit-conn-label').value = currentLabel
+        openModal('edit-instance-modal')
+        setTimeout(() => document.getElementById('edit-conn-label').focus(), 50)
+      }
+
+      async function saveInstance() {
+        const id = document.getElementById('edit-conn-id').value
+        const label = document.getElementById('edit-conn-label').value.trim()
+        try {
+          await apiJson('PATCH', `/connections/${id}`, { label: label || null })
+          toast('Instância atualizada', 'success')
+          closeModal('edit-instance-modal')
+          await loadInstances()
+        } catch (e) {
+          toast(e.message, 'error')
+        }
+      }
+
+      // ────────────────────────────────────────────────────────────────────────────
+      // QR Modal
+      // ────────────────────────────────────────────────────────────────────────────
+      function openQrModal(connId) {
+        document.getElementById('qr-modal-title').textContent = `Conectar — ${connId}`
+        document.getElementById('qr-status').textContent = 'Aguardando QR code...'
+        document.getElementById('qr-img').style.display = 'none'
+        openModal('qr-modal')
+        S.qrTimer = setInterval(() => pollQr(connId), 2500)
+        pollQr(connId)
+      }
+
+      function closeQrModal() {
+        if (S.qrTimer) {
+          clearInterval(S.qrTimer)
+          S.qrTimer = null
+        }
+        closeModal('qr-modal')
+      }
+
+      async function pollQr(connId) {
+        try {
+          const r = await api('GET', `/connections/${connId}/qr`)
+          if (r.status === 404 || r.status === 204) {
+            const st = await apiJson('GET', `/connections/${connId}/status`)
+            if (st?.status === 'open') {
+              document.getElementById('qr-status').textContent = '✓ Conectado com sucesso!'
+              document.getElementById('qr-img').style.display = 'none'
+              if (S.qrTimer) {
+                clearInterval(S.qrTimer)
+                S.qrTimer = null
+              }
+              setTimeout(() => {
+                closeQrModal()
+                loadInstances()
+              }, 1800)
+            }
+            return
+          }
+          if (!r.ok) return
+          const data = await r.json()
+          const qr = data.qr ?? data
+          if (qr && typeof qr === 'string') {
+            const img = document.getElementById('qr-img')
+            img.src = qr.startsWith('data:') ? qr : `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(qr)}`
+            img.style.display = 'block'
+            document.getElementById('qr-status').textContent = 'Escaneie com o WhatsApp'
+          }
+        } catch {}
+      }
+
+      // ────────────────────────────────────────────────────────────────────────────
+      // Instance webhooks (expandable panel)
+      // ────────────────────────────────────────────────────────────────────────────
+      async function toggleInstanceWebhooks(connId) {
+        if (S.expandedWebhooks.has(connId)) {
+          S.expandedWebhooks.delete(connId)
+        } else {
+          S.expandedWebhooks.add(connId)
+          await loadInstanceWebhooks(connId)
+        }
+        renderInstances()
+      }
+
+      async function loadInstanceWebhooks(connId) {
+        try {
+          S.instanceWebhooks[connId] = (await apiJson('GET', `/connections/${connId}/webhooks`)) ?? []
+        } catch {
+          S.instanceWebhooks[connId] = []
+        }
+      }
+
+      function renderInstanceWebhooksSection(connId) {
+        const list = S.instanceWebhooks[connId] ?? []
+        return `
   <div class="nested-section">
     <div class="nested-hdr">
       <span>Webhooks desta instância</span>
       <button class="btn-primary btn-sm" onclick="openCreateWebhook('${esc(connId)}')">+ Novo</button>
     </div>
-    ${list.length
-      ? list.map(wh => renderWebhookItem(wh, connId)).join('')
-      : '<div style="color:var(--muted);font-size:12px;padding:4px 0">Nenhum webhook configurado.</div>'
-    }
+    ${list.length ? list.map((wh) => renderWebhookItem(wh, connId)).join('') : '<div style="color:var(--muted);font-size:12px;padding:4px 0">Nenhum webhook configurado.</div>'}
   </div>`
-}
+      }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Global webhooks
-// ────────────────────────────────────────────────────────────────────────────
-async function loadGlobalWebhooks() {
-  try {
-    S.globalWebhooks = await apiJson('GET', '/webhooks') ?? []
-    renderGlobalWebhooks()
-  } catch (e) {
-    if (e.message !== '401') console.error(e)
-  }
-}
+      // ────────────────────────────────────────────────────────────────────────────
+      // Global webhooks
+      // ────────────────────────────────────────────────────────────────────────────
+      async function loadGlobalWebhooks() {
+        try {
+          S.globalWebhooks = (await apiJson('GET', '/webhooks')) ?? []
+          renderGlobalWebhooks()
+        } catch (e) {
+          if (e.message !== '401') console.error(e)
+        }
+      }
 
-function renderGlobalWebhooks() {
-  const el = document.getElementById('global-webhooks-list')
-  if (!S.globalWebhooks.length) {
-    el.innerHTML = '<div class="empty">Nenhum webhook global configurado.<br>Clique em <strong>+ Novo Webhook</strong> para criar.</div>'
-    return
-  }
-  el.innerHTML = S.globalWebhooks.map(wh => renderWebhookItem(wh, '__global__')).join('')
-}
+      function renderGlobalWebhooks() {
+        const el = document.getElementById('global-webhooks-list')
+        if (!S.globalWebhooks.length) {
+          el.innerHTML = '<div class="empty">Nenhum webhook global configurado.<br>Clique em <strong>+ Novo Webhook</strong> para criar.</div>'
+          return
+        }
+        el.innerHTML = S.globalWebhooks.map((wh) => renderWebhookItem(wh, '__global__')).join('')
+      }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Shared webhook rendering
-// ────────────────────────────────────────────────────────────────────────────
-function renderWebhookItem(wh, connId) {
-  const delExpanded = S.expandedDeliveries.has(wh.id)
-  const dels = S.deliveries[wh.id]
+      // ────────────────────────────────────────────────────────────────────────────
+      // Shared webhook rendering
+      // ────────────────────────────────────────────────────────────────────────────
+      function renderWebhookItem(wh, connId) {
+        const delExpanded = S.expandedDeliveries.has(wh.id)
+        const dels = S.deliveries[wh.id]
 
-  return `
+        return `
   <div class="wh-item">
     <div class="wh-header">
       <div class="wh-info">
@@ -1322,174 +1657,194 @@ function renderWebhookItem(wh, connId) {
     </div>
     ${delExpanded ? renderDeliveriesSection(wh.id, connId) : ''}
   </div>`
-}
+      }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Webhook CRUD
-// ────────────────────────────────────────────────────────────────────────────
-function openCreateWebhook(connId) {
-  document.getElementById('wh-modal-conn-id').value = connId
-  document.getElementById('wh-modal-title').textContent =
-    connId === '__global__' ? 'Novo Webhook Global' : `Novo Webhook — ${connId}`
-  document.getElementById('wh-url').value = ''
-  document.getElementById('wh-filters').value = '["*"]'
-  document.getElementById('wh-secret').value = ''
-  openModal('create-webhook-modal')
-}
+      // ────────────────────────────────────────────────────────────────────────────
+      // Webhook CRUD
+      // ────────────────────────────────────────────────────────────────────────────
+      function openCreateWebhook(connId) {
+        document.getElementById('wh-modal-conn-id').value = connId
+        document.getElementById('wh-modal-title').textContent = connId === '__global__' ? 'Novo Webhook Global' : `Novo Webhook — ${connId}`
+        document.getElementById('wh-url').value = ''
+        document.getElementById('wh-filters').value = '["*"]'
+        document.getElementById('wh-secret').value = ''
+        openModal('create-webhook-modal')
+      }
 
-async function createWebhook() {
-  const connId = document.getElementById('wh-modal-conn-id').value
-  const url = document.getElementById('wh-url').value.trim()
-  const filtersRaw = document.getElementById('wh-filters').value.trim()
-  const secret = document.getElementById('wh-secret').value.trim() || null
+      async function createWebhook() {
+        const connId = document.getElementById('wh-modal-conn-id').value
+        const url = document.getElementById('wh-url').value.trim()
+        const filtersRaw = document.getElementById('wh-filters').value.trim()
+        const secret = document.getElementById('wh-secret').value.trim() || null
 
-  if (!url) { toast('URL é obrigatória', 'error'); return }
+        if (!url) {
+          toast('URL é obrigatória', 'error')
+          return
+        }
 
-  let eventsFilter
-  try { eventsFilter = JSON.parse(filtersRaw) } catch {
-    toast('Filtros inválidos — use JSON, ex: ["*"]', 'error'); return
-  }
-  if (!Array.isArray(eventsFilter) || !eventsFilter.length) {
-    toast('eventsFilter deve ser um array não-vazio', 'error'); return
-  }
+        let eventsFilter
+        try {
+          eventsFilter = JSON.parse(filtersRaw)
+        } catch {
+          toast('Filtros inválidos — use JSON, ex: ["*"]', 'error')
+          return
+        }
+        if (!Array.isArray(eventsFilter) || !eventsFilter.length) {
+          toast('eventsFilter deve ser um array não-vazio', 'error')
+          return
+        }
 
-  const path = connId === '__global__' ? '/webhooks' : `/connections/${connId}/webhooks`
-  try {
-    await apiJson('POST', path, { url, eventsFilter, secret })
-    toast('Webhook criado', 'success')
-    closeModal('create-webhook-modal')
-    if (connId === '__global__') {
-      await loadGlobalWebhooks()
-    } else {
-      await loadInstanceWebhooks(connId)
-      renderInstances()
-    }
-  } catch (e) { toast(e.message, 'error') }
-}
+        const path = connId === '__global__' ? '/webhooks' : `/connections/${connId}/webhooks`
+        try {
+          await apiJson('POST', path, { url, eventsFilter, secret })
+          toast('Webhook criado', 'success')
+          closeModal('create-webhook-modal')
+          if (connId === '__global__') {
+            await loadGlobalWebhooks()
+          } else {
+            await loadInstanceWebhooks(connId)
+            renderInstances()
+          }
+        } catch (e) {
+          toast(e.message, 'error')
+        }
+      }
 
-async function toggleWebhook(connId, webhookId, active) {
-  const path = connId === '__global__'
-    ? `/webhooks/${webhookId}`
-    : `/connections/${connId}/webhooks/${webhookId}`
-  try {
-    await apiJson('PATCH', path, { active })
-    toast(`Webhook ${active ? 'ativado' : 'desativado'}`, 'success')
-    if (connId === '__global__') {
-      await loadGlobalWebhooks()
-    } else {
-      await loadInstanceWebhooks(connId)
-      renderInstances()
-    }
-  } catch (e) { toast(e.message, 'error') }
-}
+      async function toggleWebhook(connId, webhookId, active) {
+        const path = connId === '__global__' ? `/webhooks/${webhookId}` : `/connections/${connId}/webhooks/${webhookId}`
+        try {
+          await apiJson('PATCH', path, { active })
+          toast(`Webhook ${active ? 'ativado' : 'desativado'}`, 'success')
+          if (connId === '__global__') {
+            await loadGlobalWebhooks()
+          } else {
+            await loadInstanceWebhooks(connId)
+            renderInstances()
+          }
+        } catch (e) {
+          toast(e.message, 'error')
+        }
+      }
 
-async function deleteWebhook(connId, webhookId) {
-  if (!confirm('Deletar este webhook?')) return
-  const path = connId === '__global__'
-    ? `/webhooks/${webhookId}`
-    : `/connections/${connId}/webhooks/${webhookId}`
-  try {
-    await api('DELETE', path)
-    toast('Webhook deletado', 'success')
-    delete S.deliveries[webhookId]
-    S.expandedDeliveries.delete(webhookId)
-    if (connId === '__global__') {
-      await loadGlobalWebhooks()
-    } else {
-      await loadInstanceWebhooks(connId)
-      renderInstances()
-    }
-  } catch (e) { toast(e.message, 'error') }
-}
+      async function deleteWebhook(connId, webhookId) {
+        if (!confirm('Deletar este webhook?')) return
+        const path = connId === '__global__' ? `/webhooks/${webhookId}` : `/connections/${connId}/webhooks/${webhookId}`
+        try {
+          await api('DELETE', path)
+          toast('Webhook deletado', 'success')
+          delete S.deliveries[webhookId]
+          S.expandedDeliveries.delete(webhookId)
+          if (connId === '__global__') {
+            await loadGlobalWebhooks()
+          } else {
+            await loadInstanceWebhooks(connId)
+            renderInstances()
+          }
+        } catch (e) {
+          toast(e.message, 'error')
+        }
+      }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Deliveries
-// ────────────────────────────────────────────────────────────────────────────
-async function toggleDeliveries(webhookId, connId) {
-  if (S.expandedDeliveries.has(webhookId)) {
-    S.expandedDeliveries.delete(webhookId)
-  } else {
-    S.expandedDeliveries.add(webhookId)
-    await loadDeliveries(webhookId, connId)
-  }
-  if (connId === '__global__') renderGlobalWebhooks()
-  else renderInstances()
-}
+      // ────────────────────────────────────────────────────────────────────────────
+      // Deliveries
+      // ────────────────────────────────────────────────────────────────────────────
+      async function toggleDeliveries(webhookId, connId) {
+        if (S.expandedDeliveries.has(webhookId)) {
+          S.expandedDeliveries.delete(webhookId)
+        } else {
+          S.expandedDeliveries.add(webhookId)
+          await loadDeliveries(webhookId, connId)
+        }
+        if (connId === '__global__') renderGlobalWebhooks()
+        else renderInstances()
+      }
 
-async function loadDeliveries(webhookId, connId) {
-  const path = connId === '__global__'
-    ? `/webhooks/${webhookId}/deliveries`
-    : `/connections/${connId}/webhooks/${webhookId}/deliveries`
-  try {
-    S.deliveries[webhookId] = await apiJson('GET', path) ?? []
-  } catch { S.deliveries[webhookId] = [] }
-}
+      async function loadDeliveries(webhookId, connId) {
+        const path = connId === '__global__' ? `/webhooks/${webhookId}/deliveries` : `/connections/${connId}/webhooks/${webhookId}/deliveries`
+        try {
+          S.deliveries[webhookId] = (await apiJson('GET', path)) ?? []
+        } catch {
+          S.deliveries[webhookId] = []
+        }
+      }
 
-function renderDeliveriesSection(webhookId, connId) {
-  const dels = S.deliveries[webhookId] ?? []
-  if (!dels.length) {
-    return `<div class="deliveries-section" style="color:var(--muted);font-size:12px">Nenhuma entrega registrada.</div>`
-  }
-  const rows = dels.slice(0, 30).map(d => `
+      function renderDeliveriesSection(webhookId, connId) {
+        const dels = S.deliveries[webhookId] ?? []
+        if (!dels.length) {
+          return `<div class="deliveries-section" style="color:var(--muted);font-size:12px">Nenhuma entrega registrada.</div>`
+        }
+        const rows = dels
+          .slice(0, 30)
+          .map(
+            (d) => `
     <div class="delivery-row">
       <span class="delivery-event">${esc(d.eventType)}</span>
       ${deliveryBadge(d.status)}
       <span style="color:var(--muted);font-size:11px">${d.responseStatus ?? '—'}</span>
       <span class="delivery-time">${timeAgo(d.lastAttemptAt ?? d.createdAt)}</span>
-      ${['failed','dead_letter'].includes(d.status)
-        ? `<button class="btn-ghost btn-sm" onclick="retryDelivery('${esc(connId)}','${webhookId}','${d.id}')">Retry</button>`
-        : ''}
-    </div>`).join('')
-  return `<div class="deliveries-section">${rows}</div>`
-}
+      ${['failed', 'dead_letter'].includes(d.status) ? `<button class="btn-ghost btn-sm" onclick="retryDelivery('${esc(connId)}','${webhookId}','${d.id}')">Retry</button>` : ''}
+    </div>`
+          )
+          .join('')
+        return `<div class="deliveries-section">${rows}</div>`
+      }
 
-async function retryDelivery(connId, webhookId, deliveryId) {
-  const path = connId === '__global__'
-    ? `/webhooks/${webhookId}/deliveries/${deliveryId}/retry`
-    : `/connections/${connId}/webhooks/${webhookId}/deliveries/${deliveryId}/retry`
-  try {
-    await apiJson('POST', path)
-    toast('Entrega reenviada', 'success')
-    await loadDeliveries(webhookId, connId)
-    if (connId === '__global__') renderGlobalWebhooks()
-    else renderInstances()
-  } catch (e) { toast(e.message, 'error') }
-}
+      async function retryDelivery(connId, webhookId, deliveryId) {
+        const path = connId === '__global__' ? `/webhooks/${webhookId}/deliveries/${deliveryId}/retry` : `/connections/${connId}/webhooks/${webhookId}/deliveries/${deliveryId}/retry`
+        try {
+          await apiJson('POST', path)
+          toast('Entrega reenviada', 'success')
+          await loadDeliveries(webhookId, connId)
+          if (connId === '__global__') renderGlobalWebhooks()
+          else renderInstances()
+        } catch (e) {
+          toast(e.message, 'error')
+        }
+      }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Auto-refresh
-// ────────────────────────────────────────────────────────────────────────────
-function setAutoRefresh(enabled) {
-  if (S.autoRefreshTimer) { clearInterval(S.autoRefreshTimer); S.autoRefreshTimer = null }
-  if (enabled) S.autoRefreshTimer = setInterval(loadAll, 5000)
-}
+      // ────────────────────────────────────────────────────────────────────────────
+      // Auto-refresh
+      // ────────────────────────────────────────────────────────────────────────────
+      function setAutoRefresh(enabled) {
+        if (S.autoRefreshTimer) {
+          clearInterval(S.autoRefreshTimer)
+          S.autoRefreshTimer = null
+        }
+        if (enabled) S.autoRefreshTimer = setInterval(loadAll, 5000)
+      }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Init
-// ────────────────────────────────────────────────────────────────────────────
-async function init() {
-  if (S.apiKey) {
-    // Already have a key stored — try it
-    try {
-      const r = await fetch('/connections', {
-        headers: { authorization: `Bearer ${S.apiKey}` },
-      })
-      if (r.status === 401) { showAuthOverlay(); return }
-    } catch {}
-    document.getElementById('auth-overlay').classList.add('hidden')
-  } else {
-    // No key — try without auth first
-    try {
-      const r = await fetch('/connections')
-      if (r.status === 401) { showAuthOverlay(); return }
-    } catch {}
-    document.getElementById('auth-overlay').classList.add('hidden')
-  }
-  loadAll()
-  setAutoRefresh(true)
-}
+      // ────────────────────────────────────────────────────────────────────────────
+      // Init
+      // ────────────────────────────────────────────────────────────────────────────
+      async function init() {
+        if (S.apiKey) {
+          // Already have a key stored — try it
+          try {
+            const r = await fetch('/connections', {
+              headers: { authorization: `Bearer ${S.apiKey}` },
+            })
+            if (r.status === 401) {
+              showAuthOverlay()
+              return
+            }
+          } catch {}
+          document.getElementById('auth-overlay').classList.add('hidden')
+        } else {
+          // No key — try without auth first
+          try {
+            const r = await fetch('/connections')
+            if (r.status === 401) {
+              showAuthOverlay()
+              return
+            }
+          } catch {}
+          document.getElementById('auth-overlay').classList.add('hidden')
+        }
+        loadAll()
+        setAutoRefresh(true)
+      }
 
-init()
-</script>
-</body>
+      init()
+    </script>
+  </body>
 </html>

@@ -169,4 +169,3 @@ describe('auth-state factory', () => {
     expect(useMultiFileAuthState).not.toHaveBeenCalled()
   })
 })
-

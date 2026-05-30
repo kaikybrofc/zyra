@@ -6,19 +6,16 @@ import { createDelivery, updateDelivery } from './store.js'
 import { resolveAllowedWebhookTarget } from './url-validation.js'
 
 const RETRY_DELAYS_MS = [
-  30 * 1000,        // 1st retry: 30s
-  5 * 60 * 1000,    // 2nd retry: 5min
-  30 * 60 * 1000,   // 3rd retry: 30min
+  30 * 1000, // 1st retry: 30s
+  5 * 60 * 1000, // 2nd retry: 5min
+  30 * 60 * 1000, // 3rd retry: 30min
 ]
 
 const sign = (secret: string, body: string): string => {
   return 'sha256=' + createHmac('sha256', secret).update(body).digest('hex')
 }
 
-export const attemptDelivery = async (
-  delivery: DeliveryRecord,
-  webhook: WebhookRecord
-): Promise<void> => {
+export const attemptDelivery = async (delivery: DeliveryRecord, webhook: WebhookRecord): Promise<void> => {
   const body = JSON.stringify(delivery.payload)
   const headers: Record<string, string> = {
     'content-type': 'application/json',
@@ -97,10 +94,7 @@ export const attemptDelivery = async (
   })
 }
 
-export const sendWebhookEvent = async (
-  webhook: WebhookRecord,
-  payload: WebhookPayload
-): Promise<void> => {
+export const sendWebhookEvent = async (webhook: WebhookRecord, payload: WebhookPayload): Promise<void> => {
   const delivery = await createDelivery({
     webhookId: webhook.id,
     connectionId: webhook.connectionId,

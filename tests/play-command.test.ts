@@ -82,24 +82,14 @@ describe('play command', () => {
     const ctx = createCtx(['never', 'gonna', 'give', 'you', 'up'])
     const audioBuffer = Buffer.from('audio')
     const thumbBuffer = Buffer.from('thumb')
-    fetchMock
-      .mockResolvedValueOnce(new Response(audioBuffer, { status: 200, headers: { 'content-type': 'audio/mpeg' } }))
-      .mockResolvedValueOnce(new Response(thumbBuffer, { status: 200, headers: { 'content-type': 'image/jpeg' } }))
+    fetchMock.mockResolvedValueOnce(new Response(audioBuffer, { status: 200, headers: { 'content-type': 'audio/mpeg' } })).mockResolvedValueOnce(new Response(thumbBuffer, { status: 200, headers: { 'content-type': 'image/jpeg' } }))
 
     await playCommand.execute(ctx as never)
 
     expect(resolvePlayInputMock).toHaveBeenCalledWith('never gonna give you up', { skipLookupKeys: [] })
     expect(refreshTrackIfNeededMock).toHaveBeenCalledWith(baseTrack, { skipLookupKeys: ['audio:q:teste'] })
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      1,
-      'https://cdn.example/audio.mp3',
-      expect.objectContaining({ signal: expect.any(AbortSignal) })
-    )
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      'https://img.example/thumb.jpg',
-      expect.objectContaining({ signal: expect.any(AbortSignal) })
-    )
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://cdn.example/audio.mp3', expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://img.example/thumb.jpg', expect.objectContaining({ signal: expect.any(AbortSignal) }))
     expect(ctx.send).toHaveBeenCalledWith({
       image: thumbBuffer,
       caption: '🎵 Track Title\nArtista/Canal: Artist Name\nDuração: 2:03\nID: abc\nhttps://example.com/watch?v=1',
@@ -116,9 +106,7 @@ describe('play command', () => {
     const ctx = createCtx(['https://youtu.be/dQw4w9WgXcQ'])
     const audioBuffer = Buffer.from('url-audio')
     const thumbBuffer = Buffer.from('url-thumb')
-    fetchMock
-      .mockResolvedValueOnce(new Response(audioBuffer, { status: 200 }))
-      .mockResolvedValueOnce(new Response(thumbBuffer, { status: 200 }))
+    fetchMock.mockResolvedValueOnce(new Response(audioBuffer, { status: 200 })).mockResolvedValueOnce(new Response(thumbBuffer, { status: 200 }))
 
     await playCommand.execute(ctx as never)
 
@@ -144,9 +132,7 @@ describe('play command', () => {
     const thumbBuffer = Buffer.from('fresh-thumb')
     const audioBuffer = Buffer.from('fresh-audio')
 
-    refreshTrackIfNeededMock
-      .mockImplementationOnce(async (track: unknown) => track)
-      .mockResolvedValueOnce(refreshedTrack)
+    refreshTrackIfNeededMock.mockImplementationOnce(async (track: unknown) => track).mockResolvedValueOnce(refreshedTrack)
     fetchMock
       .mockResolvedValueOnce(new Response('expired', { status: 503 }))
       .mockResolvedValueOnce(new Response(audioBuffer, { status: 200 }))
@@ -157,16 +143,8 @@ describe('play command', () => {
 
     expect(refreshTrackIfNeededMock).toHaveBeenNthCalledWith(1, baseTrack, { skipLookupKeys: ['audio:q:teste'] })
     expect(refreshTrackIfNeededMock).toHaveBeenNthCalledWith(2, baseTrack, { forceRefresh: true, skipLookupKeys: ['audio:q:teste'] })
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      'https://cdn.example/audio-fresh.mp3',
-      expect.objectContaining({ signal: expect.any(AbortSignal) })
-    )
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
-      'https://img.example/thumb.jpg',
-      expect.objectContaining({ signal: expect.any(AbortSignal) })
-    )
+    expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://cdn.example/audio-fresh.mp3', expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(fetchMock).toHaveBeenNthCalledWith(3, 'https://img.example/thumb.jpg', expect.objectContaining({ signal: expect.any(AbortSignal) }))
     expect(ctx.send).toHaveBeenCalledWith({
       image: thumbBuffer,
       caption: '🎵 Fresh Title\nArtista/Canal: Artist Name\nDuração: 2:03\nID: abc\nhttps://example.com/watch?v=1',
@@ -176,12 +154,8 @@ describe('play command', () => {
 
   it('retorna erro amigável quando o envio falha sem ser transitório', async () => {
     const ctx = createCtx(['fail'])
-    resolvePlayInputMock
-      .mockResolvedValueOnce(baseTrack)
-      .mockRejectedValueOnce(new Error('sem mais candidatos'))
-    fetchMock
-      .mockResolvedValueOnce(new Response('bad gateway', { status: 502 }))
-      .mockResolvedValueOnce(new Response('bad gateway', { status: 502 }))
+    resolvePlayInputMock.mockResolvedValueOnce(baseTrack).mockRejectedValueOnce(new Error('sem mais candidatos'))
+    fetchMock.mockResolvedValueOnce(new Response('bad gateway', { status: 502 })).mockResolvedValueOnce(new Response('bad gateway', { status: 502 }))
     isLikelyTransientPlayStreamErrorMock.mockImplementation((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error)
       return message.includes('HTTP 502 ao baixar áudio')
@@ -199,9 +173,7 @@ describe('play command', () => {
     const secondTrack = { ...baseTrack, lookupKey: 'audio:q:big-2', streamUrl: 'https://cdn.example/audio-2.mp3', title: 'Track 2' }
     const audioBuffer = Buffer.from('audio-2')
     const thumbBuffer = Buffer.from('thumb-2')
-    resolvePlayInputMock
-      .mockResolvedValueOnce(baseTrack)
-      .mockResolvedValueOnce(secondTrack)
+    resolvePlayInputMock.mockResolvedValueOnce(baseTrack).mockResolvedValueOnce(secondTrack)
     fetchMock
       .mockResolvedValueOnce(
         new Response('too big', {
@@ -228,9 +200,7 @@ describe('play command', () => {
   it('bloqueia áudio acima de 100 MB quando o tamanho real ultrapassa o limite', async () => {
     const ctx = createCtx(['huge'])
     const oversizeBuffer = new Uint8Array(100 * 1024 * 1024 + 1)
-    resolvePlayInputMock
-      .mockResolvedValueOnce(baseTrack)
-      .mockRejectedValueOnce(new Error('sem mais candidatos'))
+    resolvePlayInputMock.mockResolvedValueOnce(baseTrack).mockRejectedValueOnce(new Error('sem mais candidatos'))
     fetchMock.mockResolvedValueOnce(
       new Response(oversizeBuffer, {
         status: 200,

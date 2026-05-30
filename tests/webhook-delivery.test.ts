@@ -86,7 +86,7 @@ describe('webhook delivery', () => {
     executeMock.mockResolvedValue([[]])
 
     const { attemptDelivery } = await import('../src/webhook/delivery.ts')
-    const delivery = makeDelivery({ attempts: 3 })  // 3 + 1 = 4 = max
+    const delivery = makeDelivery({ attempts: 3 }) // 3 + 1 = 4 = max
     const webhook = makeWebhook()
 
     await attemptDelivery(delivery, webhook)

@@ -56,9 +56,7 @@ class GroupFeatureStore {
     if (!input) return {}
     return {
       ...(typeof input.antilink === 'boolean' ? { antilink: input.antilink } : {}),
-      ...(Array.isArray(input.antilinkAllowedDomains)
-        ? { antilinkAllowedDomains: [...new Set(input.antilinkAllowedDomains.map((entry) => entry.trim().toLowerCase()).filter(Boolean))] }
-        : {}),
+      ...(Array.isArray(input.antilinkAllowedDomains) ? { antilinkAllowedDomains: [...new Set(input.antilinkAllowedDomains.map((entry) => entry.trim().toLowerCase()).filter(Boolean))] } : {}),
       ...(typeof input.antilinkAllowOwnGroupInvite === 'boolean' ? { antilinkAllowOwnGroupInvite: input.antilinkAllowOwnGroupInvite } : {}),
     }
   }

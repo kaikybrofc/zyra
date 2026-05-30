@@ -91,12 +91,7 @@ describe('antiban helper', () => {
     const loaded = await loadAntiBanWarmUpState('conn-a', logger as never)
     expect(loaded).toEqual({ day: 2 })
 
-    await saveAntiBanWarmUpState(
-      { antiban: { exportWarmUpState: () => ({ day: 3 }), getStats: () => ({}) } } as never,
-      'conn-a',
-      logger as never,
-      'teste'
-    )
+    await saveAntiBanWarmUpState({ antiban: { exportWarmUpState: () => ({ day: 3 }), getStats: () => ({}) } } as never, 'conn-a', logger as never, 'teste')
 
     expect(adapterLoadMock).toHaveBeenCalledWith('warmup')
     expect(adapterSaveMock).toHaveBeenCalledWith('warmup', { day: 3 })
@@ -157,10 +152,7 @@ describe('antiban helper', () => {
     const loaded = await loadAntiBanWarmUpState('conn-a', logger as never)
 
     expect(loaded).toBeUndefined()
-    expect(logger.warn).toHaveBeenCalledWith(
-      'falha ao carregar estado de warm-up do antiban',
-      expect.objectContaining({ connectionId: 'conn-a', err: expect.any(Error) })
-    )
+    expect(logger.warn).toHaveBeenCalledWith('falha ao carregar estado de warm-up do antiban', expect.objectContaining({ connectionId: 'conn-a', err: expect.any(Error) }))
   })
 
   it('nao salva quando socket nao possui antiban', async () => {
@@ -178,17 +170,9 @@ describe('antiban helper', () => {
     adapterSaveMock.mockRejectedValueOnce(new Error('save failed'))
     const { saveAntiBanWarmUpState } = await import('../src/core/connection/antiban.ts')
 
-    await saveAntiBanWarmUpState(
-      { antiban: { exportWarmUpState: () => ({ day: 3 }), getStats: () => ({}) } } as never,
-      'conn-a',
-      logger as never,
-      'teste-save'
-    )
+    await saveAntiBanWarmUpState({ antiban: { exportWarmUpState: () => ({ day: 3 }), getStats: () => ({}) } } as never, 'conn-a', logger as never, 'teste-save')
 
-    expect(logger.warn).toHaveBeenCalledWith(
-      'falha ao salvar estado de warm-up do antiban',
-      expect.objectContaining({ connectionId: 'conn-a', reason: 'teste-save', err: expect.any(Error) })
-    )
+    expect(logger.warn).toHaveBeenCalledWith('falha ao salvar estado de warm-up do antiban', expect.objectContaining({ connectionId: 'conn-a', reason: 'teste-save', err: expect.any(Error) }))
   })
 
   it('retorna o socket original quando antiban esta desativado', async () => {
@@ -235,28 +219,21 @@ describe('antiban helper', () => {
       connectedSinceMs: 9999,
     })
 
-    expect(wrappedAntiban?.rateLimiter?.config).toEqual(expect.objectContaining({
-      maxIdenticalMessages: 200,
-      identicalMessageWindowMs: 60000,
-      burstAllowance: 20,
-    }))
+    expect(wrappedAntiban?.rateLimiter?.config).toEqual(
+      expect.objectContaining({
+        maxIdenticalMessages: 200,
+        identicalMessageWindowMs: 60000,
+        burstAllowance: 20,
+      })
+    )
     expect(wrappedAntiban?.jidCanonicalizerModule).toBeTruthy()
     expect(wrappedAntiban?.lidResolverModule).toBeTruthy()
     expect(deafSession?.timeoutMs).toBe(300000)
     expect(deafSession?.minUptimeMs).toBe(120000)
     expect(deafSession?.autoReconnect).toBe(true)
-    expect(logger.warn).toHaveBeenCalledWith(
-      'antiban alterou o nivel de risco',
-      expect.objectContaining({ connectionId: 'conn-z', risk: 'high', score: 90 })
-    )
-    expect(logger.warn).toHaveBeenCalledWith(
-      'antiban detectou reachout timelock',
-      expect.objectContaining({ connectionId: 'conn-z', enforcementType: 'temporary', errorCount: 2 })
-    )
-    expect(logger.info).toHaveBeenCalledWith(
-      'antiban liberou o reachout timelock',
-      expect.objectContaining({ connectionId: 'conn-z', enforcementType: 'temporary', errorCount: 0 })
-    )
+    expect(logger.warn).toHaveBeenCalledWith('antiban alterou o nivel de risco', expect.objectContaining({ connectionId: 'conn-z', risk: 'high', score: 90 }))
+    expect(logger.warn).toHaveBeenCalledWith('antiban detectou reachout timelock', expect.objectContaining({ connectionId: 'conn-z', enforcementType: 'temporary', errorCount: 2 }))
+    expect(logger.info).toHaveBeenCalledWith('antiban liberou o reachout timelock', expect.objectContaining({ connectionId: 'conn-z', enforcementType: 'temporary', errorCount: 0 }))
     expect(logger.warn).toHaveBeenCalledWith(
       'antiban detectou sessao possivelmente surda',
       expect.objectContaining({
