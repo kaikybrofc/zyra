@@ -57,11 +57,11 @@
   "dependencies": {
     "@caed0/webp-conv": "^2.2.3",
     "@hapi/boom": "^10.0.1",
-    "baileys": "npm:@whiskeysockets/baileys@7.0.0-rc11",
+    "baileys": "npm:@whiskeysockets/baileys@7.0.0-rc13",
     "baileys-antiban": "3.8.11",
-    "libsignal": "^6.0.0",
     "dotenv": "^16.4.5",
     "fflate": "^0.8.2",
+    "libsignal": "^6.0.0",
     "link-preview-js": "4.0.1",
     "linkifyjs": "^4.3.3",
     "logform": "^2.7.0",
@@ -76,13 +76,13 @@
     "@types/qrcode-terminal": "^0.12.2",
     "eslint": "^9.0.0",
     "patch-package": "^8.0.1",
-    "winston": "^3.18.3",
-    "winston-daily-rotate-file": "^5.0.0",
     "prettier": "^3.8.1",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "typescript-eslint": "^8.0.0",
-    "vitest": "^4.1.2"
+    "vitest": "^4.1.2",
+    "winston": "^3.18.3",
+    "winston-daily-rotate-file": "^5.0.0"
   },
   "overrides": {
     "vite": "8.0.5",
