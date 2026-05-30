@@ -32,5 +32,9 @@ describe('auth-dir', () => {
     expect(resolveAuthDir('c1')).toBe(path.resolve(process.cwd(), '/tmp/zyra-auth', 'c1'))
     expect(resolveAuthDir('c1')).toBe('/tmp/zyra-auth/c1')
   })
-})
 
+  it('rejeita connectionId inválido para evitar path traversal', async () => {
+    const { resolveAuthDir } = await import('../src/core/auth/auth-dir.ts')
+    expect(() => resolveAuthDir('../evil')).toThrow()
+  })
+})

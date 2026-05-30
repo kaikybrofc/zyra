@@ -2,6 +2,7 @@ import path from 'node:path'
 import { FileStateAdapter, JidCanonicalizer, LidResolver, wrapSocket, type AntiBanConfig, type WarmUpState, type WrappedSocket } from 'baileys-antiban'
 import { config } from '../../config/index.js'
 import type { AppLogger } from '../../observability/logger.js'
+import { assertValidConnectionId } from './connection-id.js'
 
 /**
  * Extensão do socket para incluir métodos do Anti-Ban.
@@ -56,8 +57,11 @@ const buildDeafSessionConfig = (logger: AppLogger, connectionId: string) => {
   }
 }
 
+export const resolveAntiBanStateDir = (connectionId: string): string =>
+  path.resolve(process.cwd(), config.antibanStateDir, assertValidConnectionId(connectionId))
+
 const resolveStateAdapter = (connectionId: string): FileStateAdapter =>
-  new FileStateAdapter(path.resolve(process.cwd(), config.antibanStateDir, connectionId))
+  new FileStateAdapter(resolveAntiBanStateDir(connectionId))
 
 const isInvalidPersistedWarmUpStateError = (error: unknown): boolean => {
   if (!(error instanceof SyntaxError)) return false

@@ -16,6 +16,7 @@ import {
 } from '../../store/connection-admin-store.js'
 import { enqueueConnectionOutboxEvent } from '../webhooks/outbox-dispatcher.js'
 import { hardDeleteSessionArtifacts } from './session-cleanup.js'
+import { assertValidConnectionId } from './connection-id.js'
 
 /** Estado da conexão ao longo do seu ciclo de vida em memória. */
 export type ConnectionStatus = 'created' | 'connecting' | 'qr' | 'open' | 'closed' | 'error'
@@ -75,6 +76,7 @@ export interface ConnectionManager {
     lastReconnectAtMs: number
   }>
   getAntiBanStats(): unknown
+  getAntiBanStatsByConnection(): Record<string, unknown>
 }
 
 type StartupConnectionRow = RowDataPacket & { connection_id: string }
@@ -352,11 +354,12 @@ class DefaultConnectionManager implements ConnectionManager {
   }
 
   getOrCreateRuntime(connectionId: string): ConnectionRuntime {
-    const existing = this.runtimes.get(connectionId)
+    const resolvedConnectionId = assertValidConnectionId(connectionId)
+    const existing = this.runtimes.get(resolvedConnectionId)
     if (existing) return existing
 
     const created: ConnectionRuntime = {
-      connectionId,
+      connectionId: resolvedConnectionId,
       activeSocket: null,
       reconnectPromise: null,
       socketGeneration: 0,
@@ -367,9 +370,9 @@ class DefaultConnectionManager implements ConnectionManager {
       qrCodeAt: null,
       label: null,
     }
-    this.runtimes.set(connectionId, created)
+    this.runtimes.set(resolvedConnectionId, created)
 
-    this.syncManagedConnection(connectionId, {
+    this.syncManagedConnection(resolvedConnectionId, {
       status: runtimeStatusToManagedStatus[created.status],
       desiredState: created.desiredState,
       enabled: true,
@@ -377,7 +380,7 @@ class DefaultConnectionManager implements ConnectionManager {
       webhookSource: 'manager.runtime',
     })
     this.recordAdminEvent({
-      connectionId,
+      connectionId: resolvedConnectionId,
       eventType: 'connection.registered',
       source: 'manager.runtime',
       newState: created.status,
@@ -909,6 +912,16 @@ class DefaultConnectionManager implements ConnectionManager {
     return {}
   }
 
+  getAntiBanStatsByConnection(): Record<string, unknown> {
+    const output: Record<string, unknown> = {}
+    for (const runtime of this.runtimes.values()) {
+      const stats = (runtime.activeSocket as { antiban?: { getStats?: () => unknown } } | null)?.antiban?.getStats?.()
+      if (!stats) continue
+      output[runtime.connectionId] = stats
+    }
+    return output
+  }
+
   private syncManagedConnection(
     connectionId: string,
     patch: Omit<UpsertManagedConnectionInput, 'connectionId'>
@@ -1055,3 +1068,7 @@ export const getOperationalSnapshots = () => connectionManager.getOperationalSna
 
 /** Retorna as estatísticas antiban do primeiro socket ativo disponível. */
 export const getAntiBanStats = (): unknown => connectionManager.getAntiBanStats()
+
+/** Retorna as estatísticas antiban por connection_id para observabilidade multi-conexão. */
+export const getAntiBanStatsByConnection = (): Record<string, unknown> =>
+  connectionManager.getAntiBanStatsByConnection()

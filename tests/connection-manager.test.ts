@@ -300,4 +300,25 @@ describe('ConnectionManager', () => {
       expect(s.socketActive).toBe(false)
     }
   })
+
+  it('getAntiBanStatsByConnection retorna estatísticas de cada conexão ativa', async () => {
+    createSocketMock.mockImplementation(async (connectionId: string) => ({
+      ev: { removeAllListeners: vi.fn() },
+      end: vi.fn(async () => undefined),
+      antiban: {
+        getStats: () => ({ id: connectionId, sent: connectionId === 'conn-a' ? 10 : 20 }),
+      },
+    }))
+
+    const manager = await import('../src/core/connection/manager.ts')
+    manager.createConnection('conn-a')
+    manager.createConnection('conn-b')
+    await manager.connect('conn-a', logger as never)
+    await manager.connect('conn-b', logger as never)
+
+    expect(manager.getAntiBanStatsByConnection()).toEqual({
+      'conn-a': { id: 'conn-a', sent: 10 },
+      'conn-b': { id: 'conn-b', sent: 20 },
+    })
+  })
 })

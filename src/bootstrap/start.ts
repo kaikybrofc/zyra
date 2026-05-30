@@ -2,6 +2,7 @@ import {
   getLogger,
   bootstrapConnections,
   getAntiBanStats,
+  getAntiBanStatsByConnection,
   getOperationalSnapshots,
 } from '../core/connection/manager.js'
 import { startAntiBanMetricsServer } from '../observability/antiban-metrics.js'
@@ -34,6 +35,7 @@ export async function start(): Promise<void> {
     metricsServerHandle = startAntiBanMetricsServer({
       logger,
       getStats: getAntiBanStats,
+      getStatsByConnection: getAntiBanStatsByConnection,
       getOperationalSnapshots,
     })
   }

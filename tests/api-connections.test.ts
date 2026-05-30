@@ -176,6 +176,16 @@ describe('handleConnectionsRoutes', () => {
     expect(JSON.parse(res.body)).toMatchObject({ error: expect.stringContaining('connectionId') })
   })
 
+  it('POST /connections retorna 400 para connectionId inválido', async () => {
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    const body = JSON.stringify({ connectionId: '../invalido' })
+    await handleConnectionsRoutes(makeReq('POST', '/connections', body) as never, res as never, '/connections', logger as never)
+
+    expect(res.statusCode).toBe(400)
+    expect(createConnectionMock).not.toHaveBeenCalled()
+  })
+
   it('POST /connections retorna 409 para connectionId duplicado', async () => {
     getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'existente' }))
     const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')

@@ -28,6 +28,7 @@ import {
   getWebhookCommand,
   saveWebhookCommandReceived,
 } from '../../store/connection-admin-store.js'
+import { validateConnectionId } from '../../core/connection/connection-id.js'
 
 type CommandActionType =
   | 'register'
@@ -128,6 +129,14 @@ const ensureConnectionExists = (connectionId: string): { created: boolean } => {
   if (existing) return { created: false }
   createConnection(connectionId)
   return { created: true }
+}
+
+const parseWebhookConnectionId = (
+  rawConnectionId: string | null | undefined
+): { ok: true; value: string } | { ok: false; reason: string } => {
+  const parsed = validateConnectionId(rawConnectionId)
+  if (parsed.ok) return parsed
+  return { ok: false, reason: parsed.reason.replace('connectionId', 'connection.id') }
 }
 
 const requireJsonContentType = (req: IncomingMessage): boolean => {
@@ -260,7 +269,7 @@ export async function handleConnectionWebhookRoutes(
   }
 
   const commandId = String(payload.command_id ?? '').trim()
-  const connectionId = String(payload.connection?.id ?? '').trim()
+  const rawConnectionId = String(payload.connection?.id ?? '').trim()
   const action = String(payload.action?.type ?? '').trim()
 
   if (payload.event !== 'connection.command') {
@@ -271,10 +280,12 @@ export async function handleConnectionWebhookRoutes(
     sendError(res, 400, 'command_id é obrigatório')
     return true
   }
-  if (!connectionId) {
-    sendError(res, 400, 'connection.id é obrigatório')
+  const connectionIdParsed = parseWebhookConnectionId(rawConnectionId)
+  if (!connectionIdParsed.ok) {
+    sendError(res, 400, connectionIdParsed.reason)
     return true
   }
+  const connectionId = connectionIdParsed.value
   const isKnownAction = action.length > 0 && COMMAND_ACTIONS.has(action)
 
   const duplicate = await getWebhookCommand(commandId)

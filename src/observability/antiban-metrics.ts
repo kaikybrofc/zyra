@@ -33,6 +33,8 @@ type StartAntiBanMetricsServerOptions = {
   logger: AppLogger
   /** Provedor de estatísticas nativas do `baileys-antiban`. */
   getStats: () => unknown
+  /** Provedor de estatísticas anti-ban por conexão para ambientes multi-conexão. */
+  getStatsByConnection?: () => Record<string, unknown>
   /** Provedor de snapshots operacionais adicionais do runtime. */
   getOperationalSnapshots?: OperationalSnapshotProvider
 }
@@ -180,7 +182,12 @@ const renderOperationalPrometheus = (snapshots: OperationalSnapshot[]): string =
  * - `${WA_ANTIBAN_METRICS_PATH}?format=json`: payload JSON com stats + snapshot operacional
  * - `${WA_ANTIBAN_METRICS_PATH}/ops`: métricas operacionais extras (Prometheus)
  */
-export const startAntiBanMetricsServer = ({ logger, getStats, getOperationalSnapshots }: StartAntiBanMetricsServerOptions): MetricsServerHandle => {
+export const startAntiBanMetricsServer = ({
+  logger,
+  getStats,
+  getStatsByConnection,
+  getOperationalSnapshots,
+}: StartAntiBanMetricsServerOptions): MetricsServerHandle => {
   if (!config.antibanEnabled || !config.antibanMetricsEnabled) {
     return {
       stop: async () => undefined,
@@ -207,6 +214,7 @@ export const startAntiBanMetricsServer = ({ logger, getStats, getOperationalSnap
       const payload = {
         generatedAt: new Date().toISOString(),
         stats: getStats(),
+        statsByConnection: getStatsByConnection?.() ?? {},
         operations: buildOperationalSnapshots(getOperationalSnapshots),
       }
       res.statusCode = 200

@@ -5,6 +5,7 @@ import { resolveAuthDir } from '../auth/auth-dir.js'
 import { getMysqlPool } from '../db/mysql.js'
 import { getRedisClient } from '../redis/client.js'
 import { getLegacyRedisNamespace, getRedisNamespace } from '../redis/prefix.js'
+import { resolveAntiBanStateDir } from './antiban.js'
 
 const DEFAULT_TIMEOUT_MS = Math.max(1_000, Number(process.env.WA_DELETE_SESSION_TIMEOUT_MS ?? 15_000))
 const REDIS_SCAN_MAX_MS = Math.max(5_000, Number(process.env.WA_DELETE_SESSION_REDIS_MAX_MS ?? 60_000))
@@ -13,6 +14,7 @@ type SessionCleanupResult = {
   mysql: boolean
   redis: boolean
   authDir: boolean
+  antibanState: boolean
   errors: string[]
 }
 
@@ -83,6 +85,7 @@ export const hardDeleteSessionArtifacts = async (
     mysql: false,
     redis: false,
     authDir: false,
+    antibanState: false,
     errors: [],
   }
 
@@ -146,6 +149,20 @@ export const hardDeleteSessionArtifacts = async (
       const message = error instanceof Error ? error.message : String(error)
       result.errors.push(`auth_dir: ${message}`)
       logger.warn('hard delete: falha ao limpar diretório local de auth', { connectionId, err: error })
+    }
+  }
+
+  if (!config.antibanStateDir) {
+    result.antibanState = true
+  } else {
+    try {
+      const antibanStateDir = resolveAntiBanStateDir(connectionId)
+      await withTimeout('antiban.rm', rm(antibanStateDir, { recursive: true, force: true }))
+      result.antibanState = true
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      result.errors.push(`antiban_state: ${message}`)
+      logger.warn('hard delete: falha ao limpar diretório do estado antiban', { connectionId, err: error })
     }
   }
 

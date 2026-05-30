@@ -322,6 +322,32 @@ describe('handleConnectionWebhookRoutes', () => {
     expect(res.statusCode).toBe(422)
   })
 
+  it('retorna 400 para connection.id inválido', async () => {
+    const timestamp = String(Date.now())
+    const body = JSON.stringify({
+      event: 'connection.command',
+      command_id: 'cmd-invalid-connection',
+      connection: { id: '../evil' },
+      action: { type: 'register' },
+    })
+    const signature = signBody(timestamp, body)
+    const res = makeRes()
+
+    await handleConnectionWebhookRoutes(
+      makeReq(body, {
+        'x-zyra-timestamp': timestamp,
+        'x-zyra-delivery-id': 'delivery-invalid-connection',
+        'x-zyra-signature': signature,
+      }) as never,
+      res as never,
+      '/webhooks/connections',
+      logger as never
+    )
+
+    expect(res.statusCode).toBe(400)
+    expect(createConnectionMock).not.toHaveBeenCalled()
+  })
+
   it('processa action pairing_start', async () => {
     const timestamp = String(Date.now())
     const body = JSON.stringify({

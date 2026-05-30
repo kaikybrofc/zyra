@@ -108,6 +108,10 @@ describe('antiban metrics server', () => {
     startAntiBanMetricsServer({
       logger: logger as never,
       getStats: () => ({ ok: true }),
+      getStatsByConnection: () => ({
+        'conn-a': { sent: 2 },
+        'conn-b': { sent: 4 },
+      }),
       getOperationalSnapshots: () => [
         { connectionId: 'conn-a', socketActive: true },
         { connectionId: 'conn-b', socketActive: false },
@@ -118,8 +122,14 @@ describe('antiban metrics server', () => {
     await serverHandler?.({ url: '/metrics?format=json' }, res)
 
     expect(res.statusCode).toBe(200)
-    const payload = JSON.parse(res.body) as { stats: { ok: boolean }; operations: Array<{ connectionId: string }> }
+    const payload = JSON.parse(res.body) as {
+      stats: { ok: boolean }
+      statsByConnection: Record<string, { sent: number }>
+      operations: Array<{ connectionId: string }>
+    }
     expect(payload.stats.ok).toBe(true)
+    expect(payload.statsByConnection['conn-a']?.sent).toBe(2)
+    expect(payload.statsByConnection['conn-b']?.sent).toBe(4)
     expect(payload.operations.map((entry) => entry.connectionId)).toEqual(['conn-a', 'conn-b'])
   })
 
