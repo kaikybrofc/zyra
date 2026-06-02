@@ -91,7 +91,10 @@
       "libsignal": "$libsignal"
     },
     "pm2": {
-      "ws": "8.20.1"
+      "ws": "8.20.1",
+      "@pm2/js-api": {
+        "ws": "7.5.11"
+      }
     },
     "link-preview-js": "4.0.3"
   }
