@@ -16,7 +16,9 @@ module.exports = {
       },
       env_production: {
         NODE_ENV: 'production',
-        WA_API_ENABLED: 'false',
+        WA_API_ENABLED: 'true',
+        WA_API_HOST: '127.0.0.1',
+        WA_API_PORT: '3021',
         WA_BOOTSTRAP_CONNECTIONS_ENABLED: 'true',
         WA_WEBHOOK_RETRY_ENABLED: 'false',
         WA_WEBHOOK_OUTBOX_ENABLED: 'false',
