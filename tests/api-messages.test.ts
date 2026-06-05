@@ -171,6 +171,60 @@ describe('handleMessagesRoutes', () => {
     })
   })
 
+  it('fixa mensagem por 7 dias com type=pin', async () => {
+    const sock = makeSock()
+    getConnectionMock.mockReturnValue(makeInfo())
+    getActiveSocketMock.mockReturnValue(sock)
+    const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
+    const res = createResponse()
+    const body = JSON.stringify({
+      type: 'pin',
+      to: 'grupo@g.us',
+      messageKey: { id: 'msg-id', remoteJid: 'grupo@g.us', fromMe: true },
+      time: 604800,
+    })
+
+    await handleMessagesRoutes(makeReq('POST', '/connections/sess/messages/send', body) as never, res as never, '/connections/sess/messages/send', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(sock.sendMessage).toHaveBeenCalledWith('grupo@g.us', {
+      pin: { id: 'msg-id', remoteJid: 'grupo@g.us', fromMe: true },
+      type: 1,
+      time: 604800,
+    })
+  })
+
+  it('retorna 400 para pin sem messageKey.id', async () => {
+    getConnectionMock.mockReturnValue(makeInfo())
+    getActiveSocketMock.mockReturnValue(makeSock())
+    const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
+    const res = createResponse()
+    const body = JSON.stringify({ type: 'pin', to: 'grupo@g.us', messageKey: {} })
+
+    await handleMessagesRoutes(makeReq('POST', '/connections/sess/messages/send', body) as never, res as never, '/connections/sess/messages/send', logger as never)
+
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toMatchObject({ error: expect.stringContaining('messageKey.id') })
+  })
+
+  it('retorna 400 para pin com time inválido', async () => {
+    getConnectionMock.mockReturnValue(makeInfo())
+    getActiveSocketMock.mockReturnValue(makeSock())
+    const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
+    const res = createResponse()
+    const body = JSON.stringify({
+      type: 'pin',
+      to: 'grupo@g.us',
+      messageKey: { id: 'msg-id' },
+      time: 123,
+    })
+
+    await handleMessagesRoutes(makeReq('POST', '/connections/sess/messages/send', body) as never, res as never, '/connections/sess/messages/send', logger as never)
+
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toMatchObject({ error: expect.stringContaining('86400') })
+  })
+
   it('retorna 400 para type desconhecido', async () => {
     getConnectionMock.mockReturnValue(makeInfo())
     getActiveSocketMock.mockReturnValue(makeSock())

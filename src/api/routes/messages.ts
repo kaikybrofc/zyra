@@ -1,3 +1,4 @@
+import type { WAMessageKey } from 'baileys'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { AppLogger } from '../../observability/logger.js'
 import { getConnection, getActiveSocket } from '../../core/connection/manager.js'
@@ -18,7 +19,14 @@ type SendMediaPayload = {
   mimetype?: string
 }
 
-type SendMessagePayload = SendTextPayload | SendMediaPayload
+type SendPinPayload = {
+  type: 'pin'
+  to: string
+  messageKey: WAMessageKey
+  time?: 86400 | 604800 | 2592000
+}
+
+type SendMessagePayload = SendTextPayload | SendMediaPayload | SendPinPayload
 
 /**
  * Trata requisições HTTP para envio de mensagens via uma instância conectada.
@@ -96,8 +104,22 @@ export async function handleMessagesRoutes(req: IncomingMessage, res: ServerResp
           mimetype: payload.mimetype ?? 'application/octet-stream',
           ...(payload.fileName !== undefined && { fileName: payload.fileName }),
         })
+      } else if (payload.type === 'pin') {
+        if (!payload.messageKey || typeof payload.messageKey !== 'object' || !payload.messageKey.id?.trim()) {
+          sendError(res, 400, 'campo messageKey.id é obrigatório para type=pin')
+          return true
+        }
+        if (payload.time !== undefined && ![86400, 604800, 2592000].includes(payload.time)) {
+          sendError(res, 400, 'campo time deve ser 86400, 604800 ou 2592000 para type=pin')
+          return true
+        }
+        result = await sock.sendMessage(to, {
+          pin: payload.messageKey,
+          type: 1,
+          ...(payload.time !== undefined && { time: payload.time }),
+        })
       } else {
-        sendError(res, 400, 'type deve ser: text, image, video, audio ou document')
+        sendError(res, 400, 'type deve ser: text, image, video, audio, document ou pin')
         return true
       }
 
