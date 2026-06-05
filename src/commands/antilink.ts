@@ -1,5 +1,6 @@
 import type { Command } from './types.js'
 import { groupFeatureStore } from '../store/group-feature-store.js'
+import { normalizeAntilinkDomain } from '../utils/antilink-domain.js'
 
 const parseOnOff = (value: string | undefined): boolean | null => {
   if (!value) return null
@@ -7,18 +8,6 @@ const parseOnOff = (value: string | undefined): boolean | null => {
   if (['on', '1', 'true', 'ativar'].includes(normalized)) return true
   if (['off', '0', 'false', 'desativar'].includes(normalized)) return false
   return null
-}
-
-const normalizeDomain = (value: string | undefined): string | null => {
-  if (!value) return null
-  const raw = value.trim().toLowerCase()
-  if (!raw) return null
-  return (
-    raw
-      .replace(/^https?:\/\//, '')
-      .replace(/^www\./, '')
-      .split('/')[0] ?? null
-  )
 }
 
 /**
@@ -50,7 +39,7 @@ export const antilinkCommand: Command = {
         return
       }
 
-      const domain = normalizeDomain(ctx.args[2])
+      const domain = normalizeAntilinkDomain(ctx.args[2])
       if (!domain || !subaction || !['add', 'remove'].includes(subaction)) {
         await ctx.reply('Uso: !antilink allow add|remove|list dominio.com')
         return

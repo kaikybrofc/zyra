@@ -5,6 +5,7 @@ import { config } from '../config/index.js'
 import { getMysqlPool } from '../core/db/mysql.js'
 import { getRedisClient } from '../core/redis/client.js'
 import { getRedisNamespace } from '../core/redis/prefix.js'
+import { normalizeAntilinkDomain } from '../utils/antilink-domain.js'
 
 type GroupFeatureState = {
   antilink?: boolean
@@ -56,7 +57,9 @@ class GroupFeatureStore {
     if (!input) return {}
     return {
       ...(typeof input.antilink === 'boolean' ? { antilink: input.antilink } : {}),
-      ...(Array.isArray(input.antilinkAllowedDomains) ? { antilinkAllowedDomains: [...new Set(input.antilinkAllowedDomains.map((entry) => entry.trim().toLowerCase()).filter(Boolean))] } : {}),
+      ...(Array.isArray(input.antilinkAllowedDomains)
+        ? { antilinkAllowedDomains: [...new Set(input.antilinkAllowedDomains.map((entry) => normalizeAntilinkDomain(entry)).filter((entry): entry is string => Boolean(entry)))] }
+        : {}),
       ...(typeof input.antilinkAllowOwnGroupInvite === 'boolean' ? { antilinkAllowOwnGroupInvite: input.antilinkAllowOwnGroupInvite } : {}),
     }
   }
@@ -236,7 +239,7 @@ class GroupFeatureStore {
   }
 
   async addAntilinkAllowedDomain(groupJid: string, domain: string): Promise<void> {
-    const normalized = domain.trim().toLowerCase()
+    const normalized = normalizeAntilinkDomain(domain)
     if (!normalized) return
     const currentState = await this.#getState(groupJid)
     const current = await this.getAntilinkAllowedDomains(groupJid)
@@ -248,7 +251,7 @@ class GroupFeatureStore {
   }
 
   async removeAntilinkAllowedDomain(groupJid: string, domain: string): Promise<void> {
-    const normalized = domain.trim().toLowerCase()
+    const normalized = normalizeAntilinkDomain(domain)
     if (!normalized) return
     const currentState = await this.#getState(groupJid)
     const current = await this.getAntilinkAllowedDomains(groupJid)

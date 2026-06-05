@@ -1,7 +1,6 @@
 import { type WAMessage, type WASocket, type proto } from 'baileys'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { domainToASCII } from 'node:url'
 import linkify from 'linkifyjs'
 import { commands } from '../../commands/index.js'
 import type { AppLogger } from '../../observability/logger.js'
@@ -9,6 +8,7 @@ import type { SqlStore } from '../../store/sql-store.js'
 import { config } from '../../config/index.js'
 import { getMessageText, getNormalizedMessage } from '../../utils/message.js'
 import { resolveStickerSourceMedia as resolveStickerSourceMediaFromMessage } from '../../utils/sticker.js'
+import { parseAntilinkDomain } from '../../utils/antilink-domain.js'
 import { createCommandAdminActions } from './admin.js'
 import { CommandContext, type CommandSendOptions } from './context.js'
 import { groupFeatureStore } from '../../store/group-feature-store.js'
@@ -629,29 +629,19 @@ export function createCommandProcessor({ logger, sqlStore }: CreateCommandProces
   }
 
   const isAllowedByDomain = (url: URL, allowedDomains: string[]): boolean => {
-    const normalizeDomainCandidate = (value: string): { host: string; wildcard: boolean } | null => {
-      const trimmed = value.trim().toLowerCase()
-      if (!trimmed) return null
-      const wildcard = trimmed.startsWith('*.')
-      const raw = wildcard ? trimmed.slice(2) : trimmed
-      const withoutProtocol = raw.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
-      const hostPart = withoutProtocol.split('/')[0]?.split(':')[0]?.replace(/\.+$/, '') ?? ''
-      if (!hostPart) return null
-      const asciiHost = domainToASCII(hostPart).toLowerCase()
-      if (!asciiHost) return null
-      return { host: asciiHost, wildcard }
-    }
-
-    const normalizedHost = domainToASCII(url.hostname.replace(/\.+$/, '')).toLowerCase()
-    if (!normalizedHost) return false
+    const normalizedUrl = parseAntilinkDomain(url.hostname)
+    if (!normalizedUrl) return false
 
     return allowedDomains.some((domain) => {
-      const normalizedDomain = normalizeDomainCandidate(domain)
+      const normalizedDomain = parseAntilinkDomain(domain)
       if (!normalizedDomain) return false
       if (normalizedDomain.wildcard) {
-        return normalizedHost.endsWith(`.${normalizedDomain.host}`) && normalizedHost !== normalizedDomain.host
+        return normalizedUrl.host.endsWith(`.${normalizedDomain.host}`) && normalizedUrl.host !== normalizedDomain.host
       }
-      return normalizedHost === normalizedDomain.host || normalizedHost.endsWith(`.${normalizedDomain.host}`)
+      if (normalizedUrl.host === normalizedDomain.host || normalizedUrl.host.endsWith(`.${normalizedDomain.host}`)) {
+        return true
+      }
+      return normalizedUrl.registrableHost === normalizedDomain.registrableHost
     })
   }
 
