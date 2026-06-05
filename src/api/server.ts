@@ -40,16 +40,24 @@ type ApiServerHandle = {
  * - `POST   /connections/:id/connect`        — conectar (gera QR)
  * - `POST   /connections/:id/start`          — alias de conectar
  * - `POST   /connections/:id/disconnect`     — desconectar
+ * - `POST   /connections/:id/pause`          — pausar conexão
+ * - `POST   /connections/:id/resume`         — retomar conexão pausada
  * - `POST   /connections/:id/restart`        — reiniciar conexão
  * - `POST   /connections/:id/reconnect`      — alias de reiniciar conexão
+ * - `DELETE /connections/:id/hard`           — hard delete com limpeza de sessão
  * - `POST   /connections/:id/pairing/start`  — iniciar pairing remoto
  * - `POST   /connections/:id/pairing/cancel` — cancelar pairing remoto
  * - `GET    /connections/:id/pairing`        — consultar estado do pairing
  * - `GET    /connections/:id/status`         — verificar status
+ * - `GET    /connections/:id/diagnostics`    — diagnóstico ampliado da conexão
+ * - `GET    /connections/:id/events`         — trilha administrativa da conexão
+ * - `GET    /connections/:id/commands`       — comandos webhook recebidos na conexão
+ * - `GET    /connections/commands/:commandId` — consultar comando webhook por id
  * - `GET    /connections/:id/qr`             — obter QR code atual
  * - `POST   /connections/:id/webhook/start`  — iniciar conexão via webhook assinado
  * - `POST   /connections/:id/messages/send`  — enviar mensagem
  * - `GET    /connections/:id/groups`         — listar grupos
+ * - `POST   /connections/:id/groups/:groupJid/admin` — executar ações administrativas de grupo
  * - `GET    /system/runtime`                  — status operacional do processo
  * - `GET    /health/live`                    — liveness do processo
  * - `GET    /health/ready`                   — readiness (infra/control-plane)

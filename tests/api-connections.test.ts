@@ -16,8 +16,11 @@ const getConnectionMock = vi.fn()
 const setConnectionLabelMock = vi.fn()
 const connectMock = vi.fn(async () => undefined)
 const disconnectMock = vi.fn(async () => undefined)
+const pauseMock = vi.fn(async () => undefined)
+const resumeMock = vi.fn(async () => undefined)
 const restartMock = vi.fn(async () => undefined)
 const deleteConnectionMock = vi.fn(async () => undefined)
+const hardDeleteConnectionMock = vi.fn(async () => undefined)
 const startPairingMock = vi.fn(async () => ({
   connectionId: 'test-id',
   status: 'pending',
@@ -60,13 +63,22 @@ const logger = {
 const mockConfig = {
   bootstrapConnectionsEnabled: true,
   webhookSharedSecret: 'test-secret' as string | null,
+  webhookHardDeleteToken: null as string | null,
   apiHost: '127.0.0.1',
   apiPort: 3000,
   webhookTimeoutMs: 5000,
 }
 
+const getMysqlPoolMock = vi.fn(() => null)
+
 vi.mock('../src/config/index.js', () => ({
   config: mockConfig,
+}))
+vi.mock('../src/core/db/mysql.js', () => ({
+  getMysqlPool: (...args: unknown[]) => getMysqlPoolMock(...args),
+}))
+vi.mock('../src/core/db/connection.js', () => ({
+  ensureMysqlConnection: vi.fn(async () => undefined),
 }))
 
 vi.mock('../src/core/connection/manager.js', () => ({
@@ -76,8 +88,11 @@ vi.mock('../src/core/connection/manager.js', () => ({
   setConnectionLabel: (...args: unknown[]) => setConnectionLabelMock(...args),
   connect: (...args: unknown[]) => connectMock(...args),
   disconnect: (...args: unknown[]) => disconnectMock(...args),
+  pause: (...args: unknown[]) => pauseMock(...args),
+  resume: (...args: unknown[]) => resumeMock(...args),
   restart: (...args: unknown[]) => restartMock(...args),
   deleteConnection: (...args: unknown[]) => deleteConnectionMock(...args),
+  hardDeleteConnection: (...args: unknown[]) => hardDeleteConnectionMock(...args),
 }))
 vi.mock('../src/core/connection/pairing-service.js', () => ({
   startPairing: (...args: unknown[]) => startPairingMock(...args),
@@ -134,9 +149,11 @@ describe('handleConnectionsRoutes', () => {
     getConnectionMock.mockReturnValue(null)
     mockConfig.bootstrapConnectionsEnabled = true
     mockConfig.webhookSharedSecret = 'test-secret'
+    mockConfig.webhookHardDeleteToken = null
     mockConfig.apiHost = '127.0.0.1'
     mockConfig.apiPort = 3000
     mockConfig.webhookTimeoutMs = 5000
+    getMysqlPoolMock.mockReturnValue(null)
   })
 
   it('GET /connections retorna lista vazia', async () => {
@@ -272,6 +289,26 @@ describe('handleConnectionsRoutes', () => {
     expect(disconnectMock).toHaveBeenCalledWith('sess-disc', logger)
   })
 
+  it('POST /connections/:id/pause chama pause', async () => {
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-pause', status: 'closed' }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('POST', '/connections/sess-pause/pause') as never, res as never, '/connections/sess-pause/pause', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(pauseMock).toHaveBeenCalledWith('sess-pause', logger)
+  })
+
+  it('POST /connections/:id/resume chama resume', async () => {
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-resume', status: 'connecting' }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('POST', '/connections/sess-resume/resume') as never, res as never, '/connections/sess-resume/resume', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(resumeMock).toHaveBeenCalledWith('sess-resume', logger)
+  })
+
   it('POST /connections/:id/restart chama restart', async () => {
     getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-rest', status: 'connecting' }))
     const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
@@ -292,6 +329,44 @@ describe('handleConnectionsRoutes', () => {
     expect(restartMock).toHaveBeenCalledWith('sess-reconn', logger)
   })
 
+  it('DELETE /connections/:id/hard exige proteção de force/confirm', async () => {
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-hard', status: 'closed' }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('DELETE', '/connections/sess-hard/hard') as never, res as never, '/connections/sess-hard/hard', logger as never)
+
+    expect(res.statusCode).toBe(422)
+    expect(hardDeleteConnectionMock).not.toHaveBeenCalled()
+  })
+
+  it('DELETE /connections/:id/hard executa hard delete com confirmação', async () => {
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-hard-ok', status: 'closed' }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    const req = makeReq('DELETE', '/connections/sess-hard-ok/hard?force=true')
+    req.headers['x-zyra-hard-delete-confirm'] = 'true'
+
+    await handleConnectionsRoutes(req as never, res as never, '/connections/sess-hard-ok/hard', logger as never)
+
+    expect(res.statusCode).toBe(204)
+    expect(hardDeleteConnectionMock).toHaveBeenCalledWith('sess-hard-ok', logger)
+  })
+
+  it('DELETE /connections/:id/hard exige token quando configurado', async () => {
+    mockConfig.webhookHardDeleteToken = 'top-secret'
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-hard-token', status: 'closed' }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    const req = makeReq('DELETE', '/connections/sess-hard-token/hard?force=true')
+    req.headers['x-zyra-hard-delete-confirm'] = 'true'
+    req.headers['x-zyra-hard-delete-token'] = 'wrong-token'
+
+    await handleConnectionsRoutes(req as never, res as never, '/connections/sess-hard-token/hard', logger as never)
+
+    expect(res.statusCode).toBe(403)
+    expect(hardDeleteConnectionMock).not.toHaveBeenCalled()
+  })
+
   it('GET /connections/:id/status retorna status resumido', async () => {
     getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-stat', status: 'open', socketActive: true }))
     const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
@@ -302,6 +377,111 @@ describe('handleConnectionsRoutes', () => {
     const data = JSON.parse(res.body) as { connectionId: string; status: string; socketActive: boolean }
     expect(data.status).toBe('open')
     expect(data.socketActive).toBe(true)
+  })
+
+  it('GET /connections/:id/events retorna trilha administrativa', async () => {
+    const store = await import('../src/store/connection-admin-store.ts')
+    store._resetConnectionAdminStore()
+    await store.recordConnectionAdminEvent({
+      connectionId: 'sess-events',
+      eventType: 'connection.started',
+      source: 'test',
+    })
+    await store.recordConnectionAdminEvent({
+      connectionId: 'sess-events',
+      eventType: 'connection.paused',
+      source: 'test',
+    })
+
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-events', status: 'closed' }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('GET', '/connections/sess-events/events?limit=1') as never, res as never, '/connections/sess-events/events', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    const data = JSON.parse(res.body) as { count: number; limit: number; events: Array<{ eventType: string }> }
+    expect(data.limit).toBe(1)
+    expect(data.count).toBe(1)
+    expect(data.events[0]?.eventType).toBe('connection.paused')
+  })
+
+  it('GET /connections/:id/commands retorna comandos recebidos para a conexão', async () => {
+    const store = await import('../src/store/connection-admin-store.ts')
+    store._resetConnectionAdminStore()
+    await store.saveWebhookCommandReceived({
+      commandId: 'cmd-a',
+      connectionId: 'sess-commands',
+      actionType: 'start',
+      payload: { ok: true },
+      deliveryId: 'delivery-a',
+    })
+    await store.finishWebhookCommand('cmd-a', {
+      status: 'accepted',
+      response: { ok: true, command_id: 'cmd-a' },
+    })
+
+    getConnectionMock.mockReturnValue(makeInfo({ connectionId: 'sess-commands', status: 'open' }))
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('GET', '/connections/sess-commands/commands') as never, res as never, '/connections/sess-commands/commands', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    const data = JSON.parse(res.body) as { count: number; commands: Array<{ commandId: string; status: string }> }
+    expect(data.count).toBe(1)
+    expect(data.commands[0]).toMatchObject({ commandId: 'cmd-a', status: 'accepted' })
+  })
+
+  it('GET /connections/commands/:commandId retorna comando específico', async () => {
+    const store = await import('../src/store/connection-admin-store.ts')
+    store._resetConnectionAdminStore()
+    await store.saveWebhookCommandReceived({
+      commandId: 'cmd-by-id',
+      connectionId: 'sess-cmd-id',
+      actionType: 'pause',
+      payload: { reason: 'manual' },
+      deliveryId: 'delivery-by-id',
+    })
+
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('GET', '/connections/commands/cmd-by-id') as never, res as never, '/connections/commands/cmd-by-id', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    const data = JSON.parse(res.body) as { commandId: string; actionType: string }
+    expect(data.commandId).toBe('cmd-by-id')
+    expect(data.actionType).toBe('pause')
+  })
+
+  it('GET /connections/:id/diagnostics retorna visão ampliada da conexão', async () => {
+    getConnectionMock.mockReturnValue(
+      makeInfo({
+        connectionId: 'sess-diag',
+        label: 'Diag Bot',
+        status: 'open',
+        socketGeneration: 3,
+        socketActive: true,
+        reconnectInFlight: false,
+        qrCode: 'qr-active',
+        qrCodeAt: 123456,
+        lastReconnectAt: 999999,
+      })
+    )
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('GET', '/connections/sess-diag/diagnostics') as never, res as never, '/connections/sess-diag/diagnostics', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    const data = JSON.parse(res.body) as {
+      connectionId: string
+      runtime: { socketGeneration: number; qrCodeAvailable: boolean }
+      admin: { status: string }
+      capabilities: { managerCanExecuteRuntimeActions: boolean }
+    }
+    expect(data.connectionId).toBe('sess-diag')
+    expect(data.runtime.socketGeneration).toBe(3)
+    expect(data.runtime.qrCodeAvailable).toBe(true)
+    expect(data.admin.status).toBe('open')
+    expect(data.capabilities.managerCanExecuteRuntimeActions).toBe(true)
   })
 
   it('GET /connections/:id/qr retorna QR disponível', async () => {

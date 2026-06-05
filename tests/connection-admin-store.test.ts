@@ -92,6 +92,31 @@ describe('connection-admin-store', () => {
     expect(stored?.response).toMatchObject({ ok: true, command_id: 'cmd-1' })
   })
 
+  it('lista webhook_commands por conexão em ordem decrescente', async () => {
+    const store = await import('../src/store/connection-admin-store.ts')
+    store._resetConnectionAdminStore()
+
+    await store.saveWebhookCommandReceived({
+      commandId: 'cmd-1',
+      connectionId: 'conn-cmd',
+      actionType: 'start',
+      payload: { ok: true },
+      deliveryId: 'delivery-1',
+    })
+    await store.saveWebhookCommandReceived({
+      commandId: 'cmd-2',
+      connectionId: 'conn-cmd',
+      actionType: 'pause',
+      payload: { ok: true },
+      deliveryId: 'delivery-2',
+    })
+
+    const commands = await store.listWebhookCommands('conn-cmd', 10)
+    expect(commands).toHaveLength(2)
+    expect(commands[0]?.commandId).toBe('cmd-2')
+    expect(commands[1]?.commandId).toBe('cmd-1')
+  })
+
   it('cria e atualiza webhook_outbox em memória', async () => {
     const store = await import('../src/store/connection-admin-store.ts')
     store._resetConnectionAdminStore()

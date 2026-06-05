@@ -2,13 +2,15 @@ import { createHmac, randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { config } from '../../config/index.js'
 import type { AppLogger } from '../../observability/logger.js'
-import { type ConnectionInfo, createConnection, listConnections, getConnection, setConnectionLabel, connect, disconnect, restart, deleteConnection } from '../../core/connection/manager.js'
+import { type ConnectionInfo, createConnection, listConnections, getConnection, setConnectionLabel, connect, disconnect, restart, deleteConnection, pause, resume, hardDeleteConnection } from '../../core/connection/manager.js'
 import { startPairing, getPairingState, cancelPairing } from '../../core/connection/pairing-service.js'
-import { getManagedConnection, listManagedConnections, upsertManagedConnection, type ManagedConnectionRecord, type ManagedConnectionPairingState, type ManagedConnectionStatus } from '../../store/connection-admin-store.js'
+import { getManagedConnection, listManagedConnections, upsertManagedConnection, listConnectionAdminEvents, listWebhookCommands, getWebhookCommand, type ManagedConnectionRecord, type ManagedConnectionPairingState, type ManagedConnectionStatus } from '../../store/connection-admin-store.js'
 import { validateConnectionId } from '../../core/connection/connection-id.js'
-import { readBody, parseJson, sendJson, sendError, matchRoute } from '../http.js'
+import { readBody, parseJson, sendJson, sendError, matchRoute, parseUrl } from '../http.js'
 
 const MANAGER_DISABLED_ERROR = 'operação indisponível neste processo (WA_BOOTSTRAP_CONNECTIONS_ENABLED=false)'
+const DEFAULT_AUDIT_LIMIT = 100
+const MAX_AUDIT_LIMIT = 500
 
 type WebhookCommandResponse = {
   ok?: boolean
@@ -40,6 +42,8 @@ type ConnectionAdminStatusView = {
 type ConnectionWithAdmin = ConnectionInfo & {
   admin: ConnectionAdminStatusView
 }
+
+type HardDeleteGuardResult = { ok: true } | { ok: false; httpStatus: number; reason: string }
 
 const signWebhookCommand = (secret: string, timestamp: string, body: string): string => {
   const digest = createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex')
@@ -273,6 +277,57 @@ const parseConnectionIdOrReply = (res: ServerResponse, rawConnectionId: string |
   return parsed.value
 }
 
+const parsePositiveLimit = (req: IncomingMessage, fallback = DEFAULT_AUDIT_LIMIT): number => {
+  const raw = parseUrl(req).searchParams.get('limit')
+  if (!raw) return fallback
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(MAX_AUDIT_LIMIT, Math.max(1, Math.trunc(parsed)))
+}
+
+const validateHardDeleteGuard = (req: IncomingMessage): HardDeleteGuardResult => {
+  const url = parseUrl(req)
+  const forceFlag = ['1', 'true', 'yes'].includes((url.searchParams.get('force') ?? '').trim().toLowerCase())
+  const hardDeleteConfirmHeader = String(req.headers['x-zyra-hard-delete-confirm'] ?? '').trim().toLowerCase()
+  const hardDeleteTokenHeader = String(req.headers['x-zyra-hard-delete-token'] ?? '').trim()
+
+  if (!forceFlag) {
+    return { ok: false, httpStatus: 422, reason: 'hard delete requer ?force=true' }
+  }
+
+  const configuredToken = config.webhookHardDeleteToken?.trim() ?? ''
+  if (configuredToken) {
+    if (hardDeleteTokenHeader !== configuredToken) {
+      return { ok: false, httpStatus: 403, reason: 'token adicional de hard delete inválido' }
+    }
+    return { ok: true }
+  }
+
+  if (hardDeleteConfirmHeader !== 'true') {
+    return { ok: false, httpStatus: 422, reason: 'hard delete requer header x-zyra-hard-delete-confirm=true' }
+  }
+  return { ok: true }
+}
+
+const buildDiagnosticsPayload = (info: ConnectionWithAdmin) => ({
+  connectionId: info.connectionId,
+  label: info.label,
+  status: info.status,
+  runtime: {
+    socketGeneration: info.socketGeneration,
+    socketActive: info.socketActive,
+    reconnectInFlight: info.reconnectInFlight,
+    qrCodeAvailable: Boolean(info.qrCode),
+    qrCodeAt: info.qrCodeAt,
+    lastReconnectAt: toIso(info.lastReconnectAt),
+  },
+  admin: info.admin,
+  capabilities: {
+    managerCanExecuteRuntimeActions: managerCanExecuteRuntimeActions(),
+    webhookIngressConfigured: Boolean(config.webhookSharedSecret?.trim()),
+  },
+})
+
 /**
  * Trata requisições HTTP para os endpoints de gerenciamento de conexões.
  * Retorna `true` se a rota foi reconhecida e tratada, `false` caso contrário.
@@ -399,6 +454,34 @@ export async function handleConnectionsRoutes(req: IncomingMessage, res: ServerR
     return true
   }
 
+  // DELETE /connections/:id/hard?force=true
+  const hardDeleteMatch = matchRoute('/connections/:id/hard', pathname)
+  if (method === 'DELETE' && hardDeleteMatch) {
+    const id = parseConnectionIdOrReply(res, hardDeleteMatch.params['id'])
+    if (!id) return true
+    if (!managerCanExecuteRuntimeActions()) {
+      sendError(res, 409, MANAGER_DISABLED_ERROR)
+      return true
+    }
+
+    const guard = validateHardDeleteGuard(req)
+    if (!guard.ok) {
+      sendError(res, guard.httpStatus, guard.reason)
+      return true
+    }
+
+    const info = await getConnectionWithManagedFallback(id, logger)
+    if (!info) {
+      sendError(res, 404, 'conexão não encontrada')
+      return true
+    }
+
+    await hardDeleteConnection(id, logger)
+    res.statusCode = 204
+    res.end()
+    return true
+  }
+
   // POST /connections/:id/connect || /connections/:id/start
   const connectMatch = matchRoute('/connections/:id/connect', pathname) ?? matchRoute('/connections/:id/start', pathname)
   if (method === 'POST' && connectMatch) {
@@ -465,6 +548,42 @@ export async function handleConnectionsRoutes(req: IncomingMessage, res: ServerR
     }
     await disconnect(id, logger)
     sendJson(res, 200, getConnection(id))
+    return true
+  }
+
+  // POST /connections/:id/pause
+  const pauseMatch = matchRoute('/connections/:id/pause', pathname)
+  if (method === 'POST' && pauseMatch) {
+    const id = parseConnectionIdOrReply(res, pauseMatch.params['id'])
+    if (!id) return true
+    if (!managerCanExecuteRuntimeActions()) {
+      sendError(res, 409, MANAGER_DISABLED_ERROR)
+      return true
+    }
+    if (!getConnection(id)) {
+      sendError(res, 404, 'conexão não encontrada')
+      return true
+    }
+    await pause(id, logger)
+    sendJson(res, 200, await getConnectionWithManagedFallback(id, logger))
+    return true
+  }
+
+  // POST /connections/:id/resume
+  const resumeMatch = matchRoute('/connections/:id/resume', pathname)
+  if (method === 'POST' && resumeMatch) {
+    const id = parseConnectionIdOrReply(res, resumeMatch.params['id'])
+    if (!id) return true
+    if (!managerCanExecuteRuntimeActions()) {
+      sendError(res, 409, MANAGER_DISABLED_ERROR)
+      return true
+    }
+    if (!getConnection(id)) {
+      sendError(res, 404, 'conexão não encontrada')
+      return true
+    }
+    await resume(id, logger)
+    sendJson(res, 200, await getConnectionWithManagedFallback(id, logger))
     return true
   }
 
@@ -557,6 +676,79 @@ export async function handleConnectionsRoutes(req: IncomingMessage, res: ServerR
       reconnectInFlight: info.reconnectInFlight,
       admin: info.admin,
     })
+    return true
+  }
+
+  // GET /connections/:id/events
+  const eventsMatch = matchRoute('/connections/:id/events', pathname)
+  if (method === 'GET' && eventsMatch) {
+    const id = parseConnectionIdOrReply(res, eventsMatch.params['id'])
+    if (!id) return true
+    const info = await getConnectionWithManagedFallback(id, logger)
+    if (!info) {
+      sendError(res, 404, 'conexão não encontrada')
+      return true
+    }
+    const limit = parsePositiveLimit(req)
+    const events = await listConnectionAdminEvents(id, limit)
+    sendJson(res, 200, {
+      connectionId: id,
+      count: events.length,
+      limit,
+      events,
+    })
+    return true
+  }
+
+  // GET /connections/:id/commands
+  const commandsMatch = matchRoute('/connections/:id/commands', pathname)
+  if (method === 'GET' && commandsMatch) {
+    const id = parseConnectionIdOrReply(res, commandsMatch.params['id'])
+    if (!id) return true
+    const info = await getConnectionWithManagedFallback(id, logger)
+    if (!info) {
+      sendError(res, 404, 'conexão não encontrada')
+      return true
+    }
+    const limit = parsePositiveLimit(req)
+    const commands = await listWebhookCommands(id, limit)
+    sendJson(res, 200, {
+      connectionId: id,
+      count: commands.length,
+      limit,
+      commands,
+    })
+    return true
+  }
+
+  // GET /connections/commands/:commandId
+  const commandByIdMatch = matchRoute('/connections/commands/:commandId', pathname)
+  if (method === 'GET' && commandByIdMatch) {
+    const commandId = String(commandByIdMatch.params['commandId'] ?? '').trim()
+    if (!commandId) {
+      sendError(res, 400, 'commandId é obrigatório')
+      return true
+    }
+    const command = await getWebhookCommand(commandId)
+    if (!command) {
+      sendError(res, 404, 'comando não encontrado')
+      return true
+    }
+    sendJson(res, 200, command)
+    return true
+  }
+
+  // GET /connections/:id/diagnostics
+  const diagnosticsMatch = matchRoute('/connections/:id/diagnostics', pathname)
+  if (method === 'GET' && diagnosticsMatch) {
+    const id = parseConnectionIdOrReply(res, diagnosticsMatch.params['id'])
+    if (!id) return true
+    const info = await getConnectionWithManagedFallback(id, logger)
+    if (!info) {
+      sendError(res, 404, 'conexão não encontrada')
+      return true
+    }
+    sendJson(res, 200, buildDiagnosticsPayload(info))
     return true
   }
 

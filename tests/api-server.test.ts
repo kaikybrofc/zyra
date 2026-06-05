@@ -160,6 +160,22 @@ describe('startApiServer', () => {
     expect(handleGroupsRoutesMock).toHaveBeenCalled()
   })
 
+  it('encaminha POST de admin de grupo para handleGroupsRoutes', async () => {
+    handleGroupsRoutesMock.mockResolvedValue(true)
+    const { startApiServer } = await import('../src/api/server.ts')
+    startApiServer({ logger: logger as never })
+
+    const res = createResponse()
+    await serverHandler?.(makeReq('POST', '/connections/sess/groups/120363000000000001%40g.us/admin'), res)
+
+    expect(handleGroupsRoutesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ method: 'POST', url: '/connections/sess/groups/120363000000000001%40g.us/admin' }),
+      expect.anything(),
+      '/connections/sess/groups/120363000000000001%40g.us/admin',
+      logger,
+    )
+  })
+
   it('retorna 404 quando nenhuma rota reconhece o path', async () => {
     const { startApiServer } = await import('../src/api/server.ts')
     startApiServer({ logger: logger as never })
@@ -218,6 +234,18 @@ describe('startApiServer', () => {
     await serverHandler?.(makeReq('GET', '/connections', { authorization: 'Bearer chave-errada' }), res)
 
     expect(res.statusCode).toBe(401)
+  })
+
+  it('protege a rota de admin de grupo quando apiKey está configurada', async () => {
+    mockConfig.apiKey = 'minha-chave'
+    const { startApiServer } = await import('../src/api/server.ts')
+    startApiServer({ logger: logger as never })
+
+    const res = createResponse()
+    await serverHandler?.(makeReq('POST', '/connections/sess/groups/120363000000000001%40g.us/admin'), res)
+
+    expect(res.statusCode).toBe(401)
+    expect(handleGroupsRoutesMock).not.toHaveBeenCalled()
   })
 
   it('permite acesso com token correto', async () => {

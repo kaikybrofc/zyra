@@ -171,6 +171,245 @@ describe('handleMessagesRoutes', () => {
     })
   })
 
+  it('envia sticker com URL', async () => {
+    const sock = makeSock()
+    getConnectionMock.mockReturnValue(makeInfo())
+    getActiveSocketMock.mockReturnValue(sock)
+    const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
+    const res = createResponse()
+    const body = JSON.stringify({ type: 'sticker', to: '5511@s.whatsapp.net', url: 'https://example.com/sticker.webp', isAnimated: true })
+
+    await handleMessagesRoutes(makeReq('POST', '/connections/sess/messages/send', body) as never, res as never, '/connections/sess/messages/send', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(sock.sendMessage).toHaveBeenCalledWith('5511@s.whatsapp.net', {
+      sticker: { url: 'https://example.com/sticker.webp' },
+      isAnimated: true,
+    })
+  })
+
+  it('envia contatos', async () => {
+    const sock = makeSock()
+    getConnectionMock.mockReturnValue(makeInfo())
+    getActiveSocketMock.mockReturnValue(sock)
+    const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
+    const res = createResponse()
+    const body = JSON.stringify({
+      type: 'contacts',
+      to: '5511@s.whatsapp.net',
+      contacts: {
+        displayName: 'Equipe',
+        contacts: [{ displayName: 'João', vcard: 'BEGIN:VCARD\nFN:João\nTEL;waid=5511999999999:+55 11 99999-9999\nEND:VCARD' }],
+      },
+    })
+
+    await handleMessagesRoutes(makeReq('POST', '/connections/sess/messages/send', body) as never, res as never, '/connections/sess/messages/send', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(sock.sendMessage).toHaveBeenCalledWith('5511@s.whatsapp.net', {
+      contacts: {
+        displayName: 'Equipe',
+        contacts: [{ displayName: 'João', vcard: 'BEGIN:VCARD\nFN:João\nTEL;waid=5511999999999:+55 11 99999-9999\nEND:VCARD' }],
+      },
+    })
+  })
+
+  it('envia localização', async () => {
+    const sock = makeSock()
+    getConnectionMock.mockReturnValue(makeInfo())
+    getActiveSocketMock.mockReturnValue(sock)
+    const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
+    const res = createResponse()
+    const body = JSON.stringify({
+      type: 'location',
+      to: '5511@s.whatsapp.net',
+      latitude: -23.55052,
+      longitude: -46.633308,
+      name: 'São Paulo',
+    })
+
+    await handleMessagesRoutes(makeReq('POST', '/connections/sess/messages/send', body) as never, res as never, '/connections/sess/messages/send', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(sock.sendMessage).toHaveBeenCalledWith('5511@s.whatsapp.net', {
+      location: {
+        degreesLatitude: -23.55052,
+        degreesLongitude: -46.633308,
+        name: 'São Paulo',
+      },
+    })
+  })
+
+  it('envia reação', async () => {
+    const sock = makeSock()
+    getConnectionMock.mockReturnValue(makeInfo())
+    getActiveSocketMock.mockReturnValue(sock)
+    const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
+    const res = createResponse()
+    const body = JSON.stringify({
+      type: 'react',
+      to: 'grupo@g.us',
+      text: '🔥',
+      messageKey: { id: 'msg-id', remoteJid: 'grupo@g.us', fromMe: false },
+    })
+
+    await handleMessagesRoutes(makeReq('POST', '/connections/sess/messages/send', body) as never, res as never, '/connections/sess/messages/send', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(sock.sendMessage).toHaveBeenCalledWith('grupo@g.us', {
+      react: {
+        text: '🔥',
+        key: { id: 'msg-id', remoteJid: 'grupo@g.us', fromMe: false },
+      },
+    })
+  })
+
+  it('envia enquete', async () => {
+    const sock = makeSock()
+    getConnectionMock.mockReturnValue(makeInfo())
+    getActiveSocketMock.mockReturnValue(sock)
+    const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
+    const res = createResponse()
+    const body = JSON.stringify({
+      type: 'poll',
+      to: 'grupo@g.us',
+      name: 'Qual opção?',
+      values: ['A', 'B'],
+      selectableCount: 1,
+    })
+
+    await handleMessagesRoutes(makeReq('POST', '/connections/sess/messages/send', body) as never, res as never, '/connections/sess/messages/send', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(sock.sendMessage).toHaveBeenCalledWith('grupo@g.us', {
+      poll: {
+        name: 'Qual opção?',
+        values: ['A', 'B'],
+        selectableCount: 1,
+      },
+    })
+  })
+
+  it('envia evento convertendo datas para Date', async () => {
+    const sock = makeSock()
+    getConnectionMock.mockReturnValue(makeInfo())
+    getActiveSocketMock.mockReturnValue(sock)
+    const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
+    const res = createResponse()
+    const body = JSON.stringify({
+      type: 'event',
+      to: 'grupo@g.us',
+      name: 'Reunião',
+      startDate: '2026-06-05T12:00:00.000Z',
+      endDate: '2026-06-05T13:00:00.000Z',
+      description: 'Sprint review',
+      call: 'video',
+    })
+
+    await handleMessagesRoutes(makeReq('POST', '/connections/sess/messages/send', body) as never, res as never, '/connections/sess/messages/send', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    const content = sock.sendMessage.mock.calls[0]?.[1] as { event: { startDate: Date; endDate: Date; call: string; name: string } }
+    expect(content.event.name).toBe('Reunião')
+    expect(content.event.call).toBe('video')
+    expect(content.event.startDate).toBeInstanceOf(Date)
+    expect(content.event.endDate).toBeInstanceOf(Date)
+  })
+
+  it('envia payload raw compatível com AnyMessageContent', async () => {
+    const sock = makeSock()
+    getConnectionMock.mockReturnValue(makeInfo())
+    getActiveSocketMock.mockReturnValue(sock)
+    const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
+    const res = createResponse()
+    const body = JSON.stringify({
+      type: 'raw',
+      to: '5511@s.whatsapp.net',
+      content: { sharePhoneNumber: true },
+    })
+
+    await handleMessagesRoutes(makeReq('POST', '/connections/sess/messages/send', body) as never, res as never, '/connections/sess/messages/send', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(sock.sendMessage).toHaveBeenCalledWith('5511@s.whatsapp.net', { sharePhoneNumber: true })
+  })
+
+  it('preserva chaves extras ao normalizar event no modo raw', async () => {
+    const sock = makeSock()
+    getConnectionMock.mockReturnValue(makeInfo())
+    getActiveSocketMock.mockReturnValue(sock)
+    const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
+    const res = createResponse()
+    const body = JSON.stringify({
+      type: 'raw',
+      to: 'grupo@g.us',
+      content: {
+        event: {
+          name: 'Plantão',
+          startDate: '2026-06-05T18:00:00.000Z',
+        },
+        viewOnce: true,
+      },
+    })
+
+    await handleMessagesRoutes(makeReq('POST', '/connections/sess/messages/send', body) as never, res as never, '/connections/sess/messages/send', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    const content = sock.sendMessage.mock.calls[0]?.[1] as { event: { startDate: Date; name: string }; viewOnce: boolean }
+    expect(content.viewOnce).toBe(true)
+    expect(content.event.name).toBe('Plantão')
+    expect(content.event.startDate).toBeInstanceOf(Date)
+  })
+
+  it('envia status com options.statusJidList e broadcast', async () => {
+    const sock = makeSock()
+    getConnectionMock.mockReturnValue(makeInfo())
+    getActiveSocketMock.mockReturnValue(sock)
+    const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
+    const res = createResponse()
+    const body = JSON.stringify({
+      type: 'text',
+      to: 'status@broadcast',
+      text: 'Status via API',
+      options: {
+        statusJidList: ['5511999999999', '5511888888888@s.whatsapp.net'],
+        backgroundColor: '#102030',
+        font: 3,
+      },
+    })
+
+    await handleMessagesRoutes(makeReq('POST', '/connections/sess/messages/send', body) as never, res as never, '/connections/sess/messages/send', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(sock.sendMessage).toHaveBeenCalledWith(
+      'status@broadcast',
+      { text: 'Status via API' },
+      {
+        statusJidList: ['5511999999999@s.whatsapp.net', '5511888888888@s.whatsapp.net'],
+        backgroundColor: '#102030',
+        font: 3,
+        broadcast: true,
+      },
+    )
+  })
+
+  it('retorna 400 ao enviar status sem statusJidList', async () => {
+    getConnectionMock.mockReturnValue(makeInfo())
+    getActiveSocketMock.mockReturnValue(makeSock())
+    const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
+    const res = createResponse()
+    const body = JSON.stringify({
+      type: 'text',
+      to: 'status@broadcast',
+      text: 'Status sem audiência',
+    })
+
+    await handleMessagesRoutes(makeReq('POST', '/connections/sess/messages/send', body) as never, res as never, '/connections/sess/messages/send', logger as never)
+
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toMatchObject({ error: expect.stringContaining('statusJidList') })
+  })
+
   it('fixa mensagem por 7 dias com type=pin', async () => {
     const sock = makeSock()
     getConnectionMock.mockReturnValue(makeInfo())

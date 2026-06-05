@@ -246,6 +246,34 @@ curl -s -X POST http://localhost:3000/connections/minha-sessao/disconnect \
 
 ---
 
+### Pausar instância
+
+Encerra o socket ativo e marca a conexão como pausada administrativamente.
+
+```bash
+curl -s -X POST http://localhost:3000/connections/minha-sessao/pause \
+  -H "Authorization: Bearer sua-chave-secreta" | jq
+```
+
+**Resposta `200`:** dados atualizados da instância com `admin.desired_state: "paused"`.
+**Resposta `404`:** instância não existe.
+
+---
+
+### Retomar instância pausada
+
+Volta o `desired_state` para `running` e agenda a reconexão da sessão.
+
+```bash
+curl -s -X POST http://localhost:3000/connections/minha-sessao/resume \
+  -H "Authorization: Bearer sua-chave-secreta" | jq
+```
+
+**Resposta `200`:** dados atualizados da instância.
+**Resposta `404`:** instância não existe.
+
+---
+
 ### Reiniciar conexão
 
 Desconecta e reconecta automaticamente. Útil para forçar um novo ciclo de autenticação.
@@ -317,6 +345,31 @@ curl -s -X DELETE http://localhost:3000/connections/minha-sessao \
 
 ---
 
+### Hard delete da instância
+
+Remove a instância e tenta limpar artefatos persistidos de sessão, incluindo auth e estado auxiliar.
+
+Use:
+
+- query obrigatória: `?force=true`
+- header obrigatório quando `WA_WEBHOOK_HARD_DELETE_TOKEN` **não** estiver configurado:
+  `x-zyra-hard-delete-confirm: true`
+- header obrigatório quando `WA_WEBHOOK_HARD_DELETE_TOKEN` estiver configurado:
+  `x-zyra-hard-delete-token: <token>`
+
+```bash
+curl -s -X DELETE "http://localhost:3000/connections/minha-sessao/hard?force=true" \
+  -H "Authorization: Bearer sua-chave-secreta" \
+  -H "x-zyra-hard-delete-confirm: true" -i
+```
+
+**Resposta `204`:** hard delete aceito e concluído.
+**Resposta `422`:** proteção `force`/confirmação não atendida.
+**Resposta `403`:** token adicional inválido.
+**Resposta `404`:** instância não encontrada.
+
+---
+
 ### Iniciar conexão via webhook (dashboard)
 
 Cria ou atualiza a instância e despacha um comando `start` para o ingress de webhook interno. Útil quando o processo atual não gerencia conexões diretamente (`WA_BOOTSTRAP_CONNECTIONS_ENABLED=false`).
@@ -347,9 +400,163 @@ O campo `label` é opcional. A resposta espelha o retorno do ingress de webhook:
 
 ---
 
-### Enviar mensagem de texto
+### Diagnóstico ampliado da conexão
+
+Retorna uma visão consolidada do runtime e do estado administrativo persistido.
+
+```bash
+curl -s http://localhost:3000/connections/minha-sessao/diagnostics \
+  -H "Authorization: Bearer sua-chave-secreta" | jq
+```
+
+**Resposta `200`:**
+
+```json
+{
+  "connectionId": "minha-sessao",
+  "label": "Bot Principal",
+  "status": "open",
+  "runtime": {
+    "socketGeneration": 3,
+    "socketActive": true,
+    "reconnectInFlight": false,
+    "qrCodeAvailable": false,
+    "qrCodeAt": null,
+    "lastReconnectAt": "2026-06-05T02:00:00.000Z"
+  },
+  "admin": {
+    "desired_state": "running",
+    "pairing_state": "not_required",
+    "last_error": null
+  },
+  "capabilities": {
+    "managerCanExecuteRuntimeActions": true,
+    "webhookIngressConfigured": true
+  }
+}
+```
+
+---
+
+### Eventos administrativos da conexão
+
+Lista a trilha de auditoria persistida em `connection_admin_events`.
+
+```bash
+curl -s "http://localhost:3000/connections/minha-sessao/events?limit=50" \
+  -H "Authorization: Bearer sua-chave-secreta" | jq
+```
+
+**Resposta `200`:**
+
+```json
+{
+  "connectionId": "minha-sessao",
+  "count": 2,
+  "limit": 50,
+  "events": [
+    {
+      "eventType": "connection.resumed",
+      "source": "manager.resume"
+    }
+  ]
+}
+```
+
+---
+
+### Comandos webhook da conexão
+
+Lista comandos recebidos para uma conexão específica, úteis para rastrear automações e integrações.
+
+```bash
+curl -s "http://localhost:3000/connections/minha-sessao/commands?limit=20" \
+  -H "Authorization: Bearer sua-chave-secreta" | jq
+```
+
+**Resposta `200`:**
+
+```json
+{
+  "connectionId": "minha-sessao",
+  "count": 1,
+  "limit": 20,
+  "commands": [
+    {
+      "commandId": "cmd-123",
+      "actionType": "pause",
+      "status": "accepted"
+    }
+  ]
+}
+```
+
+Para consultar um comando específico:
+
+```bash
+curl -s http://localhost:3000/connections/commands/cmd-123 \
+  -H "Authorization: Bearer sua-chave-secreta" | jq
+```
+
+**Resposta `404`:** comando não encontrado.
+
+---
+
+### Enviar mensagens
 
 A instância precisa estar com `status: "open"`.
+
+O endpoint `POST /connections/:id/messages/send` aceita dois modos:
+
+1. Tipos atalho da API: `text`, `image`, `video`, `audio`, `document`, `sticker`, `contacts`, `location`, `react`, `poll`, `event`, `buttonReply`, `groupInvite`, `listReply`, `pin`, `sharePhoneNumber`, `requestPhoneNumber`, `forward`, `delete`, `disappearingMessagesInChat` e `limitSharing`.
+2. `type: "raw"` para enviar um `AnyMessageContent` nativo do Baileys, útil para payloads avançados ou tipos ainda não cobertos por atalho.
+
+**Resposta `200`:** objeto `WAMessage` retornado pelo Baileys.
+
+**Campos-base do payload:**
+
+| Campo     | Tipo     | Obrigatório | Descrição                                                                  |
+| --------- | -------- | ----------- | -------------------------------------------------------------------------- |
+| `type`    | string   | sim         | Tipo da mensagem ou `raw`                                                  |
+| `to`      | string   | sim         | JID do destino (`@s.whatsapp.net`, `@g.us` ou `status@broadcast`)          |
+| `options` | object   | não         | Opções extras do Baileys para envio, inclusive `quoted`, `statusJidList` e `broadcast` |
+
+**Campos mais usados por tipo:**
+
+| Tipo | Campos principais |
+| ---- | ----------------- |
+| `text` | `text` |
+| `image` | `url`, `caption` |
+| `video` | `url`, `caption`, `gifPlayback`, `ptv` |
+| `audio` | `url`, `ptt`, `seconds` |
+| `document` | `url`, `fileName`, `mimetype`, `caption` |
+| `sticker` | `url`, `isAnimated` |
+| `contacts` | `contacts.displayName`, `contacts.contacts[]` |
+| `location` | `latitude`/`longitude` ou `degreesLatitude`/`degreesLongitude` |
+| `react` | `text`, `messageKey` |
+| `poll` | `name`, `values[]`, `selectableCount` |
+| `event` | `name`, `startDate`, `endDate`, `description`, `location`, `call` |
+| `pin` | `messageKey`, `time` (`86400`, `604800` ou `2592000`) |
+| `forward` | `message`, `force` |
+| `delete` | `messageKey` |
+| `disappearingMessagesInChat` | `value` |
+| `limitSharing` | `value` |
+| `raw` | `content` com o payload Baileys completo |
+
+**Opções suportadas em `options`:**
+
+| Campo | Tipo | Descrição |
+| ----- | ---- | --------- |
+| `messageId` | string | ID customizado da mensagem |
+| `quoted` | object | `WAMessage` usado como resposta |
+| `ephemeralExpiration` | number \| string | Expiração efêmera |
+| `mediaUploadTimeoutMs` | number | Timeout de upload |
+| `statusJidList` | string[] \| string | Lista de contatos que verão um `status@broadcast` |
+| `backgroundColor` | string | Cor de fundo para status |
+| `font` | number | Fonte para status de texto |
+| `broadcast` | boolean | Força envio como broadcast |
+
+#### Exemplo: texto
 
 ```bash
 curl -s -X POST http://localhost:3000/connections/minha-sessao/messages/send \
@@ -362,7 +569,7 @@ curl -s -X POST http://localhost:3000/connections/minha-sessao/messages/send \
   }' | jq
 ```
 
-Para grupos, use o JID do grupo como `to`:
+#### Exemplo: grupo
 
 ```bash
 curl -s -X POST http://localhost:3000/connections/minha-sessao/messages/send \
@@ -375,58 +582,7 @@ curl -s -X POST http://localhost:3000/connections/minha-sessao/messages/send \
   }' | jq
 ```
 
-**Resposta `200`:** objeto `WAMessage` retornado pelo Baileys.
-
----
-
-### Enviar imagem
-
-```bash
-curl -s -X POST http://localhost:3000/connections/minha-sessao/messages/send \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer sua-chave-secreta" \
-  -d '{
-    "type": "image",
-    "to": "5511999999999@s.whatsapp.net",
-    "url": "https://example.com/imagem.jpg",
-    "caption": "Legenda opcional"
-  }' | jq
-```
-
----
-
-### Enviar vídeo
-
-```bash
-curl -s -X POST http://localhost:3000/connections/minha-sessao/messages/send \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer sua-chave-secreta" \
-  -d '{
-    "type": "video",
-    "to": "5511999999999@s.whatsapp.net",
-    "url": "https://example.com/video.mp4",
-    "caption": "Legenda opcional"
-  }' | jq
-```
-
----
-
-### Enviar áudio
-
-```bash
-curl -s -X POST http://localhost:3000/connections/minha-sessao/messages/send \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer sua-chave-secreta" \
-  -d '{
-    "type": "audio",
-    "to": "5511999999999@s.whatsapp.net",
-    "url": "https://example.com/audio.mp3"
-  }' | jq
-```
-
----
-
-### Enviar documento
+#### Exemplo: mídia
 
 ```bash
 curl -s -X POST http://localhost:3000/connections/minha-sessao/messages/send \
@@ -441,26 +597,49 @@ curl -s -X POST http://localhost:3000/connections/minha-sessao/messages/send \
   }' | jq
 ```
 
-**Campos do payload de mensagem:**
+#### Exemplo: status
 
-| Campo      | Tipos                                                 | Obrigatório | Descrição                                                 |
-| ---------- | ----------------------------------------------------- | ----------- | --------------------------------------------------------- |
-| `type`     | `text` \| `image` \| `video` \| `audio` \| `document` | sim         | Tipo da mensagem                                          |
-| `to`       | string                                                | sim         | JID do destinatário (`@s.whatsapp.net` ou `@g.us`)        |
-| `text`     | string                                                | para `text` | Conteúdo textual                                          |
-| `url`      | string                                                | para mídia  | URL pública acessível pelo servidor WhatsApp              |
-| `caption`  | string                                                | não         | Legenda (image/video)                                     |
-| `fileName` | string                                                | não         | Nome exibido (document)                                   |
-| `mimetype` | string                                                | não         | MIME type (document — padrão: `application/octet-stream`) |
+Para status, use `to: "status@broadcast"` e informe `options.statusJidList`.
+
+```bash
+curl -s -X POST http://localhost:3000/connections/minha-sessao/messages/send \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sua-chave-secreta" \
+  -d '{
+    "type": "text",
+    "to": "status@broadcast",
+    "text": "Status enviado pela API",
+    "options": {
+      "statusJidList": ["5511999999999", "5511888888888@s.whatsapp.net"],
+      "backgroundColor": "#102030",
+      "font": 3
+    }
+  }' | jq
+```
+
+#### Exemplo: payload bruto do Baileys
+
+```bash
+curl -s -X POST http://localhost:3000/connections/minha-sessao/messages/send \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sua-chave-secreta" \
+  -d '{
+    "type": "raw",
+    "to": "5511999999999@s.whatsapp.net",
+    "content": {
+      "sharePhoneNumber": true
+    }
+  }' | jq
+```
 
 **Erros possíveis:**
 
-| Código | Motivo                                     |
-| ------ | ------------------------------------------ |
-| `400`  | Body inválido ou campo obrigatório ausente |
-| `404`  | Instância não encontrada                   |
-| `409`  | Instância não está `open`                  |
-| `500`  | Falha no envio pelo Baileys                |
+| Código | Motivo |
+| ------ | ------ |
+| `400`  | Body inválido, tipo desconhecido ou campo obrigatório ausente |
+| `404`  | Instância não encontrada |
+| `409`  | Instância não está `open` ou socket indisponível |
+| `500`  | Falha no envio pelo Baileys |
 
 ---
 
@@ -502,6 +681,103 @@ curl -s http://localhost:3000/connections/minha-sessao/groups \
 ```
 
 **Resposta `409`:** instância não está `open`.
+
+---
+
+### Administração de grupo
+
+Executa ações administrativas diretamente em um grupo específico pela rota:
+
+```text
+POST /connections/:id/groups/:groupJid/admin
+```
+
+O `groupJid` deve estar no formato completo `...@g.us`.
+
+```bash
+curl -s -X POST http://localhost:3000/connections/minha-sessao/groups/120363000000000001%40g.us/admin \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sua-chave-secreta" \
+  -d '{
+    "action": "ban",
+    "participants": ["5511999999999", "5511888888888@s.whatsapp.net"]
+  }' | jq
+```
+
+**Ações suportadas:**
+
+| `action` | Campos extras | Descrição |
+| -------- | ------------- | --------- |
+| `add` | `participants` | Adiciona participantes ao grupo |
+| `kick` | `participants` | Remove participantes |
+| `remove` | `participants` | Alias explícito de remoção |
+| `ban` | `participants` | Alias de remoção para banimento |
+| `promote` | `participants` | Promove participantes para admin |
+| `demote` | `participants` | Remove privilégios de admin |
+| `announcementMode` | `enabled: boolean` | `true` fecha o grupo para só admins enviarem |
+| `lockedMode` | `enabled: boolean` | `true` trava edição de info para não-admins |
+| `subject` | `subject: string` | Atualiza o nome do grupo |
+| `description` | `description: string \| null` | Atualiza ou limpa a descrição |
+| `ephemeral` | `expirationSeconds: number` | Define mensagens temporárias (`0` desativa) |
+| `getInviteCode` | nenhum | Retorna o código/link atual do grupo |
+| `revokeInvite` | nenhum | Revoga o convite atual e retorna o novo |
+| `memberAddMode` | `mode: "admin_add" \| "all_member_add"` | Define quem pode adicionar membros diretamente |
+| `joinApprovalMode` | `mode: "on" \| "off"` | Liga/desliga aprovação de entrada |
+| `listJoinRequests` | nenhum | Lista solicitações pendentes de entrada |
+| `approveJoinRequests` | `participants` | Aprova solicitações pendentes |
+| `rejectJoinRequests` | `participants` | Rejeita solicitações pendentes |
+
+**Formato de `participants`:**
+
+- aceita string única (`"5511999999999"`)
+- aceita CSV (`"5511999999999,5511888888888"`)
+- aceita array (`["5511999999999", "5511888888888@s.whatsapp.net"]`)
+
+**Exemplo: aprovar solicitações pendentes**
+
+```bash
+curl -s -X POST http://localhost:3000/connections/minha-sessao/groups/120363000000000001%40g.us/admin \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sua-chave-secreta" \
+  -d '{
+    "action": "approveJoinRequests",
+    "participants": "5511999999999,5511888888888"
+  }' | jq
+```
+
+**Resposta `200` para mutações:**
+
+```json
+{
+  "ok": true,
+  "action": "promote",
+  "participants": ["5511999999999@s.whatsapp.net"],
+  "result": [{ "status": "200" }]
+}
+```
+
+**Resposta `200` para leituras:**
+
+```json
+{
+  "ok": true,
+  "action": "listJoinRequests",
+  "requests": [
+    {
+      "jid": "5511999999999@s.whatsapp.net"
+    }
+  ]
+}
+```
+
+**Erros possíveis:**
+
+| Código | Motivo |
+| ------ | ------ |
+| `400` | `groupJid` inválido, body inválido ou campos obrigatórios ausentes |
+| `404` | Instância não encontrada |
+| `409` | Instância não está `open` |
+| `500` | Falha ao executar a ação administrativa no WhatsApp |
 
 ---
 

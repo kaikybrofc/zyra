@@ -419,6 +419,35 @@ export const listConnectionAdminEvents = async (connectionId: string, limit = 10
   return rows.map(toConnectionAdminEventRecord)
 }
 
+export const listWebhookCommands = async (connectionId: string, limit = 100): Promise<WebhookCommandRecord[]> => {
+  const safeLimit = Math.max(1, Math.trunc(limit))
+  const pool = getMysqlPool()
+  if (!pool) {
+    return Array.from(webhookCommands.values())
+      .filter((command) => command.connectionId === connectionId)
+      .sort((a, b) => {
+        if (b.receivedAt !== a.receivedAt) return b.receivedAt - a.receivedAt
+        return b.commandId.localeCompare(a.commandId)
+      })
+      .slice(0, safeLimit)
+  }
+
+  // Compatibilidade com ambientes que não aceitam LIMIT ? em prepared statements.
+  const [rows] = await pool.query<WebhookCommandRow[]>(
+    `SELECT command_id, connection_id, delivery_id, action_type, payload_json, status, response_json, received_at, processed_at
+     FROM webhook_commands
+     WHERE connection_id = ?
+     ORDER BY received_at DESC, command_id DESC
+     LIMIT ${safeLimit}`,
+    [connectionId]
+  )
+  const records = rows.map(toWebhookCommandRecord)
+  for (const record of records) {
+    webhookCommands.set(record.commandId, record)
+  }
+  return records
+}
+
 export const getWebhookCommand = async (commandId: string): Promise<WebhookCommandRecord | null> => {
   const pool = getMysqlPool()
   if (!pool) {
