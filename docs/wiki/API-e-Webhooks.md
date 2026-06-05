@@ -114,6 +114,31 @@ Respostas:
 - `204`: removida.
 - `404`: `conexão não encontrada`.
 
+### DELETE `/connections/:id/hard`
+
+Remove a conexão e tenta limpar artefatos persistidos de sessão, incluindo credenciais e estados auxiliares.
+
+Proteções obrigatórias:
+
+- query `?force=true`
+- header `x-zyra-hard-delete-confirm: true` quando `WA_WEBHOOK_HARD_DELETE_TOKEN` não estiver configurado
+- header `x-zyra-hard-delete-token: <token>` quando `WA_WEBHOOK_HARD_DELETE_TOKEN` estiver configurado
+
+Exemplo:
+
+```bash
+curl -s -X DELETE "http://localhost:3000/connections/minha-sessao/hard?force=true" \
+  -H "Authorization: Bearer sua-chave" \
+  -H "x-zyra-hard-delete-confirm: true" -i
+```
+
+Respostas:
+
+- `204`: hard delete concluído.
+- `403`: token adicional inválido.
+- `404`: `conexão não encontrada`.
+- `422`: `force` ou confirmação ausente.
+
 ### POST `/connections/:id/connect`
 
 Alias: `POST /connections/:id/start`.
@@ -136,6 +161,26 @@ Respostas:
 - `404`: `conexão não encontrada`.
 - `409`: manager indisponível.
 
+### POST `/connections/:id/pause`
+
+Pausa administrativamente uma conexão: encerra o socket ativo e marca o estado desejado como `paused`.
+
+Respostas:
+
+- `200`: conexão atualizada.
+- `404`: `conexão não encontrada`.
+- `409`: manager indisponível.
+
+### POST `/connections/:id/resume`
+
+Retoma uma conexão pausada: volta o estado desejado para `running` e agenda reconexão.
+
+Respostas:
+
+- `200`: conexão atualizada.
+- `404`: `conexão não encontrada`.
+- `409`: manager indisponível.
+
 ### POST `/connections/:id/restart`
 
 Alias: `POST /connections/:id/reconnect`.
@@ -154,6 +199,55 @@ Respostas:
 
 - `200`: status resumido.
 - `404`: `conexão não encontrada`.
+
+### GET `/connections/:id/diagnostics`
+
+Retorna uma visão consolidada do runtime e do estado administrativo persistido.
+
+Resposta inclui:
+
+- `runtime.socketGeneration`, `socketActive`, `reconnectInFlight`, `qrCodeAvailable`, `qrCodeAt`
+- `admin.desired_state`, `pairing_state`, `last_error`, `last_disconnect_code`
+- `capabilities.managerCanExecuteRuntimeActions`, `webhookIngressConfigured`
+
+Respostas:
+
+- `200`: diagnóstico da conexão.
+- `404`: `conexão não encontrada`.
+
+### GET `/connections/:id/events`
+
+Lista eventos administrativos persistidos em `connection_admin_events`.
+
+Exemplo:
+
+```bash
+curl -s "http://localhost:3000/connections/minha-sessao/events?limit=50" \
+  -H "Authorization: Bearer sua-chave" | jq
+```
+
+Respostas:
+
+- `200`: `{ connectionId, count, limit, events }`.
+- `404`: `conexão não encontrada`.
+
+### GET `/connections/:id/commands`
+
+Lista comandos webhook recebidos para a conexão.
+
+Respostas:
+
+- `200`: `{ connectionId, count, limit, commands }`.
+- `404`: `conexão não encontrada`.
+
+### GET `/connections/commands/:commandId`
+
+Consulta um comando webhook específico por ID.
+
+Respostas:
+
+- `200`: comando encontrado.
+- `404`: `comando não encontrado`.
 
 ### GET `/connections/:id/qr`
 
@@ -215,13 +309,48 @@ Respostas:
 
 Pré-condição: conexão deve estar `open`.
 
-Body `text`:
+O endpoint aceita dois modos:
+
+1. Tipos atalho da API: `text`, `image`, `video`, `audio`, `document`, `sticker`, `contacts`, `location`, `react`, `poll`, `event`, `buttonReply`, `groupInvite`, `listReply`, `pin`, `sharePhoneNumber`, `requestPhoneNumber`, `forward`, `delete`, `disappearingMessagesInChat` e `limitSharing`.
+2. `type: "raw"` para enviar um `AnyMessageContent` nativo do Baileys quando o payload não tiver atalho próprio.
+
+Campos-base:
+
+| Campo | Obrigatório | Descrição |
+| ----- | ----------- | --------- |
+| `type` | sim | Tipo da mensagem ou `raw` |
+| `to` | sim | JID do destino (`@s.whatsapp.net`, `@g.us` ou `status@broadcast`) |
+| `options` | não | Opções extras do Baileys, como `quoted`, `statusJidList`, `backgroundColor`, `font` e `broadcast` |
+
+Campos principais por tipo:
+
+| Tipo | Campos |
+| ---- | ------ |
+| `text` | `text` |
+| `image` | `url`, `caption` |
+| `video` | `url`, `caption`, `gifPlayback`, `ptv` |
+| `audio` | `url`, `ptt`, `seconds` |
+| `document` | `url`, `fileName`, `mimetype`, `caption` |
+| `sticker` | `url`, `isAnimated` |
+| `contacts` | `contacts.displayName`, `contacts.contacts[]` |
+| `location` | `latitude`/`longitude` ou `degreesLatitude`/`degreesLongitude` |
+| `react` | `text`, `messageKey` |
+| `poll` | `name`, `values[]`, `selectableCount` |
+| `event` | `name`, `startDate`, `endDate`, `description`, `location`, `call` |
+| `pin` | `messageKey`, `time` (`86400`, `604800` ou `2592000`) |
+| `forward` | `message`, `force` |
+| `delete` | `messageKey` |
+| `disappearingMessagesInChat` | `value` |
+| `limitSharing` | `value` |
+| `raw` | `content` com o payload Baileys completo |
+
+Exemplo `text`:
 
 ```json
 { "type": "text", "to": "5511999999999@s.whatsapp.net", "text": "Olá" }
 ```
 
-Body `image|video|audio|document`:
+Exemplo de mídia:
 
 ```json
 {
@@ -230,6 +359,33 @@ Body `image|video|audio|document`:
   "url": "https://exemplo.com/arquivo.pdf",
   "fileName": "arquivo.pdf",
   "mimetype": "application/pdf"
+}
+```
+
+Exemplo de status:
+
+```json
+{
+  "type": "text",
+  "to": "status@broadcast",
+  "text": "Status enviado pela API",
+  "options": {
+    "statusJidList": ["5511999999999", "5511888888888@s.whatsapp.net"],
+    "backgroundColor": "#102030",
+    "font": 3
+  }
+}
+```
+
+Exemplo `raw`:
+
+```json
+{
+  "type": "raw",
+  "to": "5511999999999@s.whatsapp.net",
+  "content": {
+    "sharePhoneNumber": true
+  }
 }
 ```
 
@@ -251,6 +407,52 @@ Respostas:
 - `404`: `conexão não encontrada`.
 - `409`: instância não conectada ou socket indisponível.
 - `500`: falha ao buscar grupos.
+
+### POST `/connections/:id/groups/:groupJid/admin`
+
+Executa ações administrativas em um grupo. O `groupJid` deve estar no formato `...@g.us` e precisa estar URL-encoded quando usado no caminho.
+
+Exemplo:
+
+```bash
+curl -s -X POST http://localhost:3000/connections/minha-sessao/groups/120363000000000001%40g.us/admin \
+  -H "Authorization: Bearer sua-chave" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"ban","participants":["5511999999999"]}' | jq
+```
+
+Ações suportadas:
+
+| `action` | Campos extras | Descrição |
+| -------- | ------------- | --------- |
+| `add` | `participants` | Adiciona participantes |
+| `kick` | `participants` | Remove participantes |
+| `remove` | `participants` | Alias explícito de remoção |
+| `ban` | `participants` | Alias de remoção para banimento |
+| `promote` | `participants` | Promove participantes para admin |
+| `demote` | `participants` | Remove privilégios de admin |
+| `announcementMode` | `enabled: boolean` | Fecha/abre envio de mensagens para membros |
+| `lockedMode` | `enabled: boolean` | Trava/libera edição de dados do grupo |
+| `subject` | `subject: string` | Atualiza o nome do grupo |
+| `description` | `description: string \| null` | Atualiza ou limpa a descrição |
+| `ephemeral` | `expirationSeconds: number` | Configura mensagens temporárias |
+| `getInviteCode` | nenhum | Retorna código/link atual |
+| `revokeInvite` | nenhum | Revoga convite e retorna o novo |
+| `memberAddMode` | `mode: "admin_add" \| "all_member_add"` | Define quem pode adicionar membros |
+| `joinApprovalMode` | `mode: "on" \| "off"` | Liga/desliga aprovação de entrada |
+| `listJoinRequests` | nenhum | Lista solicitações pendentes |
+| `approveJoinRequests` | `participants` | Aprova solicitações pendentes |
+| `rejectJoinRequests` | `participants` | Rejeita solicitações pendentes |
+
+`participants` aceita string única, CSV ou array. Números sem sufixo são normalizados para `@s.whatsapp.net`.
+
+Respostas:
+
+- `200`: `{ ok: true, action, ... }`.
+- `400`: `groupJid` inválido, body inválido ou campo obrigatório ausente.
+- `404`: `conexão não encontrada`.
+- `409`: instância não conectada ou socket indisponível.
+- `500`: falha na ação administrativa.
 
 ## Webhooks por Conexão
 
@@ -489,6 +691,17 @@ Respostas:
 ### GET `/health/connections`
 
 Resumo por conexão + contadores agregados (`open`, `connecting`, `paused`, `error`).
+
+## Modo managed (multi-processo)
+
+Quando `WA_BOOTSTRAP_CONNECTIONS_ENABLED=false`, o processo atende API/webhooks, mas não controla sockets locais.
+
+Nesse modo:
+
+- `POST /connections`, `PATCH /connections/:id`, `DELETE /connections/:id`, `GET /connections` e `GET /connections/:id` operam sobre o registro managed persistido.
+- `GET /connections/:id/status`, `GET /connections/:id/diagnostics`, `GET /connections/:id/events` e `GET /connections/:id/commands` continuam úteis para leitura operacional.
+- `POST /connections/:id/connect`, `/disconnect`, `/pause`, `/resume`, `/restart`, `/pairing/start`, `/pairing/cancel` e `/qr` dependem do manager local e podem retornar `409`.
+- Para iniciar uma conexão a partir do processo API/webhook, use `POST /connections/:id/webhook/start`, que despacha comando assinado para o ingress interno.
 
 ## Exemplo de fluxo completo (API)
 
