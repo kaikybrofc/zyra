@@ -14,22 +14,27 @@
       }
 
       :root {
-        --bg: #0d0d12;
-        --surface: #161620;
-        --surface2: #1e1e2c;
-        --border: #2a2a3d;
-        --text: #ddddf0;
-        --muted: #7070a0;
-        --green: #22c55e;
-        --green-dim: #16a34a22;
-        --yellow: #f59e0b;
-        --yellow-dim: #d9770622;
-        --red: #ef4444;
-        --red-dim: #dc262622;
-        --blue: #3b82f6;
-        --blue-dim: #1d4ed822;
-        --purple: #8b5cf6;
+        --bg: #0f1117;
+        --surface: #171b23;
+        --surface2: #202633;
+        --surface3: #12161d;
+        --border: #2d3545;
+        --border-strong: #3d485c;
+        --text: #e8edf5;
+        --muted: #8e9aae;
+        --muted2: #657184;
+        --green: #36d399;
+        --green-dim: #1f8a5b2b;
+        --yellow: #f5b84b;
+        --yellow-dim: #b7791f2e;
+        --red: #ff5c6c;
+        --red-dim: #b423322e;
+        --blue: #5b9dff;
+        --blue-dim: #2563eb2e;
+        --purple: #9b7cff;
+        --teal: #4dd0c8;
         --radius: 8px;
+        --shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
       }
 
       body {
@@ -41,6 +46,7 @@
           sans-serif;
         font-size: 14px;
         min-height: 100vh;
+        line-height: 1.45;
       }
 
       /* ── Auth ───────────────────────────────────────────────────── */
@@ -84,8 +90,8 @@
       header {
         background: var(--surface);
         border-bottom: 1px solid var(--border);
-        padding: 0 24px;
-        height: 54px;
+        padding: 0 28px;
+        min-height: 62px;
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -94,10 +100,27 @@
         z-index: 100;
       }
 
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+
       .logo {
         font-size: 17px;
         font-weight: 700;
-        color: var(--purple);
+        color: var(--text);
+        letter-spacing: 0;
+        white-space: nowrap;
+      }
+
+      .brand-subtitle {
+        color: var(--muted);
+        font-size: 12px;
+        border-left: 1px solid var(--border);
+        padding-left: 12px;
+        white-space: nowrap;
       }
 
       .header-right {
@@ -128,9 +151,10 @@
       nav.tabs {
         background: var(--surface);
         border-bottom: 1px solid var(--border);
-        padding: 0 24px;
+        padding: 0 28px;
         display: flex;
         gap: 2px;
+        overflow-x: auto;
       }
 
       .tab-btn {
@@ -156,8 +180,8 @@
 
       /* ── Main ───────────────────────────────────────────────────── */
       main {
-        padding: 24px;
-        max-width: 960px;
+        padding: 28px;
+        max-width: 1240px;
         margin: 0 auto;
       }
 
@@ -303,7 +327,7 @@
       }
 
       .btn-primary {
-        background: var(--purple);
+        background: var(--blue);
         color: #fff;
       }
       .btn-green {
@@ -318,6 +342,10 @@
         background: var(--surface2);
         color: var(--text);
         border: 1px solid var(--border);
+      }
+      .btn-ghost.active {
+        border-color: var(--blue);
+        color: var(--blue);
       }
       .btn-sm {
         padding: 4px 10px;
@@ -500,7 +528,7 @@
       }
       .endpoint-row {
         display: grid;
-        grid-template-columns: 90px 1fr;
+        grid-template-columns: 90px 1fr auto;
         gap: 10px;
         align-items: center;
         padding: 8px 10px;
@@ -515,6 +543,18 @@
         font-weight: 700;
         letter-spacing: 0.5px;
         color: var(--blue);
+      }
+      .method-get {
+        color: var(--blue);
+      }
+      .method-post {
+        color: var(--green);
+      }
+      .method-patch {
+        color: var(--yellow);
+      }
+      .method-delete {
+        color: var(--red);
       }
       .endpoint-main {
         min-width: 0;
@@ -535,6 +575,277 @@
         display: flex;
         gap: 6px;
         flex-wrap: wrap;
+      }
+
+      /* ── API workbench ──────────────────────────────────────────── */
+      .endpoint-workbench {
+        display: grid;
+        grid-template-columns: minmax(330px, 0.92fr) minmax(0, 1.55fr);
+        gap: 16px;
+        align-items: start;
+      }
+
+      .endpoint-panel,
+      .tester-panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .panel-hdr {
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .panel-title {
+        font-weight: 700;
+        font-size: 13px;
+      }
+
+      .panel-sub {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 2px;
+      }
+
+      .catalog-tools {
+        padding: 12px;
+        display: grid;
+        grid-template-columns: 1fr 140px;
+        gap: 8px;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface3);
+      }
+
+      .endpoint-catalog {
+        max-height: 720px;
+        overflow: auto;
+      }
+
+      .endpoint-card {
+        width: 100%;
+        background: transparent;
+        color: var(--text);
+        border: 0;
+        border-bottom: 1px solid var(--border);
+        border-radius: 0;
+        display: block;
+        text-align: left;
+        padding: 12px 14px;
+      }
+
+      .endpoint-card:hover,
+      .endpoint-card.active {
+        opacity: 1;
+        background: var(--surface2);
+      }
+
+      .endpoint-card.active {
+        box-shadow: inset 3px 0 0 var(--blue);
+      }
+
+      .endpoint-card-top {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 5px;
+      }
+
+      .method-pill {
+        border: 1px solid var(--border-strong);
+        border-radius: 6px;
+        padding: 2px 7px;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.4px;
+        min-width: 52px;
+        text-align: center;
+      }
+
+      .endpoint-card-title {
+        font-weight: 650;
+        font-size: 13px;
+        min-width: 0;
+      }
+
+      .endpoint-card-path {
+        color: var(--muted);
+        font-family: monospace;
+        font-size: 12px;
+        word-break: break-all;
+      }
+
+      .endpoint-card-meta {
+        color: var(--muted2);
+        font-size: 11px;
+        margin-top: 5px;
+      }
+
+      .tester-body {
+        padding: 16px;
+      }
+
+      .endpoint-hero {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+
+      .endpoint-hero h3 {
+        font-size: 18px;
+        line-height: 1.25;
+        margin-bottom: 5px;
+      }
+
+      .endpoint-description {
+        color: var(--muted);
+        font-size: 13px;
+        max-width: 720px;
+      }
+
+      .endpoint-doc-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+
+      .doc-tile {
+        background: var(--surface3);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 10px;
+        min-width: 0;
+      }
+
+      .doc-label {
+        color: var(--muted2);
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 5px;
+      }
+
+      .doc-value {
+        color: var(--text);
+        font-size: 12px;
+        word-break: break-word;
+      }
+
+      .doc-value code {
+        font-family: monospace;
+        color: var(--text);
+      }
+
+      .request-preview {
+        background: #090c11;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 10px 12px;
+        color: var(--teal);
+        font-family: monospace;
+        font-size: 12px;
+        word-break: break-all;
+        margin-bottom: 14px;
+      }
+
+      .request-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .request-grid .full {
+        grid-column: 1 / -1;
+      }
+
+      .mono-area {
+        font-family:
+          ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          Monaco,
+          Consolas,
+          monospace;
+        font-size: 12px;
+        line-height: 1.5;
+        min-height: 128px;
+        resize: vertical;
+      }
+
+      .response-shell {
+        margin-top: 16px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+
+      .response-hdr {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px 12px;
+        background: var(--surface3);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .response-title {
+        font-weight: 700;
+        font-size: 12px;
+      }
+
+      .response-meta {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .response-body {
+        margin: 0;
+        padding: 12px;
+        min-height: 160px;
+        max-height: 420px;
+        overflow: auto;
+        background: #090c11;
+        color: #d8e7ff;
+        font-family:
+          ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          Monaco,
+          Consolas,
+          monospace;
+        font-size: 12px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+      }
+
+      .info-list {
+        display: grid;
+        gap: 6px;
+        margin: 12px 0 16px;
+      }
+
+      .info-line {
+        color: var(--muted);
+        font-size: 12px;
+        display: flex;
+        gap: 8px;
+      }
+
+      .info-line strong {
+        color: var(--text);
+        min-width: 92px;
+        font-size: 12px;
       }
 
       /* ── Deliveries ─────────────────────────────────────────────── */
@@ -663,9 +974,32 @@
         main {
           padding: 16px;
         }
+        header {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 10px;
+          padding: 14px 16px;
+        }
+        nav.tabs {
+          padding: 0 16px;
+        }
+        .brand-subtitle {
+          display: none;
+        }
         .actions {
           flex-direction: column;
           align-items: stretch;
+        }
+        .endpoint-workbench {
+          grid-template-columns: 1fr;
+        }
+        .catalog-tools,
+        .request-grid,
+        .endpoint-doc-grid {
+          grid-template-columns: 1fr;
+        }
+        .endpoint-hero {
+          flex-direction: column;
         }
       }
     </style>
@@ -686,7 +1020,10 @@
 
     <!-- Header -->
     <header>
-      <div class="logo">⚡ Zyra</div>
+      <div class="brand">
+        <div class="logo">⚡ Zyra</div>
+        <span class="brand-subtitle">Painel operacional da API</span>
+      </div>
       <div class="header-right">
         <span class="last-updated" id="last-updated">—</span>
         <label class="toggle-label">
@@ -701,6 +1038,7 @@
       <button class="tab-btn active" onclick="switchTab('instances')">Instâncias</button>
       <button class="tab-btn" onclick="switchTab('global-webhooks')">Webhooks Globais</button>
       <button class="tab-btn" onclick="switchTab('runtime')">API & Webhook</button>
+      <button class="tab-btn" onclick="switchTab('endpoints')">Endpoints</button>
     </nav>
 
     <!-- Main -->
@@ -737,6 +1075,35 @@
         <p class="section-desc">Visão operacional deste processo: perfil de runtime, workers ativos e configuração da API para uso do dashboard e automações.</p>
         <div id="runtime-panel">
           <div class="empty"><div class="spinner"></div></div>
+        </div>
+      </section>
+
+      <!-- Tab: Endpoints -->
+      <section id="tab-endpoints" class="tab-content">
+        <div class="section-hdr">
+          <h2>Endpoints</h2>
+          <button class="btn-ghost" onclick="loadEndpointContext()">Atualizar contexto</button>
+        </div>
+        <p class="section-desc">Catálogo separado da API REST com exemplos, requisitos e execução direta pelo navegador. Os testes usam o Bearer informado na entrada do dashboard; endpoints HMAC aceitam segredo temporário só para assinar a chamada localmente.</p>
+        <div class="endpoint-workbench">
+          <aside class="endpoint-panel">
+            <div class="panel-hdr">
+              <div>
+                <div class="panel-title">Catálogo</div>
+                <div class="panel-sub" id="endpoint-count">—</div>
+              </div>
+            </div>
+            <div class="catalog-tools">
+              <input id="endpoint-search" placeholder="Buscar endpoint, rota ou requisito" oninput="renderEndpointCatalog()" />
+              <select id="endpoint-scope-filter" onchange="renderEndpointCatalog()">
+                <option value="">Todos</option>
+              </select>
+            </div>
+            <div id="endpoint-catalog" class="endpoint-catalog"></div>
+          </aside>
+          <section class="tester-panel">
+            <div id="endpoint-tester"></div>
+          </section>
         </div>
       </section>
     </main>
@@ -828,9 +1195,660 @@
         expandedDetails: new Set(), // connIds with details panel open
         expandedWebhooks: new Set(), // connIds with webhook panel open
         expandedDeliveries: new Set(), // webhookIds with deliveries panel open
+        selectedEndpointId: 'connections-list',
+        endpointParamOverrides: {},
+        endpointResponse: null,
         qrTimer: null,
         autoRefreshTimer: null,
       }
+
+      const connectionParam = {
+        name: 'id',
+        label: 'Connection ID',
+        placeholder: 'default',
+        value: () => defaultConnectionId(),
+      }
+      const webhookParam = {
+        name: 'webhookId',
+        label: 'Webhook ID',
+        placeholder: 'webhook-id',
+        value: () => defaultWebhookId(),
+      }
+      const deliveryParam = {
+        name: 'deliveryId',
+        label: 'Delivery ID',
+        placeholder: 'delivery-id',
+      }
+      const messageParam = {
+        name: 'messageId',
+        label: 'Message ID',
+        placeholder: 'message-id',
+      }
+      const groupParam = {
+        name: 'groupJid',
+        label: 'Group JID',
+        placeholder: '120363000000000000@g.us',
+      }
+      const commandParam = {
+        name: 'commandId',
+        label: 'Command ID',
+        placeholder: 'command-id',
+      }
+
+      const ENDPOINTS = [
+        {
+          id: 'health-live',
+          group: 'Health',
+          method: 'GET',
+          path: '/health/live',
+          title: 'Liveness do processo',
+          description: 'Confirma que o servidor HTTP está vivo e respondendo.',
+          auth: 'Sem Bearer obrigatório',
+          requirement: 'WA_HEALTH_ENABLED precisa estar ativo.',
+          responses: ['200 processo vivo'],
+        },
+        {
+          id: 'health-ready',
+          group: 'Health',
+          method: 'GET',
+          path: '/health/ready',
+          title: 'Readiness da infraestrutura',
+          description: 'Valida dependências como MySQL, Redis e flags do control-plane.',
+          auth: 'Sem Bearer obrigatório',
+          requirement: 'WA_HEALTH_ENABLED precisa estar ativo.',
+          responses: ['200 pronto', '503 dependência indisponível'],
+        },
+        {
+          id: 'health-connections',
+          group: 'Health',
+          method: 'GET',
+          path: '/health/connections',
+          title: 'Resumo de saúde das conexões',
+          description: 'Retorna contadores e snapshot operacional de cada conexão gerenciada.',
+          auth: 'Sem Bearer obrigatório',
+          requirement: 'WA_HEALTH_ENABLED precisa estar ativo.',
+          responses: ['200 resumo com conexões'],
+        },
+        {
+          id: 'runtime',
+          group: 'Sistema',
+          method: 'GET',
+          path: '/system/runtime',
+          title: 'Runtime da API',
+          description: 'Mostra perfil do processo, capabilities, porta, auth e workers de webhook.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'API ativa.',
+          responses: ['200 metadados do runtime', '401 Bearer inválido ou ausente'],
+        },
+        {
+          id: 'connections-list',
+          group: 'Conexões',
+          method: 'GET',
+          path: '/connections',
+          title: 'Listar instâncias',
+          description: 'Lista conexões carregadas no processo e registros gerenciados no control-plane.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'API ativa.',
+          responses: ['200 lista de conexões'],
+        },
+        {
+          id: 'connections-create',
+          group: 'Conexões',
+          method: 'POST',
+          path: '/connections',
+          title: 'Criar instância',
+          description: 'Cria uma entrada de conexão sem necessariamente iniciar o socket.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Connection ID válido e único.',
+          bodyExample: () => ({ connectionId: 'minha-sessao', label: 'Bot de Suporte' }),
+          responses: ['201 conexão criada', '409 connectionId já existe'],
+        },
+        {
+          id: 'connection-detail',
+          group: 'Conexões',
+          method: 'GET',
+          path: '/connections/:id',
+          title: 'Detalhar instância',
+          description: 'Retorna estado completo da conexão, metadados administrativos e capabilities.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Connection ID existente.',
+          params: [connectionParam],
+          responses: ['200 detalhes', '404 conexão não encontrada'],
+        },
+        {
+          id: 'connection-update',
+          group: 'Conexões',
+          method: 'PATCH',
+          path: '/connections/:id',
+          title: 'Atualizar label',
+          description: 'Atualiza o nome legível da instância.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Connection ID existente.',
+          params: [connectionParam],
+          bodyExample: () => ({ label: 'Bot de Suporte' }),
+          responses: ['200 conexão atualizada', '404 conexão não encontrada'],
+        },
+        {
+          id: 'connection-delete',
+          group: 'Conexões',
+          method: 'DELETE',
+          path: '/connections/:id',
+          title: 'Deletar instância',
+          description: 'Remove a instância ou marca o registro gerenciado como deletado.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Connection ID existente.',
+          params: [connectionParam],
+          danger: true,
+          responses: ['204 removida', '404 conexão não encontrada'],
+        },
+        {
+          id: 'connection-hard-delete',
+          group: 'Conexões',
+          method: 'DELETE',
+          path: '/connections/:id/hard',
+          title: 'Hard delete de sessão',
+          description: 'Remove instância e limpa estado de sessão persistido. Use com cuidado.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Processo precisa gerenciar conexões e query force=true.',
+          params: [connectionParam],
+          query: [{ name: 'force', label: 'force', placeholder: 'true', value: 'true' }],
+          danger: true,
+          available: () => S.runtime?.capabilities?.managesConnections !== false,
+          responses: ['204 removida', '422 guard de segurança ausente'],
+        },
+        {
+          id: 'connection-connect',
+          group: 'Conexões',
+          method: 'POST',
+          path: '/connections/:id/connect',
+          title: 'Conectar instância',
+          description: 'Inicia o socket no processo atual e disponibiliza QR quando necessário.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Processo precisa gerenciar conexões.',
+          params: [connectionParam],
+          available: () => S.runtime?.capabilities?.managesConnections !== false,
+          responses: ['200 conectando', '409 manager desabilitado'],
+        },
+        {
+          id: 'connection-start-alias',
+          group: 'Conexões',
+          method: 'POST',
+          path: '/connections/:id/start',
+          title: 'Conectar instância (alias)',
+          description: 'Alias operacional de /connections/:id/connect.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Processo precisa gerenciar conexões.',
+          params: [connectionParam],
+          available: () => S.runtime?.capabilities?.managesConnections !== false,
+          responses: ['200 conectando', '409 manager desabilitado'],
+        },
+        {
+          id: 'connection-webhook-start',
+          group: 'Conexões',
+          method: 'POST',
+          path: '/connections/:id/webhook/start',
+          title: 'Conectar via webhook',
+          description: 'Dispara comando de start pelo ingress assinado configurado no ambiente.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'WA_WEBHOOK_SHARED_SECRET configurado.',
+          params: [connectionParam],
+          bodyExample: () => ({ label: 'Bot de Suporte' }),
+          available: () => S.runtime?.capabilities?.connectionWebhookIngress === true,
+          responses: ['200/202 comando aceito', '503 webhook indisponível'],
+        },
+        {
+          id: 'connection-disconnect',
+          group: 'Conexões',
+          method: 'POST',
+          path: '/connections/:id/disconnect',
+          title: 'Desconectar instância',
+          description: 'Fecha o socket ativo da conexão.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Processo precisa gerenciar conexões.',
+          params: [connectionParam],
+          available: () => S.runtime?.capabilities?.managesConnections !== false,
+          responses: ['200 desconectada', '409 manager desabilitado'],
+        },
+        {
+          id: 'connection-pause',
+          group: 'Conexões',
+          method: 'POST',
+          path: '/connections/:id/pause',
+          title: 'Pausar instância',
+          description: 'Pausa a conexão e registra desired_state pausado.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Processo precisa gerenciar conexões.',
+          params: [connectionParam],
+          available: () => S.runtime?.capabilities?.managesConnections !== false,
+          responses: ['200 pausada', '409 manager desabilitado'],
+        },
+        {
+          id: 'connection-resume',
+          group: 'Conexões',
+          method: 'POST',
+          path: '/connections/:id/resume',
+          title: 'Retomar instância',
+          description: 'Retoma uma conexão pausada.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Processo precisa gerenciar conexões.',
+          params: [connectionParam],
+          available: () => S.runtime?.capabilities?.managesConnections !== false,
+          responses: ['200 retomada', '409 manager desabilitado'],
+        },
+        {
+          id: 'connection-restart',
+          group: 'Conexões',
+          method: 'POST',
+          path: '/connections/:id/restart',
+          title: 'Reiniciar instância',
+          description: 'Recria o socket da conexão.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Processo precisa gerenciar conexões.',
+          params: [connectionParam],
+          available: () => S.runtime?.capabilities?.managesConnections !== false,
+          responses: ['200 reiniciando', '409 manager desabilitado'],
+        },
+        {
+          id: 'connection-reconnect-alias',
+          group: 'Conexões',
+          method: 'POST',
+          path: '/connections/:id/reconnect',
+          title: 'Reiniciar instância (alias)',
+          description: 'Alias operacional de /connections/:id/restart.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Processo precisa gerenciar conexões.',
+          params: [connectionParam],
+          available: () => S.runtime?.capabilities?.managesConnections !== false,
+          responses: ['200 reiniciando', '409 manager desabilitado'],
+        },
+        {
+          id: 'connection-pairing-start',
+          group: 'Pairing',
+          method: 'POST',
+          path: '/connections/:id/pairing/start',
+          title: 'Iniciar pairing remoto',
+          description: 'Inicia fluxo de pairing remoto para a conexão.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Processo precisa gerenciar conexões.',
+          params: [connectionParam],
+          available: () => S.runtime?.capabilities?.managesConnections !== false,
+          responses: ['202 pairing iniciado', '409 manager desabilitado'],
+        },
+        {
+          id: 'connection-pairing-cancel',
+          group: 'Pairing',
+          method: 'POST',
+          path: '/connections/:id/pairing/cancel',
+          title: 'Cancelar pairing remoto',
+          description: 'Cancela o fluxo de pairing remoto em andamento.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Processo precisa gerenciar conexões.',
+          params: [connectionParam],
+          available: () => S.runtime?.capabilities?.managesConnections !== false,
+          responses: ['200 pairing cancelado', '404 conexão não encontrada'],
+        },
+        {
+          id: 'connection-pairing-get',
+          group: 'Pairing',
+          method: 'GET',
+          path: '/connections/:id/pairing',
+          title: 'Consultar pairing',
+          description: 'Retorna estado atual do pairing remoto.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Processo precisa gerenciar conexões.',
+          params: [connectionParam],
+          available: () => S.runtime?.capabilities?.managesConnections !== false,
+          responses: ['200 estado de pairing', '409 manager desabilitado'],
+        },
+        {
+          id: 'connection-status',
+          group: 'Conexões',
+          method: 'GET',
+          path: '/connections/:id/status',
+          title: 'Status resumido',
+          description: 'Retorna status, socket ativo, reconnect e dados administrativos.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Connection ID existente.',
+          params: [connectionParam],
+          responses: ['200 status', '404 conexão não encontrada'],
+        },
+        {
+          id: 'connection-events',
+          group: 'Auditoria',
+          method: 'GET',
+          path: '/connections/:id/events',
+          title: 'Eventos administrativos',
+          description: 'Lista a trilha administrativa da conexão.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Connection ID existente.',
+          params: [connectionParam],
+          query: [{ name: 'limit', label: 'limit', placeholder: '50', value: '50' }],
+          responses: ['200 lista de eventos', '404 conexão não encontrada'],
+        },
+        {
+          id: 'connection-commands',
+          group: 'Auditoria',
+          method: 'GET',
+          path: '/connections/:id/commands',
+          title: 'Comandos webhook da conexão',
+          description: 'Lista comandos recebidos via ingress HMAC para a conexão.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Connection ID existente.',
+          params: [connectionParam],
+          query: [{ name: 'limit', label: 'limit', placeholder: '50', value: '50' }],
+          responses: ['200 lista de comandos', '404 conexão não encontrada'],
+        },
+        {
+          id: 'connection-command-detail',
+          group: 'Auditoria',
+          method: 'GET',
+          path: '/connections/commands/:commandId',
+          title: 'Detalhar comando webhook',
+          description: 'Consulta um comando recebido por ID.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Command ID conhecido.',
+          params: [commandParam],
+          responses: ['200 comando', '404 comando não encontrado'],
+        },
+        {
+          id: 'connection-diagnostics',
+          group: 'Diagnóstico',
+          method: 'GET',
+          path: '/connections/:id/diagnostics',
+          title: 'Diagnóstico ampliado',
+          description: 'Retorna snapshot operacional detalhado da conexão.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Connection ID existente.',
+          params: [connectionParam],
+          responses: ['200 diagnóstico', '404 conexão não encontrada'],
+        },
+        {
+          id: 'connection-qr',
+          group: 'Diagnóstico',
+          method: 'GET',
+          path: '/connections/:id/qr',
+          title: 'QR code atual',
+          description: 'Retorna o QR code atual quando a conexão estiver aguardando pareamento.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Conexão existente e QR disponível no processo atual.',
+          params: [connectionParam],
+          responses: ['200 QR', '404 QR indisponível'],
+        },
+        {
+          id: 'media-upload',
+          group: 'Mensagens',
+          method: 'POST',
+          path: '/media',
+          title: 'Upload de mídia base64',
+          description: 'Salva mídia enviada em JSON/base64 para reutilizar depois com mediaId.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Payload precisa respeitar WA_API_MEDIA_MAX_BYTES.',
+          bodyExample: () => ({ fileName: 'exemplo.txt', mimetype: 'text/plain', base64: 'dGVzdGU=' }),
+          responses: ['201 mediaId criado', '413 arquivo maior que o limite'],
+        },
+        {
+          id: 'messages-list',
+          group: 'Mensagens',
+          method: 'GET',
+          path: '/connections/:id/messages',
+          title: 'Histórico de mensagens API',
+          description: 'Lista mensagens enviadas pela API com filtros opcionais.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Connection ID existente.',
+          params: [connectionParam],
+          query: [
+            { name: 'to', label: 'to', placeholder: '5511999999999@s.whatsapp.net' },
+            { name: 'status', label: 'status', placeholder: 'sent' },
+            { name: 'limit', label: 'limit', placeholder: '50', value: '50' },
+          ],
+          responses: ['200 histórico'],
+        },
+        {
+          id: 'message-detail',
+          group: 'Mensagens',
+          method: 'GET',
+          path: '/connections/:id/messages/:messageId',
+          title: 'Status de mensagem API',
+          description: 'Consulta o status de uma mensagem enviada anteriormente pela API.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Message ID conhecido.',
+          params: [connectionParam, messageParam],
+          responses: ['200 mensagem', '404 mensagem não encontrada'],
+        },
+        {
+          id: 'message-send',
+          group: 'Mensagens',
+          method: 'POST',
+          path: '/connections/:id/messages/send',
+          title: 'Enviar mensagem',
+          description: 'Envia texto, mídia, reação, enquete, localização, contato ou payload raw pela instância.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Instância precisa estar open.',
+          params: [connectionParam],
+          bodyExample: () => ({ type: 'text', to: '5511999999999@s.whatsapp.net', text: 'teste via API' }),
+          responses: ['200 mensagem enviada', '409 instância não conectada'],
+        },
+        {
+          id: 'groups-list',
+          group: 'Grupos',
+          method: 'GET',
+          path: '/connections/:id/groups',
+          title: 'Listar grupos',
+          description: 'Lista grupos em que a instância conectada participa.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Instância precisa estar open.',
+          params: [connectionParam],
+          responses: ['200 mapa de grupos', '409 socket indisponível'],
+        },
+        {
+          id: 'groups-admin',
+          group: 'Grupos',
+          method: 'POST',
+          path: '/connections/:id/groups/:groupJid/admin',
+          title: 'Ação administrativa de grupo',
+          description: 'Executa ações como add/remove/promote/demote, assunto, descrição, convite e modos do grupo.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Instância open e permissão administrativa no grupo.',
+          params: [connectionParam, groupParam],
+          bodyExample: () => ({ action: 'subject', subject: 'Novo assunto do grupo' }),
+          responses: ['200 ação executada', '400 payload inválido', '409 socket indisponível'],
+        },
+        {
+          id: 'webhooks-global-list',
+          group: 'Webhooks globais',
+          method: 'GET',
+          path: '/webhooks',
+          title: 'Listar webhooks globais',
+          description: 'Lista webhooks que recebem eventos de todas as instâncias.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'API ativa.',
+          responses: ['200 lista de webhooks'],
+        },
+        {
+          id: 'webhooks-global-create',
+          group: 'Webhooks globais',
+          method: 'POST',
+          path: '/webhooks',
+          title: 'Criar webhook global',
+          description: 'Cria um destino global com filtros de evento e secret HMAC opcional.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'URL permitida pela configuração de targets.',
+          bodyExample: () => ({ url: 'https://example.com/webhook', eventsFilter: ['*'], secret: null }),
+          responses: ['201 webhook criado', '400 target não permitido'],
+        },
+        {
+          id: 'webhooks-global-detail',
+          group: 'Webhooks globais',
+          method: 'GET',
+          path: '/webhooks/:webhookId',
+          title: 'Detalhar webhook global',
+          description: 'Consulta um webhook global específico.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Webhook ID conhecido.',
+          params: [webhookParam],
+          responses: ['200 webhook', '404 webhook não encontrado'],
+        },
+        {
+          id: 'webhooks-global-update',
+          group: 'Webhooks globais',
+          method: 'PATCH',
+          path: '/webhooks/:webhookId',
+          title: 'Atualizar webhook global',
+          description: 'Atualiza URL, filtros, status ativo ou secret de um webhook global.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Webhook ID conhecido.',
+          params: [webhookParam],
+          bodyExample: () => ({ active: true }),
+          responses: ['200 webhook atualizado', '404 webhook não encontrado'],
+        },
+        {
+          id: 'webhooks-global-delete',
+          group: 'Webhooks globais',
+          method: 'DELETE',
+          path: '/webhooks/:webhookId',
+          title: 'Deletar webhook global',
+          description: 'Remove um webhook global.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Webhook ID conhecido.',
+          params: [webhookParam],
+          danger: true,
+          responses: ['204 removido', '404 webhook não encontrado'],
+        },
+        {
+          id: 'webhooks-global-deliveries',
+          group: 'Webhooks globais',
+          method: 'GET',
+          path: '/webhooks/:webhookId/deliveries',
+          title: 'Entregas do webhook global',
+          description: 'Lista entregas registradas para um webhook global.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Webhook ID conhecido.',
+          params: [webhookParam],
+          responses: ['200 lista de entregas', '404 webhook não encontrado'],
+        },
+        {
+          id: 'webhooks-global-retry',
+          group: 'Webhooks globais',
+          method: 'POST',
+          path: '/webhooks/:webhookId/deliveries/:deliveryId/retry',
+          title: 'Retry de entrega global',
+          description: 'Reprocessa uma entrega failed ou dead_letter de webhook global.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Webhook ID e Delivery ID conhecidos.',
+          params: [webhookParam, deliveryParam],
+          responses: ['200 entrega reprocessada', '404 entrega não encontrada'],
+        },
+        {
+          id: 'webhooks-instance-list',
+          group: 'Webhooks da conexão',
+          method: 'GET',
+          path: '/connections/:id/webhooks',
+          title: 'Listar webhooks da conexão',
+          description: 'Lista webhooks vinculados a uma instância específica.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Connection ID existente.',
+          params: [connectionParam],
+          responses: ['200 lista de webhooks'],
+        },
+        {
+          id: 'webhooks-instance-create',
+          group: 'Webhooks da conexão',
+          method: 'POST',
+          path: '/connections/:id/webhooks',
+          title: 'Criar webhook da conexão',
+          description: 'Cria um destino de webhook limitado a uma instância.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'URL permitida pela configuração de targets.',
+          params: [connectionParam],
+          bodyExample: () => ({ url: 'https://example.com/webhook', eventsFilter: ['messages.*'], secret: null }),
+          responses: ['201 webhook criado', '400 target não permitido'],
+        },
+        {
+          id: 'webhooks-instance-detail',
+          group: 'Webhooks da conexão',
+          method: 'GET',
+          path: '/connections/:id/webhooks/:webhookId',
+          title: 'Detalhar webhook da conexão',
+          description: 'Consulta um webhook específico de uma instância.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Connection ID e Webhook ID conhecidos.',
+          params: [connectionParam, webhookParam],
+          responses: ['200 webhook', '404 webhook não encontrado'],
+        },
+        {
+          id: 'webhooks-instance-update',
+          group: 'Webhooks da conexão',
+          method: 'PATCH',
+          path: '/connections/:id/webhooks/:webhookId',
+          title: 'Atualizar webhook da conexão',
+          description: 'Atualiza URL, filtros, status ativo ou secret do webhook da instância.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Connection ID e Webhook ID conhecidos.',
+          params: [connectionParam, webhookParam],
+          bodyExample: () => ({ active: true }),
+          responses: ['200 webhook atualizado', '404 webhook não encontrado'],
+        },
+        {
+          id: 'webhooks-instance-delete',
+          group: 'Webhooks da conexão',
+          method: 'DELETE',
+          path: '/connections/:id/webhooks/:webhookId',
+          title: 'Deletar webhook da conexão',
+          description: 'Remove um webhook vinculado a uma instância.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Connection ID e Webhook ID conhecidos.',
+          params: [connectionParam, webhookParam],
+          danger: true,
+          responses: ['204 removido', '404 webhook não encontrado'],
+        },
+        {
+          id: 'webhooks-instance-deliveries',
+          group: 'Webhooks da conexão',
+          method: 'GET',
+          path: '/connections/:id/webhooks/:webhookId/deliveries',
+          title: 'Entregas do webhook da conexão',
+          description: 'Lista entregas registradas para um webhook de instância.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Connection ID e Webhook ID conhecidos.',
+          params: [connectionParam, webhookParam],
+          responses: ['200 lista de entregas', '404 webhook não encontrado'],
+        },
+        {
+          id: 'webhooks-instance-retry',
+          group: 'Webhooks da conexão',
+          method: 'POST',
+          path: '/connections/:id/webhooks/:webhookId/deliveries/:deliveryId/retry',
+          title: 'Retry de entrega da conexão',
+          description: 'Reprocessa uma entrega failed ou dead_letter de webhook de instância.',
+          auth: 'Bearer quando WA_API_KEY estiver configurada.',
+          requirement: 'Connection ID, Webhook ID e Delivery ID conhecidos.',
+          params: [connectionParam, webhookParam, deliveryParam],
+          responses: ['200 entrega reprocessada', '404 entrega não encontrada'],
+        },
+        {
+          id: 'connection-webhook-ingress',
+          group: 'Ingress HMAC',
+          method: 'POST',
+          path: '/webhooks/connections',
+          title: 'Ingress de comando de conexão',
+          description: 'Recebe comandos administrativos assinados por HMAC para registrar, iniciar, reiniciar, pausar, retomar ou deletar conexões.',
+          auth: 'HMAC nos headers x-zyra-*; não usa Bearer da API.',
+          requirement: 'WA_WEBHOOK_SHARED_SECRET configurado e timestamp dentro da janela permitida.',
+          hmac: true,
+          bodyExample: () => ({
+            event: 'connection.command',
+            version: '1',
+            command_id: `cmd_${Date.now()}`,
+            sent_at: new Date().toISOString(),
+            connection: { id: defaultConnectionId(), display_name: 'Bot de Suporte' },
+            action: { type: 'start', reason: 'teste pelo dashboard' },
+            options: {},
+            metadata: { source: 'dashboard.endpoint_lab' },
+          }),
+          available: () => S.runtime?.capabilities?.connectionWebhookIngress === true,
+          responses: ['202 comando aceito', '401 assinatura inválida', '503 segredo não configurado'],
+        },
+      ]
 
       // ────────────────────────────────────────────────────────────────────────────
       // API
@@ -905,10 +1923,11 @@
         document.querySelectorAll('.tab-content').forEach((e) => e.classList.remove('active'))
         document.querySelectorAll('.tab-btn').forEach((e) => e.classList.remove('active'))
         document.getElementById(`tab-${name}`).classList.add('active')
-        const idx = ['instances', 'global-webhooks', 'runtime'].indexOf(name)
+        const idx = ['instances', 'global-webhooks', 'runtime', 'endpoints'].indexOf(name)
         document.querySelectorAll('.tab-btn')[idx]?.classList.add('active')
         if (name === 'global-webhooks') loadGlobalWebhooks()
         if (name === 'runtime') loadRuntime()
+        if (name === 'endpoints') renderEndpointLab()
       }
 
       // ────────────────────────────────────────────────────────────────────────────
@@ -961,6 +1980,425 @@
         return new Date(ts).toLocaleString('pt-BR')
       }
 
+      function defaultConnectionId() {
+        return S.instances[0]?.connectionId ?? 'default'
+      }
+
+      function defaultWebhookId() {
+        const firstInstanceWebhook = Object.values(S.instanceWebhooks).flat()[0]
+        return S.globalWebhooks[0]?.id ?? firstInstanceWebhook?.id ?? 'webhook-id'
+      }
+
+      function methodClass(method) {
+        return `method-${String(method).toLowerCase()}`
+      }
+
+      function endpointById(id) {
+        return ENDPOINTS.find((endpoint) => endpoint.id === id) ?? ENDPOINTS[0]
+      }
+
+      function endpointParams(endpoint) {
+        if (Array.isArray(endpoint.params)) return endpoint.params
+        const names = [...endpoint.path.matchAll(/:([A-Za-z0-9_]+)/g)].map((match) => match[1])
+        return names.map((name) => ({ name, label: name, placeholder: name }))
+      }
+
+      function endpointBodyText(endpoint) {
+        if (!endpoint.bodyExample) return ''
+        const sample = typeof endpoint.bodyExample === 'function' ? endpoint.bodyExample() : endpoint.bodyExample
+        return JSON.stringify(sample, null, 2)
+      }
+
+      function endpointAvailability(endpoint) {
+        if (typeof endpoint.available !== 'function') return { ok: true, label: 'disponível' }
+        if (!S.runtime) return { ok: null, label: 'depende do runtime' }
+        return endpoint.available() ? { ok: true, label: 'disponível' } : { ok: false, label: 'indisponível neste runtime' }
+      }
+
+      function endpointInputId(kind, name) {
+        return `endpoint-${kind}-${name}`
+      }
+
+      function getEndpointParamValue(param) {
+        if (Object.prototype.hasOwnProperty.call(S.endpointParamOverrides, param.name)) {
+          return S.endpointParamOverrides[param.name]
+        }
+        if (typeof param.value === 'function') return param.value()
+        return param.value ?? ''
+      }
+
+      function buildEndpointPath(endpoint, values) {
+        let path = endpoint.path
+        for (const param of endpointParams(endpoint)) {
+          const raw = values[param.name] ?? ''
+          path = path.replace(`:${param.name}`, encodeURIComponent(raw))
+        }
+        const queryParams = new URLSearchParams()
+        for (const item of endpoint.query ?? []) {
+          const raw = values[`query:${item.name}`] ?? ''
+          if (raw !== '') queryParams.set(item.name, raw)
+        }
+        const query = queryParams.toString()
+        return query ? `${path}?${query}` : path
+      }
+
+      function collectEndpointValues(endpoint) {
+        const values = {}
+        for (const param of endpointParams(endpoint)) {
+          values[param.name] = document.getElementById(endpointInputId('param', param.name))?.value.trim() ?? ''
+        }
+        for (const item of endpoint.query ?? []) {
+          values[`query:${item.name}`] = document.getElementById(endpointInputId('query', item.name))?.value.trim() ?? ''
+        }
+        return values
+      }
+
+      function refreshEndpointRequestPreview() {
+        const endpoint = endpointById(S.selectedEndpointId)
+        const preview = document.getElementById('endpoint-request-preview')
+        if (!endpoint || !preview) return
+        const values = collectEndpointValues(endpoint)
+        preview.textContent = `${endpoint.method} ${window.location.origin}${buildEndpointPath(endpoint, values)}`
+      }
+
+      function renderEndpointLab() {
+        renderEndpointScopeOptions()
+        renderEndpointCatalog()
+        renderEndpointTester()
+      }
+
+      function renderEndpointScopeOptions() {
+        const select = document.getElementById('endpoint-scope-filter')
+        if (!select) return
+        const current = select.value
+        const groups = [...new Set(ENDPOINTS.map((endpoint) => endpoint.group))].sort((a, b) => a.localeCompare(b))
+        select.innerHTML = '<option value="">Todos</option>' + groups.map((group) => `<option value="${esc(group)}">${esc(group)}</option>`).join('')
+        select.value = groups.includes(current) ? current : ''
+      }
+
+      function renderEndpointCatalog() {
+        const el = document.getElementById('endpoint-catalog')
+        const countEl = document.getElementById('endpoint-count')
+        if (!el) return
+        const search = (document.getElementById('endpoint-search')?.value ?? '').trim().toLowerCase()
+        const group = document.getElementById('endpoint-scope-filter')?.value ?? ''
+        const filtered = ENDPOINTS.filter((endpoint) => {
+          const haystack = [endpoint.method, endpoint.path, endpoint.title, endpoint.description, endpoint.group, endpoint.requirement, endpoint.auth].join(' ').toLowerCase()
+          return (!group || endpoint.group === group) && (!search || haystack.includes(search))
+        })
+        if (countEl) countEl.textContent = `${filtered.length} de ${ENDPOINTS.length} endpoints`
+        if (!filtered.length) {
+          el.innerHTML = '<div class="empty">Nenhum endpoint encontrado.</div>'
+          return
+        }
+        el.innerHTML = filtered
+          .map((endpoint) => {
+            const availability = endpointAvailability(endpoint)
+            const availabilityClass = availability.ok === false ? 'badge-muted' : availability.ok === null ? 'badge-yellow' : 'badge-green'
+            return `
+      <button class="endpoint-card ${endpoint.id === S.selectedEndpointId ? 'active' : ''}" onclick="selectEndpoint('${endpoint.id}')">
+        <div class="endpoint-card-top">
+          <span class="method-pill ${methodClass(endpoint.method)}">${endpoint.method}</span>
+          <span class="endpoint-card-title">${esc(endpoint.title)}</span>
+        </div>
+        <div class="endpoint-card-path">${esc(endpoint.path)}</div>
+        <div class="endpoint-card-meta">${esc(endpoint.group)} · <span class="badge ${availabilityClass}">${esc(availability.label)}</span></div>
+      </button>`
+          })
+          .join('')
+      }
+
+      function renderField(param, kind) {
+        const value = kind === 'param' ? getEndpointParamValue(param) : (param.value ?? '')
+        return `
+    <div class="form-row">
+      <label class="form-label">${esc(param.label ?? param.name)}</label>
+      <input
+        id="${endpointInputId(kind, param.name)}"
+        value="${esc(value)}"
+        placeholder="${esc(param.placeholder ?? '')}"
+        oninput="refreshEndpointRequestPreview()"
+      />
+      ${param.hint ? `<div class="form-hint">${esc(param.hint)}</div>` : ''}
+    </div>`
+      }
+
+      function renderEndpointTester() {
+        const el = document.getElementById('endpoint-tester')
+        if (!el) return
+        const endpoint = endpointById(S.selectedEndpointId)
+        if (!endpoint) {
+          el.innerHTML = '<div class="empty">Selecione um endpoint no catálogo.</div>'
+          return
+        }
+        const availability = endpointAvailability(endpoint)
+        const availabilityClass = availability.ok === false ? 'badge-muted' : availability.ok === null ? 'badge-yellow' : 'badge-green'
+        const paramsHtml = endpointParams(endpoint).map((param) => renderField(param, 'param')).join('')
+        const queryHtml = (endpoint.query ?? []).map((param) => renderField(param, 'query')).join('')
+        const bodyText = endpointBodyText(endpoint)
+        const hasBodyEditor = Boolean(endpoint.bodyExample) || !['GET', 'DELETE'].includes(endpoint.method)
+        const responses = (endpoint.responses ?? []).map((item) => `<div class="info-line"><strong>Resposta</strong><span>${esc(item)}</span></div>`).join('')
+
+        el.innerHTML = `
+    <div class="panel-hdr">
+      <div>
+        <div class="panel-title">Executor</div>
+        <div class="panel-sub">Requisição real contra esta API</div>
+      </div>
+      <button class="btn-ghost btn-sm" onclick="copyEndpointCurl()">Copiar cURL</button>
+    </div>
+    <div class="tester-body">
+      <div class="endpoint-hero">
+        <div>
+          <h3>${esc(endpoint.title)}</h3>
+          <div class="endpoint-description">${esc(endpoint.description)}</div>
+        </div>
+        <span class="method-pill ${methodClass(endpoint.method)}">${endpoint.method}</span>
+      </div>
+
+      <div class="endpoint-doc-grid">
+        <div class="doc-tile">
+          <div class="doc-label">Rota</div>
+          <div class="doc-value"><code>${esc(endpoint.path)}</code></div>
+        </div>
+        <div class="doc-tile">
+          <div class="doc-label">Autenticação</div>
+          <div class="doc-value">${esc(endpoint.auth ?? 'Bearer quando configurado')}</div>
+        </div>
+        <div class="doc-tile">
+          <div class="doc-label">Requisito</div>
+          <div class="doc-value">${esc(endpoint.requirement ?? 'Nenhum requisito adicional')}</div>
+        </div>
+      </div>
+
+      <div class="endpoint-tags" style="margin-bottom:12px">
+        <span class="badge ${availabilityClass}">${esc(availability.label)}</span>
+        <span class="badge ${endpoint.danger ? 'badge-red' : 'badge-blue'}">${endpoint.danger ? 'ação sensível' : endpoint.group}</span>
+        ${endpoint.hmac ? '<span class="badge badge-yellow">HMAC local</span>' : ''}
+      </div>
+
+      <div class="info-list">
+        ${responses || '<div class="info-line"><strong>Resposta</strong><span>Consulte o corpo retornado pela API.</span></div>'}
+      </div>
+
+      <div class="request-preview" id="endpoint-request-preview"></div>
+
+      <div class="request-grid">
+        ${paramsHtml}
+        ${queryHtml}
+        ${
+          endpoint.hmac
+            ? `<div class="form-row full">
+                <label class="form-label">Segredo HMAC temporário</label>
+                <input id="endpoint-hmac-secret" type="password" placeholder="WA_WEBHOOK_SHARED_SECRET para assinar esta chamada" />
+                <div class="form-hint">Usado apenas no navegador para gerar x-zyra-timestamp, x-zyra-delivery-id e x-zyra-signature.</div>
+              </div>`
+            : ''
+        }
+        ${
+          hasBodyEditor
+            ? `<div class="form-row full">
+                <label class="form-label">Body JSON</label>
+                <textarea id="endpoint-body" class="mono-area" spellcheck="false" oninput="refreshEndpointRequestPreview()">${esc(bodyText)}</textarea>
+              </div>`
+            : ''
+        }
+        <div class="form-row full">
+          <label class="form-label">Headers extras JSON</label>
+          <textarea id="endpoint-extra-headers" class="mono-area" spellcheck="false" style="min-height:78px" placeholder='{"x-custom-header":"valor"}'></textarea>
+          <div class="form-hint">Content-Type e Authorization são montados automaticamente quando aplicável.</div>
+        </div>
+      </div>
+
+      <div class="actions" style="padding:0;margin-top:2px">
+        <button class="btn-primary" onclick="runEndpointTest()">Executar endpoint</button>
+        <button class="btn-ghost" onclick="resetEndpointBody()">Restaurar exemplo</button>
+      </div>
+
+      <div class="response-shell" id="endpoint-response-shell">
+        ${renderEndpointResponse()}
+      </div>
+    </div>`
+        refreshEndpointRequestPreview()
+      }
+
+      function renderEndpointResponse() {
+        const response = S.endpointResponse
+        if (!response) {
+          return `
+    <div class="response-hdr">
+      <div class="response-title">Resposta</div>
+      <div class="response-meta">aguardando execução</div>
+    </div>
+    <pre class="response-body">A resposta da API aparecerá aqui.</pre>`
+        }
+        const statusClass = response.ok ? 'badge-green' : 'badge-red'
+        return `
+    <div class="response-hdr">
+      <div class="response-title">
+        <span class="badge ${statusClass}">${esc(response.statusText)}</span>
+      </div>
+      <div class="response-meta">${esc(response.durationMs)}ms · ${esc(response.contentType || 'sem content-type')}</div>
+    </div>
+    <pre class="response-body">${esc(response.body)}</pre>`
+      }
+
+      function renderEndpointResponseOnly() {
+        const shell = document.getElementById('endpoint-response-shell')
+        if (shell) shell.innerHTML = renderEndpointResponse()
+      }
+
+      function selectEndpoint(id, overrides = {}) {
+        S.selectedEndpointId = id
+        S.endpointParamOverrides = overrides
+        S.endpointResponse = null
+        renderEndpointCatalog()
+        renderEndpointTester()
+      }
+
+      function openEndpointTester(id, overrides = {}) {
+        selectEndpoint(id, overrides)
+        switchTab('endpoints')
+      }
+
+      function resetEndpointBody() {
+        const endpoint = endpointById(S.selectedEndpointId)
+        const body = document.getElementById('endpoint-body')
+        if (body) body.value = endpointBodyText(endpoint)
+        const headers = document.getElementById('endpoint-extra-headers')
+        if (headers) headers.value = ''
+        refreshEndpointRequestPreview()
+      }
+
+      function parseJsonInput(id, fallback) {
+        const el = document.getElementById(id)
+        const raw = el?.value.trim() ?? ''
+        if (!raw) return fallback
+        return JSON.parse(raw)
+      }
+
+      async function signHmac(secret, timestamp, body) {
+        if (!window.crypto?.subtle) throw new Error('Web Crypto indisponível para assinar HMAC')
+        const encoder = new TextEncoder()
+        const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+        const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(`${timestamp}.${body}`))
+        return [...new Uint8Array(signature)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+      }
+
+      async function buildEndpointRequest() {
+        const endpoint = endpointById(S.selectedEndpointId)
+        const values = collectEndpointValues(endpoint)
+        const path = buildEndpointPath(endpoint, values)
+        const headers = { 'content-type': 'application/json' }
+        if (S.apiKey && !endpoint.hmac) headers['authorization'] = `Bearer ${S.apiKey}`
+
+        let bodyText = ''
+        const bodyEl = document.getElementById('endpoint-body')
+        if (bodyEl && bodyEl.value.trim()) {
+          JSON.parse(bodyEl.value)
+          bodyText = bodyEl.value.trim()
+        }
+
+        const extraHeaders = parseJsonInput('endpoint-extra-headers', {})
+        if (extraHeaders && typeof extraHeaders === 'object' && !Array.isArray(extraHeaders)) {
+          for (const [key, value] of Object.entries(extraHeaders)) {
+            if (value !== null && value !== undefined) headers[key] = String(value)
+          }
+        } else {
+          throw new Error('Headers extras precisam ser um objeto JSON')
+        }
+
+        if (endpoint.hmac) {
+          const secret = document.getElementById('endpoint-hmac-secret')?.value.trim() ?? ''
+          if (!secret) throw new Error('Informe o segredo HMAC para assinar este endpoint')
+          const timestamp = String(Date.now())
+          const deliveryId = headers['x-zyra-delivery-id'] || `dash_${Date.now()}`
+          headers['x-zyra-timestamp'] = timestamp
+          headers['x-zyra-delivery-id'] = deliveryId
+          headers['x-zyra-signature'] = `sha256=${await signHmac(secret, timestamp, bodyText)}`
+        }
+
+        return {
+          endpoint,
+          path,
+          options: {
+            method: endpoint.method,
+            headers,
+            body: bodyText ? bodyText : undefined,
+          },
+        }
+      }
+
+      async function runEndpointTest() {
+        try {
+          const { endpoint, path, options } = await buildEndpointRequest()
+          if (endpoint.danger && !confirm(`Executar endpoint sensível?\n\n${endpoint.method} ${path}`)) return
+          S.endpointResponse = {
+            ok: true,
+            statusText: 'executando',
+            durationMs: '0',
+            contentType: '',
+            body: 'Executando requisição...',
+          }
+          renderEndpointResponseOnly()
+
+          const started = performance.now()
+          const response = await fetch(path, options)
+          const durationMs = Math.round(performance.now() - started)
+          const contentType = response.headers.get('content-type') ?? ''
+          const raw = await response.text()
+          let body = raw || '(resposta sem corpo)'
+          try {
+            body = JSON.stringify(JSON.parse(raw), null, 2)
+          } catch {}
+
+          S.endpointResponse = {
+            ok: response.ok,
+            statusText: `${response.status} ${response.statusText || ''}`.trim(),
+            durationMs: String(durationMs),
+            contentType,
+            body,
+          }
+          renderEndpointResponseOnly()
+          toast(response.ok ? 'Endpoint executado' : `Endpoint retornou ${response.status}`, response.ok ? 'success' : 'error')
+        } catch (error) {
+          S.endpointResponse = {
+            ok: false,
+            statusText: 'erro local',
+            durationMs: '0',
+            contentType: '',
+            body: error instanceof Error ? error.message : String(error),
+          }
+          renderEndpointResponseOnly()
+          toast(S.endpointResponse.body, 'error')
+        }
+      }
+
+      async function copyEndpointCurl() {
+        try {
+          const { path, options } = await buildEndpointRequest()
+          const headers = Object.entries(options.headers ?? {})
+            .map(([key, value]) => `-H ${JSON.stringify(`${key}: ${value}`)}`)
+            .join(' ')
+          const body = options.body ? ` -d ${JSON.stringify(options.body)}` : ''
+          const command = `curl -i -X ${options.method} ${headers} ${JSON.stringify(window.location.origin + path)}${body}`
+          await navigator.clipboard.writeText(command)
+          toast('cURL copiado', 'success')
+        } catch (error) {
+          toast(error instanceof Error ? error.message : String(error), 'error')
+        }
+      }
+
+      async function loadEndpointContext() {
+        await Promise.allSettled([loadInstances(), loadRuntime(), loadGlobalWebhooks()])
+        const connId = defaultConnectionId()
+        if (connId && connId !== 'default') {
+          await loadInstanceWebhooks(connId)
+        }
+        renderEndpointLab()
+        toast('Contexto de endpoints atualizado', 'success')
+      }
+
       // ────────────────────────────────────────────────────────────────────────────
       // Load all
       // ────────────────────────────────────────────────────────────────────────────
@@ -973,6 +2411,9 @@
         if (S.expandedWebhooks.size > 0) {
           await Promise.allSettled([...S.expandedWebhooks].map(loadInstanceWebhooks))
           renderInstances()
+        }
+        if (document.getElementById('tab-endpoints')?.classList.contains('active')) {
+          renderEndpointLab()
         }
         document.getElementById('last-updated').textContent = `atualizado ${new Date().toLocaleTimeString('pt-BR')}`
       }
@@ -1013,7 +2454,11 @@
         const profile = esc(r.profile ?? 'desconhecido')
         const processName = esc(r?.process?.pm2?.appName ?? '—')
         const processId = esc(r?.process?.pm2?.processId ?? '—')
+        const pid = esc(String(r?.process?.pid ?? '—'))
+        const nodeVersion = esc(r?.process?.nodeVersion ?? '—')
+        const platform = esc(r?.process?.platform ?? '—')
         const uptime = esc(String(r?.process?.uptimeSec ?? 0) + 's')
+        const runtimeNow = formatDateTime(r?.now)
         const hostPort = `${esc(r?.api?.host ?? '0.0.0.0')}:${esc(String(r?.api?.port ?? '—'))}`
         const allowedTargets = esc(String(r?.webhook?.allowedTargetsCount ?? 0))
         const maxAttempts = esc(String(r?.webhook?.maxAttempts ?? 0))
@@ -1038,6 +2483,18 @@
           <div class="meta-item">
             <div class="meta-k">Uptime</div>
             <div class="meta-v">${uptime}</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-k">PID</div>
+            <div class="meta-v">${pid}</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-k">Node</div>
+            <div class="meta-v">${nodeVersion}</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-k">Plataforma</div>
+            <div class="meta-v">${platform}</div>
           </div>
           <div class="meta-item">
             <div class="meta-k">API</div>
@@ -1074,6 +2531,10 @@
           <div class="meta-item">
             <div class="meta-k">Targets permitidos</div>
             <div class="meta-v">${allowedTargets}</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-k">Snapshot runtime</div>
+            <div class="meta-v">${runtimeNow}</div>
           </div>
         </div>
       </div>
@@ -1153,112 +2614,48 @@
       }
 
       function buildConnectionEndpoints(connId) {
-        const id = encodeURIComponent(connId)
-        const base = `/connections/${id}`
-        const direct = S.runtime?.capabilities?.managesConnections !== false
-        const webhookFlow = canUseWebhookConnectionFlow()
-
-        return [
-          { method: 'GET', path: `${base}`, note: 'Detalhes completos da conexão', available: true },
-          { method: 'GET', path: `${base}/status`, note: 'Status resumido', available: true },
-          { method: 'GET', path: `${base}/qr`, note: 'QR atual (quando disponível)', available: true },
-          {
-            method: 'POST',
-            path: `${base}/connect`,
-            note: direct ? 'Conexão direta via manager' : 'Requer processo com bootstrap habilitado',
-            available: direct,
-          },
-          {
-            method: 'POST',
-            path: `${base}/webhook/start`,
-            note: webhookFlow ? 'Conexão via comando webhook assinado' : 'Requer WA_WEBHOOK_SHARED_SECRET',
-            available: webhookFlow,
-          },
-          {
-            method: 'POST',
-            path: `${base}/disconnect`,
-            note: direct ? 'Desconecta sessão ativa' : 'Requer processo com bootstrap habilitado',
-            available: direct,
-          },
-          {
-            method: 'POST',
-            path: `${base}/restart`,
-            note: direct ? 'Reinicia sessão' : 'Requer processo com bootstrap habilitado',
-            available: direct,
-          },
-          {
-            method: 'POST',
-            path: `${base}/pairing/start`,
-            note: direct ? 'Inicia pairing remoto' : 'Requer processo com bootstrap habilitado',
-            available: direct,
-          },
-          {
-            method: 'POST',
-            path: `${base}/pairing/cancel`,
-            note: direct ? 'Cancela pairing remoto' : 'Requer processo com bootstrap habilitado',
-            available: direct,
-          },
-          {
-            method: 'GET',
-            path: `${base}/pairing`,
-            note: direct ? 'Estado atual do pairing' : 'Requer processo com bootstrap habilitado',
-            available: direct,
-          },
-          {
-            method: 'POST',
-            path: `${base}/messages/send`,
-            note: 'Envia mensagem (instância precisa estar open)',
-            available: true,
-          },
-          {
-            method: 'GET',
-            path: `${base}/groups`,
-            note: 'Lista grupos (instância precisa estar open)',
-            available: true,
-          },
-          {
-            method: 'GET',
-            path: `${base}/webhooks`,
-            note: 'Lista webhooks da conexão',
-            available: true,
-          },
-          {
-            method: 'POST',
-            path: `${base}/webhooks`,
-            note: 'Cria webhook da conexão',
-            available: true,
-          },
-          {
-            method: 'GET',
-            path: `${base}/webhooks/:webhookId`,
-            note: 'Detalha webhook específico',
-            available: true,
-          },
-          {
-            method: 'PATCH',
-            path: `${base}/webhooks/:webhookId`,
-            note: 'Atualiza webhook específico',
-            available: true,
-          },
-          {
-            method: 'DELETE',
-            path: `${base}/webhooks/:webhookId`,
-            note: 'Remove webhook específico',
-            available: true,
-          },
-          {
-            method: 'GET',
-            path: `${base}/webhooks/:webhookId/deliveries`,
-            note: 'Lista entregas do webhook',
-            available: true,
-          },
-          {
-            method: 'POST',
-            path: `${base}/webhooks/:webhookId/deliveries/:deliveryId/retry`,
-            note: 'Reenvia entrega específica',
-            available: true,
-          },
+        const ids = [
+          'connection-detail',
+          'connection-status',
+          'connection-diagnostics',
+          'connection-events',
+          'connection-commands',
+          'connection-qr',
+          'connection-connect',
+          'connection-webhook-start',
+          'connection-disconnect',
+          'connection-pause',
+          'connection-resume',
+          'connection-restart',
+          'connection-pairing-start',
+          'connection-pairing-cancel',
+          'connection-pairing-get',
+          'messages-list',
+          'message-send',
+          'groups-list',
+          'groups-admin',
+          'webhooks-instance-list',
+          'webhooks-instance-create',
+          'webhooks-instance-detail',
+          'webhooks-instance-update',
+          'webhooks-instance-delete',
+          'webhooks-instance-deliveries',
+          'webhooks-instance-retry',
         ]
+
+        return ids.map((endpointId) => {
+          const endpoint = endpointById(endpointId)
+          const availability = endpointAvailability(endpoint)
+          return {
+            endpointId,
+            method: endpoint.method,
+            path: endpoint.path.replace(':id', encodeURIComponent(connId)),
+            note: endpoint.description,
+            available: availability.ok !== false,
+            availabilityOk: availability.ok,
+            availabilityLabel: availability.label,
+          }
+        })
       }
 
       function renderConnectionEndpoints(connId) {
@@ -1267,16 +2664,17 @@
           .map(
             (endpoint) => `
     <div class="endpoint-row">
-      <div class="endpoint-method">${endpoint.method}</div>
+      <div class="endpoint-method ${methodClass(endpoint.method)}">${endpoint.method}</div>
       <div class="endpoint-main">
         <div class="endpoint-path">${esc(origin + endpoint.path)}</div>
         <div class="endpoint-note">${esc(endpoint.note)}</div>
         <div class="endpoint-tags">
-          <span class="badge ${endpoint.available ? 'badge-green' : 'badge-muted'}">
-            ${endpoint.available ? 'disponível' : 'indisponível'}
+          <span class="badge ${endpoint.availabilityOk === false ? 'badge-muted' : endpoint.availabilityOk === null ? 'badge-yellow' : 'badge-green'}">
+            ${esc(endpoint.availabilityLabel)}
           </span>
         </div>
       </div>
+      <button class="btn-ghost btn-sm" onclick="openEndpointTester('${endpoint.endpointId}', { id: '${esc(connId)}' })">Testar</button>
     </div>
   `
           )
