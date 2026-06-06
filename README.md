@@ -719,6 +719,7 @@ WA_BACKFILL_ONCE=true npm run db:backfill
 ## Contribuidores
 
 - **@kaikybrofc** — mantenedor do projeto
+- **@grazionale** — apoio no sistema de API
 - **@kobie3717** — integração do `baileys-antiban`
 
 ## Licença
