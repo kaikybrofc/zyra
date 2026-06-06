@@ -14,6 +14,7 @@ O projeto foi desenhado para manter sessões resilientes, auditar eventos do Wha
 - [Principais Capacidades](#principais-capacidades)
 - [Arquitetura](#arquitetura)
 - [Pré-requisitos](#pré-requisitos)
+- [Início Rápido](#início-rápido)
 - [Instalação](#instalação)
 - [Configuração](#configuração)
 - [Como Executar](#como-executar)
@@ -110,6 +111,82 @@ Recursos novos devem preservar esse isolamento.
 - **MySQL 8.0+**: recomendado para persistência durável e recursos de auditoria
 - **Redis 6.0+**: recomendado para cache quente e performance
 
+## Início Rápido
+
+Este fluxo sobe o bot, a API REST, o dashboard e os workers de webhook no mesmo processo. Use em desenvolvimento, homologação ou em uma instalação simples.
+
+```bash
+cp .env.example .env
+npm install
+```
+
+Edite o `.env` com os valores mínimos:
+
+```env
+WA_CONNECTION_ID=default
+MYSQL_URL=mysql://user:pass@127.0.0.1:3306/zyra
+WA_REDIS_URL=redis://127.0.0.1:6379
+
+WA_API_ENABLED=true
+WA_API_HOST=0.0.0.0
+WA_API_PORT=3000
+WA_API_KEY=sua-chave-secreta
+WA_BOOTSTRAP_CONNECTIONS_ENABLED=true
+
+WA_WEBHOOK_SHARED_SECRET=troque-este-segredo
+WA_WEBHOOK_ALLOWED_TARGETS=https://seu-sistema.com/webhook
+WA_WEBHOOK_RETRY_ENABLED=true
+WA_WEBHOOK_OUTBOX_ENABLED=true
+```
+
+Inicialize o schema e suba tudo em modo desenvolvimento:
+
+```bash
+npm run db:init
+npm run dev
+```
+
+Depois acesse o dashboard em:
+
+```text
+http://localhost:3000/dashboard
+```
+
+Fluxo mínimo pela API:
+
+```bash
+BASE="http://localhost:3000"
+TOKEN="sua-chave-secreta"
+ID="default"
+
+curl -s -X POST "$BASE/connections" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d "{\"connectionId\":\"$ID\",\"label\":\"Bot Principal\"}"
+
+curl -s -X POST "$BASE/connections/$ID/connect" \
+  -H "Authorization: Bearer $TOKEN"
+
+curl -s "$BASE/connections/$ID/qr" \
+  -H "Authorization: Bearer $TOKEN"
+
+curl -s "$BASE/connections/$ID/status" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Quando o status estiver `open`, envie uma mensagem:
+
+```bash
+curl -s -X POST "$BASE/connections/$ID/messages/send" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "type": "text",
+    "to": "5511999999999@s.whatsapp.net",
+    "text": "Mensagem enviada via API do Zyra."
+  }'
+```
+
 ## Instalação
 
 ### 1. Clonar o repositório
@@ -159,8 +236,11 @@ Variáveis centrais:
 - `WA_API_HOST` e `WA_API_PORT`: host/porta de bind da API
 - `WA_API_KEY`: exige `Authorization: Bearer <chave>` quando definida
 - `WA_BOOTSTRAP_CONNECTIONS_ENABLED`: define se este processo também gerencia sockets/conexões
-- `WA_WEBHOOK_SHARED_SECRET`: ativa autenticação HMAC do ingress `POST /webhooks/connections`
-- `WA_WEBHOOK_ALLOWED_TARGETS`: lista CSV de URLs permitidas para webhooks de saída
+- `WA_WEBHOOK_SHARED_SECRET`: ativa autenticação HMAC do ingress `POST /webhooks/connections` e permite `POST /connections/:id/webhook/start`
+- `WA_WEBHOOK_ALLOWED_TARGETS`: lista CSV de URLs permitidas para webhooks de saída; a URL cadastrada precisa existir exatamente nessa lista
+- `WA_WEBHOOK_RETRY_ENABLED`: liga o worker legado de retentativas da tabela `webhook_deliveries`
+- `WA_WEBHOOK_OUTBOX_ENABLED`: liga o worker/outbox de eventos administrativos de webhook
+- `WA_WEBHOOK_TIMEOUT_MS` e `WA_WEBHOOK_MAX_ATTEMPTS`: controlam timeout e tentativas de entrega de webhooks
 
 ### Estratégia de startup das conexões
 
@@ -184,11 +264,13 @@ npm run db:init
 
 ## Como Executar
 
-### Desenvolvimento
+### Desenvolvimento local
 
 ```bash
 npm run dev
 ```
+
+Com `WA_API_ENABLED=true`, o mesmo processo expõe a API e o dashboard em `http://localhost:<WA_API_PORT>`. Com `WA_BOOTSTRAP_CONNECTIONS_ENABLED=true`, ele também gerencia os sockets WhatsApp em memória.
 
 ### Execução simples sem watch
 
@@ -196,11 +278,33 @@ npm run dev
 npm run start
 ```
 
-### Produção
+### Build e produção manual
 
 ```bash
 npm run build
 npm run start:prod
+```
+
+### Iniciar tudo com PM2
+
+```bash
+npm run pm2:start
+npm run pm2:logs
+```
+
+O `ecosystem.config.cjs` inicia:
+
+- `zyra`: processo de conexões/sockets, com API habilitada em `127.0.0.1:3021` por padrão do PM2
+- `zyra-api-webhook`: control-plane HTTP, dashboard e workers de webhook, sem gerenciar sockets locais; usa `WA_API_PORT` do `.env` ou `3000` quando não definido
+- `zyra-backfill`: worker contínuo de backfill do banco
+
+Como o `.env` é carregado no boot, valores que não estiverem sobrescritos no `ecosystem.config.cjs` continuam vindo do `.env`. Mantenha o `WA_API_PORT` do `.env` diferente de `3021` se for usar o processo `zyra-api-webhook` junto com o processo `zyra`.
+
+Após validar a subida:
+
+```bash
+npm run pm2:save
+npm run pm2:startup
 ```
 
 ### Exemplos de uso
@@ -238,57 +342,154 @@ Esse modo é útil quando as sessões já foram persistidas no MySQL e você que
 
 ## API REST e Webhooks
 
-### Habilitação básica
+### Base, dashboard e autenticação
+
+Habilite a API no `.env`:
 
 ```env
 WA_API_ENABLED=true
 WA_API_HOST=0.0.0.0
 WA_API_PORT=3000
-# WA_API_KEY=sua-chave-secreta
+WA_API_KEY=sua-chave-secreta
 ```
 
-Quando `WA_API_KEY` estiver definida, os endpoints protegidos exigem:
+Com isso, a base local fica em `http://localhost:3000` e o dashboard em:
+
+```text
+http://localhost:3000/dashboard
+```
+
+Quando `WA_API_KEY` estiver definida, todos os endpoints protegidos exigem:
 
 ```http
 Authorization: Bearer sua-chave-secreta
 ```
 
-Exceções: `GET /health/*` e `POST /webhooks/connections` usam fluxo operacional próprio e não dependem de `WA_API_KEY`.
+Exceções:
+
+- `GET /health/*`: health checks operacionais
+- `POST /webhooks/connections`: ingress de comandos com autenticação HMAC própria
 
 ### Endpoints principais
 
-| Método | Rota                             | Uso                                                                         |
-| ------ | -------------------------------- | --------------------------------------------------------------------------- |
-| `GET`  | `/dashboard`                     | Interface web para operações de conexão/webhook                             |
-| `GET`  | `/system/runtime`                | Perfil do processo (`full`, `connections-only`, `api-webhook`, `stateless`) |
-| `GET`  | `/health/live`                   | Liveness para orquestradores                                                |
-| `GET`  | `/health/ready`                  | Readiness de MySQL/Redis/control-plane                                      |
-| `GET`  | `/health/connections`            | Resumo dos estados por `connection_id`                                      |
-| `POST` | `/connections`                   | Criar instância                                                             |
-| `POST` | `/connections/:id/connect`       | Iniciar conexão (gera QR)                                                   |
-| `GET`  | `/connections/:id/qr`            | Ler QR atual                                                                |
-| `GET`  | `/connections/:id/status`        | Estado resumido (`created`, `connecting`, `qr`, `open`, `closed`, `error`)  |
-| `POST` | `/connections/:id/messages/send` | Enviar texto/mídia                                                          |
-| `GET`  | `/connections/:id/groups`        | Listar grupos da instância                                                  |
-| `POST` | `/connections/:id/webhooks`      | Cadastrar webhook da instância                                              |
-| `POST` | `/webhooks`                      | Cadastrar webhook global (todas as instâncias)                              |
-| `POST` | `/webhooks/connections`          | Ingress assinado por HMAC para comandos de conexão                          |
+| Método | Rota                                                   | Uso                                                                         |
+| ------ | ------------------------------------------------------ | --------------------------------------------------------------------------- |
+| `GET`  | `/dashboard`                                           | Interface web para conexões, QR, mensagens e webhooks                       |
+| `GET`  | `/system/runtime`                                      | Perfil do processo (`full`, `connections-only`, `api-webhook`, `stateless`) |
+| `GET`  | `/health/live`                                         | Liveness para orquestradores                                                |
+| `GET`  | `/health/ready`                                        | Readiness de MySQL, Redis e control-plane                                   |
+| `GET`  | `/health/connections`                                  | Resumo de estados por `connection_id`                                       |
+| `POST` | `/connections`                                         | Criar instância                                                             |
+| `GET`  | `/connections`                                         | Listar instâncias                                                           |
+| `GET`  | `/connections/:id`                                     | Detalhar instância                                                          |
+| `PATCH` | `/connections/:id`                                     | Atualizar label                                                             |
+| `POST` | `/connections/:id/connect`                             | Iniciar conexão diretamente no processo atual                               |
+| `POST` | `/connections/:id/webhook/start`                       | Iniciar conexão via ingress HMAC local                                      |
+| `GET`  | `/connections/:id/qr`                                  | Ler QR atual                                                                |
+| `GET`  | `/connections/:id/status`                              | Estado resumido (`created`, `connecting`, `qr`, `open`, `closed`, `error`)  |
+| `POST` | `/connections/:id/messages/send`                       | Enviar texto, mídia ou payload Baileys bruto                                |
+| `GET`  | `/connections/:id/groups`                              | Listar grupos da instância                                                  |
+| `POST` | `/connections/:id/groups/:groupJid/admin`              | Ações administrativas em grupo                                              |
+| `POST` | `/connections/:id/webhooks`                            | Criar webhook específico da instância                                       |
+| `POST` | `/webhooks`                                            | Criar webhook global para todas as instâncias                               |
+| `POST` | `/webhooks/connections`                                | Receber comandos administrativos assinados por HMAC                         |
 
-### Modo managed (API separada do processo de conexões)
+### Fluxo de conexão via API
 
-Com `WA_BOOTSTRAP_CONNECTIONS_ENABLED=false`, o processo atende API/webhooks, mas não controla sockets locais.
+```bash
+BASE="http://localhost:3000"
+TOKEN="sua-chave-secreta"
+ID="minha-sessao"
 
-Nesse modo:
+curl -s -X POST "$BASE/connections" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d "{\"connectionId\":\"$ID\",\"label\":\"Bot Principal\"}"
 
-- `POST /connections/:id/connect`, `disconnect`, `restart` e endpoints de pairing retornam `409`
-- `POST /connections/:id/webhook/start` passa a ser o caminho recomendado para iniciar conexão
-- `GET /connections`, `GET /connections/:id` e `GET /system/runtime` continuam disponíveis
+curl -s -X POST "$BASE/connections/$ID/connect" \
+  -H "Authorization: Bearer $TOKEN"
 
-### Segurança do ingress de conexões
+curl -s "$BASE/connections/$ID/qr" \
+  -H "Authorization: Bearer $TOKEN"
 
-O endpoint `POST /webhooks/connections` usa assinatura HMAC SHA-256 sobre `${timestamp}.${rawBody}`.
+curl -s "$BASE/connections/$ID/status" \
+  -H "Authorization: Bearer $TOKEN"
+```
 
-Variáveis relacionadas:
+O QR pode ser lido pela API ou pelo dashboard. Depois que a conexão ficar `open`, envie mensagem:
+
+```bash
+curl -s -X POST "$BASE/connections/$ID/messages/send" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "type": "text",
+    "to": "5511999999999@s.whatsapp.net",
+    "text": "Olá! Mensagem enviada pela API."
+  }'
+```
+
+O endpoint de envio aceita atalhos (`text`, `image`, `video`, `audio`, `document`, `sticker`, `contacts`, `location`, `react`, `poll`, `event`, `forward`, `delete`, entre outros) e também `type: "raw"` para payloads nativos do Baileys. Use JIDs no formato `5511999999999@s.whatsapp.net` para contatos, `120363000000000000@g.us` para grupos e `status@broadcast` para status.
+
+### Webhooks de saída
+
+Webhooks de saída notificam sistemas externos quando eventos do WhatsApp ou do ciclo administrativo acontecem. Configure destinos permitidos antes de cadastrar webhooks:
+
+```env
+WA_WEBHOOK_ALLOWED_TARGETS=https://seu-sistema.com/webhook,https://hooks.exemplo.com/zyra
+WA_WEBHOOK_TIMEOUT_MS=10000
+WA_WEBHOOK_MAX_ATTEMPTS=4
+WA_WEBHOOK_RETRY_ENABLED=true
+WA_WEBHOOK_OUTBOX_ENABLED=true
+```
+
+Por segurança, a URL enviada na API precisa existir exatamente em `WA_WEBHOOK_ALLOWED_TARGETS`.
+
+Criar webhook para uma conexão:
+
+```bash
+curl -s -X POST "$BASE/connections/$ID/webhooks" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "url": "https://seu-sistema.com/webhook",
+    "eventsFilter": ["messages.upsert", "connection.update"],
+    "secret": "segredo-do-receptor"
+  }'
+```
+
+Criar webhook global para todas as conexões:
+
+```bash
+curl -s -X POST "$BASE/webhooks" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "url": "https://hooks.exemplo.com/zyra",
+    "eventsFilter": ["*"]
+  }'
+```
+
+Eventos suportados incluem `connection.update`, `messages.upsert`, `messages.update`, `messages.delete`, `message-receipt.update`, `messages.reaction`, `groups.upsert`, `groups.update` e `group-participants.update`. O campo `eventsFilter` aceita eventos específicos, grupos (`connection`, `messages`, `groups`) ou `["*"]`.
+
+O payload entregue ao receptor segue este envelope:
+
+```json
+{
+  "event": "messages.upsert",
+  "connectionId": "minha-sessao",
+  "timestamp": 1716768000000,
+  "data": {}
+}
+```
+
+Quando o webhook tem `secret`, o Zyra envia `x-webhook-signature: sha256=<hmac-hex>`. O HMAC é calculado sobre o body bruto recebido pelo seu endpoint.
+
+### Webhook de entrada para comandos de conexão
+
+O endpoint `POST /webhooks/connections` recebe comandos administrativos assinados por HMAC. Ele é útil para automações externas e também é usado internamente pelo dashboard e por `POST /connections/:id/webhook/start`.
+
+Configure:
 
 ```env
 WA_WEBHOOK_SHARED_SECRET=troque-este-segredo
@@ -296,7 +497,57 @@ WA_WEBHOOK_MAX_BODY_BYTES=262144
 WA_WEBHOOK_TIMESTAMP_TOLERANCE_MS=300000
 ```
 
-Para payloads completos, exemplos `curl` e coleção Postman, veja a seção [Documentação](#documentação).
+Headers obrigatórios:
+
+- `x-zyra-timestamp`: epoch em segundos ou milissegundos
+- `x-zyra-signature`: HMAC SHA-256 de `${timestamp}.${rawBody}`
+- `x-zyra-delivery-id`: ID único da entrega no sistema chamador
+
+Payload base:
+
+```json
+{
+  "event": "connection.command",
+  "version": "2026-05-27",
+  "command_id": "uuid-unico",
+  "sent_at": "2026-05-29T18:00:00.000Z",
+  "connection": {
+    "id": "minha-sessao",
+    "display_name": "Bot Principal"
+  },
+  "action": {
+    "type": "start",
+    "reason": "motivo-opcional"
+  },
+  "options": {
+    "force": false
+  }
+}
+```
+
+Ações aceitas: `register`, `start`, `reconnect`, `disconnect`, `pause`, `resume`, `delete_soft`, `delete_hard`, `sync_status`, `pairing_start` e `pairing_cancel`.
+
+Para iniciar pelo fluxo de webhook sem montar a assinatura manualmente, use o endpoint protegido por Bearer:
+
+```bash
+curl -s -X POST "$BASE/connections/$ID/webhook/start" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"label":"Bot Principal"}'
+```
+
+Esse endpoint exige `WA_WEBHOOK_SHARED_SECRET`, cria ou atualiza a conexão e despacha internamente um comando `start` assinado para `/webhooks/connections`.
+
+### Modo API/Webhook separado do processo de conexões
+
+Com `WA_BOOTSTRAP_CONNECTIONS_ENABLED=false`, o processo atende API, dashboard e webhooks, mas não controla sockets WhatsApp localmente. Nesse perfil:
+
+- `POST /connections`, `GET /connections`, `GET /connections/:id`, `PATCH /connections/:id` e `DELETE /connections/:id` operam sobre o registro persistido
+- `POST /connections/:id/connect`, `disconnect`, `restart` e endpoints de pairing retornam `409`
+- `POST /connections/:id/webhook/start` é o caminho recomendado para pedir que o processo de conexões inicie a sessão
+- `GET /system/runtime` mostra o perfil atual e as capacidades habilitadas
+
+No PM2, esse é o papel do processo `zyra-api-webhook`; o processo `zyra` fica responsável pelos sockets/conexões.
 
 ## Comandos de Desenvolvimento
 
@@ -410,6 +661,7 @@ Notas operacionais:
 
 - o processo `zyra` pode manter múltiplas sessões ativas ao mesmo tempo
 - o processo `zyra-api-webhook` roda com `WA_BOOTSTRAP_CONNECTIONS_ENABLED=false` e atua como control-plane HTTP
+- no PM2, `zyra` força `WA_API_PORT=3021`; deixe o `WA_API_PORT` do `.env` em outra porta para o `zyra-api-webhook`, como `3000`
 - prefira `WA_CONNECTION_IDS` quando quiser controle explícito do conjunto de sessões
 - prefira descoberta via MySQL quando `auth_creds` já for a fonte de verdade das sessões persistidas
 - para parear uma nova conta via QR no terminal, use `npm run session:pair -- --connection <id>`
