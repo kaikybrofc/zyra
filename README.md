@@ -4,12 +4,19 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![PM2 Ready](https://img.shields.io/badge/pm2-ready-2B037A?logo=pm2&logoColor=white)](https://pm2.keymetrics.io/)
 
+## Aviso legal
+
+Este projeto não possui qualquer afiliação, associação, autorização, endosso ou vínculo oficial com o WhatsApp ou com a Meta Platforms, Inc. O Zyra é um projeto open source criado para fins de estudo, pesquisa e experimentação técnica.
+
+Não incentivamos, apoiamos ou autorizamos o uso deste software para spam, abuso, fraude, violação de privacidade, automação indevida, evasão de limites, engenharia social ou qualquer atividade ilegal. O uso do projeto é de responsabilidade exclusiva de quem o executa, devendo respeitar leis aplicáveis, termos de serviço das plataformas envolvidas e boas práticas de segurança.
+
 Motor de bot para WhatsApp construído com [Baileys](https://github.com/WhiskeySockets/Baileys), com foco em operação multi-instância, persistência híbrida, observabilidade e execução segura em produção.
 
 O projeto foi desenhado para manter sessões resilientes, auditar eventos do WhatsApp, processar comandos modulares e operar com múltiplas conexões isoladas por `connection_id`.
 
 ## Sumário
 
+- [Aviso legal](#aviso-legal)
 - [Visão Geral](#visão-geral)
 - [Principais Capacidades](#principais-capacidades)
 - [Arquitetura](#arquitetura)
