@@ -56,6 +56,9 @@ type ApiServerHandle = {
  * - `GET    /connections/:id/qr`             — obter QR code atual
  * - `POST   /connections/:id/webhook/start`  — iniciar conexão via webhook assinado
  * - `POST   /connections/:id/messages/send`  — enviar mensagem
+ * - `GET    /connections/:id/messages`       — listar histórico de mensagens enviadas pela API
+ * - `GET    /connections/:id/messages/:messageId` — consultar status de mensagem enviada pela API
+ * - `POST   /media`                          — fazer upload de mídia para uso via mediaId
  * - `GET    /connections/:id/groups`         — listar grupos
  * - `POST   /connections/:id/groups/:groupJid/admin` — executar ações administrativas de grupo
  * - `GET    /system/runtime`                  — status operacional do processo

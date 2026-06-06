@@ -344,6 +344,45 @@ CREATE TABLE message_failures (
   CONSTRAINT fk_message_failures_conn FOREIGN KEY (connection_id) REFERENCES connections(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE api_sent_messages (
+  id VARCHAR(80) NOT NULL,
+  connection_id VARCHAR(128) NOT NULL,
+  client_message_id VARCHAR(128) NULL,
+  idempotency_key VARCHAR(255) NULL,
+  to_jid VARCHAR(128) NOT NULL,
+  message_type VARCHAR(64) NOT NULL,
+  request_hash CHAR(64) NOT NULL,
+  message_id VARCHAR(128) NULL,
+  status ENUM('pending','sent','failed') NOT NULL DEFAULT 'pending',
+  error_message VARCHAR(512) NULL,
+  request_json JSON NOT NULL,
+  response_json JSON NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  sent_at TIMESTAMP NULL,
+  failed_at TIMESTAMP NULL,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_api_sent_client_message (connection_id, client_message_id),
+  UNIQUE KEY uq_api_sent_idempotency (connection_id, idempotency_key),
+  INDEX idx_api_sent_connection_created (connection_id, created_at),
+  INDEX idx_api_sent_to_created (connection_id, to_jid, created_at),
+  INDEX idx_api_sent_status_created (connection_id, status, created_at),
+  INDEX idx_api_sent_message_id (connection_id, message_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE api_media_uploads (
+  id VARCHAR(80) NOT NULL,
+  file_name VARCHAR(255) NULL,
+  mime_type VARCHAR(128) NOT NULL,
+  file_length BIGINT NOT NULL,
+  sha256 CHAR(64) NOT NULL,
+  local_path TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_api_media_sha256 (sha256),
+  INDEX idx_api_media_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE bot_sessions (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   connection_id VARCHAR(64) NOT NULL,
@@ -551,7 +590,7 @@ Principais blocos:
 - **Multi-instância**: `connections` + `connection_id` em todas as entidades (isolamento lógico por instância).
 - **Identidade unificada**: `users` + `user_identifiers` + `user_aliases` + `lid_mappings` (mesma pessoa pode ter PN/LID/JID/username).
 - **Armazenamento do WhatsApp**: `chats`, `wa_contacts_cache`, `groups`, `group_participants`, `messages`, `message_media`, `message_text_index`.
-- **Auditoria/Observabilidade**: `events_log`, `message_events`, `group_events`, `commands_log`, `message_failures`, `bot_sessions`, `blocklist`, `labels` e `label_associations`.
+- **Auditoria/Observabilidade**: `events_log`, `message_events`, `group_events`, `commands_log`, `message_failures`, `api_sent_messages`, `api_media_uploads`, `bot_sessions`, `blocklist`, `labels` e `label_associations`.
 - **Newsletters (canais)**: `newsletters`, `newsletter_participants` e `newsletter_events`.
 - **Estado criptográfico**: `auth_creds` e `signal_keys` (quando a estratégia de auth estiver apontada para MySQL).
 
@@ -559,7 +598,7 @@ Principais blocos:
 
 - **Isolamento por instância**: o `connection_id` aparece sistematicamente em chaves e índices, facilitando multi-instância e filtros por tenant.
 - **Identidade resiliente**: `users` (BINARY(16)) desacopla a pessoa dos identificadores voláteis; `user_identifiers` permite re-vincular PN/LID/JID/username sem perder histórico.
-- **Observabilidade pronta para produção**: trilhas de evento e falha (`events_log`, `message_events`, `message_failures`, `commands_log`) facilitam auditoria, troubleshooting e métricas.
+- **Observabilidade pronta para produção**: trilhas de evento, falha e envio via API (`events_log`, `message_events`, `message_failures`, `api_sent_messages`, `commands_log`) facilitam auditoria, troubleshooting e métricas.
 - **Modelo híbrido “bruto + derivado”**: colunas de leitura rápida (ex: `text_preview`, `timestamp`, `status`) convivem com `data_json` para preservar payloads completos.
 - **Busca textual nativa**: `message_text_index` com FULLTEXT permite consultas rápidas sem depender de um serviço externo.
 

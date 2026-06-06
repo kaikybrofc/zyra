@@ -1,8 +1,10 @@
 import type { AnyMessageContent, MiscMessageGenerationOptions, WAMessage, WAMessageKey } from 'baileys'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { config } from '../../config/index.js'
 import type { AppLogger } from '../../observability/logger.js'
 import { getConnection, getActiveSocket } from '../../core/connection/manager.js'
-import { readBody, parseJson, sendJson, sendError, matchRoute } from '../http.js'
+import { beginApiMessageSend, finishApiMessageSend, getApiMediaUpload, getApiSentMessage, hashApiMessageRequest, listApiSentMessages, saveApiMediaUpload } from '../../store/api-message-store.js'
+import { BodyTooLargeError, readBody, parseJson, sendJson, sendError, matchRoute, parseUrl } from '../http.js'
 
 type SendMessageOptionsPayload = {
   messageId?: string
@@ -17,6 +19,7 @@ type SendMessageOptionsPayload = {
 
 type SendPayloadBase = {
   to: string
+  clientMessageId?: string | null
   options?: SendMessageOptionsPayload
 }
 
@@ -27,7 +30,8 @@ type SendTextPayload = SendPayloadBase & {
 
 type SendMediaPayload = SendPayloadBase & {
   type: 'image' | 'video' | 'audio' | 'document' | 'sticker'
-  url: string
+  url?: string
+  mediaId?: string
   caption?: string
   fileName?: string
   mimetype?: string
@@ -146,6 +150,15 @@ type SendRawPayload = SendPayloadBase & {
   content: Record<string, unknown>
 }
 
+type UploadMediaPayload = {
+  fileName?: string | null
+  mimetype?: string | null
+  mimeType?: string | null
+  base64?: string | null
+  data?: string | null
+  dataUrl?: string | null
+}
+
 type SendMessagePayload =
   | SendTextPayload
   | SendMediaPayload
@@ -170,6 +183,55 @@ type BuildResult<T> = { ok: true; value: T } | { ok: false; error: string }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 const isStatusBroadcastJid = (jid: string): boolean => jid.trim().toLowerCase() === 'status@broadcast'
+const MEDIA_TYPES = new Set(['image', 'video', 'audio', 'document', 'sticker'])
+
+const getHeaderValue = (req: IncomingMessage, name: string): string | null => {
+  const value = req.headers[name.toLowerCase()]
+  const raw = Array.isArray(value) ? value[0] : value
+  if (typeof raw !== 'string') return null
+  const trimmed = raw.trim()
+  return trimmed || null
+}
+
+const normalizeClientToken = (value: unknown, max = 255): string | null => {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed ? trimmed.slice(0, max) : null
+}
+
+const normalizeLimit = (value: string | null, fallback = 50): number => {
+  if (!value) return fallback
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(200, Math.max(1, Math.trunc(parsed)))
+}
+
+const parseMediaUploadData = (payload: UploadMediaPayload): BuildResult<{ data: Buffer; mimeType: string }> => {
+  const dataUrl = typeof payload.dataUrl === 'string' ? payload.dataUrl.trim() : ''
+  if (dataUrl) {
+    const match = dataUrl.match(/^data:([^;,]+);base64,(.+)$/)
+    if (!match) return { ok: false, error: 'campo dataUrl deve usar o formato data:<mime>;base64,<conteúdo>' }
+    const mimeType = match[1]?.trim() ?? ''
+    const rawBase64 = match[2]?.trim() ?? ''
+    if (!mimeType || !rawBase64) return { ok: false, error: 'campo dataUrl inválido' }
+    return { ok: true, value: { data: Buffer.from(rawBase64, 'base64'), mimeType } }
+  }
+
+  const mimeType = normalizeClientToken(payload.mimetype ?? payload.mimeType, 128)
+  if (!mimeType) return { ok: false, error: 'campo mimetype é obrigatório' }
+  const rawBase64 = typeof payload.base64 === 'string' ? payload.base64 : typeof payload.data === 'string' ? payload.data : ''
+  const normalizedBase64 = rawBase64.includes(',') ? (rawBase64.split(',').pop() ?? '') : rawBase64
+  if (!normalizedBase64.trim()) return { ok: false, error: 'campo base64 ou data é obrigatório' }
+  return { ok: true, value: { data: Buffer.from(normalizedBase64.trim(), 'base64'), mimeType } }
+}
+
+const extractResultMessageId = (result: unknown): string | null => {
+  if (!isRecord(result)) return null
+  const key = result['key']
+  if (!isRecord(key)) return null
+  const id = key['id']
+  return typeof id === 'string' && id.trim() ? id.trim() : null
+}
 
 const normalizeStatusRecipient = (value: string): string => {
   const normalized = value.trim().toLowerCase()
@@ -320,12 +382,12 @@ const buildMessageContent = (payload: SendMessagePayload): BuildResult<AnyMessag
   }
 
   if (payload.type === 'image') {
-    if (!payload.url?.trim()) return { ok: false, error: 'campo url é obrigatório para type=image' }
+    if (!payload.url?.trim()) return { ok: false, error: 'campo url ou mediaId é obrigatório para type=image' }
     return { ok: true, value: { image: { url: payload.url }, ...(payload.caption !== undefined ? { caption: payload.caption } : {}) } }
   }
 
   if (payload.type === 'video') {
-    if (!payload.url?.trim()) return { ok: false, error: 'campo url é obrigatório para type=video' }
+    if (!payload.url?.trim()) return { ok: false, error: 'campo url ou mediaId é obrigatório para type=video' }
     return {
       ok: true,
       value: {
@@ -338,7 +400,7 @@ const buildMessageContent = (payload: SendMessagePayload): BuildResult<AnyMessag
   }
 
   if (payload.type === 'audio') {
-    if (!payload.url?.trim()) return { ok: false, error: 'campo url é obrigatório para type=audio' }
+    if (!payload.url?.trim()) return { ok: false, error: 'campo url ou mediaId é obrigatório para type=audio' }
     return {
       ok: true,
       value: {
@@ -350,7 +412,7 @@ const buildMessageContent = (payload: SendMessagePayload): BuildResult<AnyMessag
   }
 
   if (payload.type === 'document') {
-    if (!payload.url?.trim()) return { ok: false, error: 'campo url é obrigatório para type=document' }
+    if (!payload.url?.trim()) return { ok: false, error: 'campo url ou mediaId é obrigatório para type=document' }
     return {
       ok: true,
       value: {
@@ -363,7 +425,7 @@ const buildMessageContent = (payload: SendMessagePayload): BuildResult<AnyMessag
   }
 
   if (payload.type === 'sticker') {
-    if (!payload.url?.trim()) return { ok: false, error: 'campo url é obrigatório para type=sticker' }
+    if (!payload.url?.trim()) return { ok: false, error: 'campo url ou mediaId é obrigatório para type=sticker' }
     return {
       ok: true,
       value: {
@@ -547,6 +609,25 @@ const sendWithOptionalOptions = async (
   options: MiscMessageGenerationOptions | undefined
 ) => (options ? sock.sendMessage(to, content, options) : sock.sendMessage(to, content))
 
+const resolveMediaReference = async (payload: SendMessagePayload): Promise<BuildResult<SendMessagePayload>> => {
+  if (!MEDIA_TYPES.has(payload.type)) return { ok: true, value: payload }
+  const mediaPayload = payload as SendMediaPayload
+  if (mediaPayload.url?.trim()) return { ok: true, value: payload }
+  const mediaId = normalizeClientToken(mediaPayload.mediaId, 80)
+  if (!mediaId) return { ok: true, value: payload }
+  const media = await getApiMediaUpload(mediaId)
+  if (!media) return { ok: false, error: 'mediaId não encontrado' }
+  return {
+    ok: true,
+    value: {
+      ...mediaPayload,
+      url: media.localPath,
+      mimetype: mediaPayload.mimetype ?? media.mimeType,
+      fileName: mediaPayload.fileName ?? media.fileName ?? undefined,
+    } as SendMessagePayload,
+  }
+}
+
 /**
  * Trata requisições HTTP para envio de mensagens via uma instância conectada.
  * Retorna `true` se a rota foi reconhecida e tratada, `false` caso contrário.
@@ -554,10 +635,97 @@ const sendWithOptionalOptions = async (
 export async function handleMessagesRoutes(req: IncomingMessage, res: ServerResponse, pathname: string, logger: AppLogger): Promise<boolean> {
   const method = req.method ?? 'GET'
 
+  // POST /media — upload JSON/base64 para reutilizar depois via mediaId
+  if (method === 'POST' && pathname === '/media') {
+    let rawBody = ''
+    try {
+      rawBody = await readBody(req, { maxBytes: Math.ceil(config.apiMediaMaxBytes * 1.4) + 4096 })
+    } catch (error) {
+      if (error instanceof BodyTooLargeError) {
+        sendError(res, 413, 'upload maior que o limite permitido')
+        return true
+      }
+      throw error
+    }
+
+    const payload = parseJson<UploadMediaPayload>(rawBody)
+    if (!payload || !isRecord(payload)) {
+      sendError(res, 400, 'corpo da requisição inválido')
+      return true
+    }
+
+    const parsed = parseMediaUploadData(payload)
+    if (!parsed.ok) {
+      sendError(res, 400, parsed.error)
+      return true
+    }
+    if (parsed.value.data.byteLength === 0) {
+      sendError(res, 400, 'arquivo enviado está vazio')
+      return true
+    }
+    if (parsed.value.data.byteLength > config.apiMediaMaxBytes) {
+      sendError(res, 413, 'arquivo maior que WA_API_MEDIA_MAX_BYTES')
+      return true
+    }
+
+    try {
+      const media = await saveApiMediaUpload({
+        fileName: typeof payload.fileName === 'string' ? payload.fileName : null,
+        mimeType: parsed.value.mimeType,
+        data: parsed.value.data,
+      })
+      sendJson(res, 201, media)
+    } catch (error) {
+      logger.error('falha ao salvar upload de mídia via API', { err: error })
+      sendError(res, 500, 'falha ao salvar mídia')
+    }
+    return true
+  }
+
+  // GET /connections/:id/messages — histórico de mensagens enviadas pela API
+  const listMatch = matchRoute('/connections/:id/messages', pathname)
+  if (method === 'GET' && listMatch) {
+    const connectionId = listMatch.params['id'] ?? ''
+    const url = parseUrl(req)
+    const messages = await listApiSentMessages({
+      connectionId,
+      to: url.searchParams.get('to'),
+      status: url.searchParams.get('status'),
+      limit: normalizeLimit(url.searchParams.get('limit')),
+    })
+    sendJson(res, 200, {
+      connectionId,
+      count: messages.length,
+      messages,
+    })
+    return true
+  }
+
+  // GET /connections/:id/messages/:messageId — status de uma mensagem enviada pela API
+  const detailMatch = matchRoute('/connections/:id/messages/:messageId', pathname)
+  if (method === 'GET' && detailMatch) {
+    const connectionId = detailMatch.params['id'] ?? ''
+    const messageId = detailMatch.params['messageId'] ?? ''
+    const message = await getApiSentMessage(connectionId, messageId)
+    if (!message) {
+      sendError(res, 404, 'mensagem não encontrada')
+      return true
+    }
+    sendJson(res, 200, message)
+    return true
+  }
+
   // POST /connections/:id/messages/send
   const sendMatch = matchRoute('/connections/:id/messages/send', pathname)
   if (method === 'POST' && sendMatch) {
     const connectionId = sendMatch.params['id'] ?? ''
+    const rawBody = await readBody(req)
+    const payload = parseJson<SendMessagePayload>(rawBody)
+    if (!payload || !isRecord(payload)) {
+      sendError(res, 400, 'corpo da requisição inválido')
+      return true
+    }
+
     const info = getConnection(connectionId)
     if (!info) {
       sendError(res, 404, 'conexão não encontrada')
@@ -574,11 +742,6 @@ export async function handleMessagesRoutes(req: IncomingMessage, res: ServerResp
       return true
     }
 
-    const payload = parseJson<SendMessagePayload>(await readBody(req))
-    if (!payload || !isRecord(payload)) {
-      sendError(res, 400, 'corpo da requisição inválido')
-      return true
-    }
     if (!payload.to?.trim()) {
       sendError(res, 400, 'destinatário (to) é obrigatório')
       return true
@@ -588,24 +751,82 @@ export async function handleMessagesRoutes(req: IncomingMessage, res: ServerResp
       return true
     }
 
-    const to = payload.to.trim()
-    const contentResult = buildMessageContent(payload)
+    const mediaResolved = await resolveMediaReference(payload)
+    if (!mediaResolved.ok) {
+      sendError(res, 400, mediaResolved.error)
+      return true
+    }
+    const resolvedPayload = mediaResolved.value
+
+    const to = resolvedPayload.to.trim()
+    const contentResult = buildMessageContent(resolvedPayload)
     if (!contentResult.ok) {
       sendError(res, 400, contentResult.error)
       return true
     }
 
-    const optionsResult = buildMessageOptions(to, payload.options)
+    const optionsResult = buildMessageOptions(to, resolvedPayload.options)
     if (!optionsResult.ok) {
       sendError(res, 400, optionsResult.error)
       return true
     }
 
+    const clientMessageId = normalizeClientToken(resolvedPayload.clientMessageId, 128)
+    const idempotencyKey = normalizeClientToken(getHeaderValue(req, 'idempotency-key') ?? clientMessageId, 255)
+    const requestHash = hashApiMessageRequest(rawBody)
+    let sendRecordId: string | null = null
+
     try {
+      const begin = await beginApiMessageSend({
+        connectionId,
+        clientMessageId,
+        idempotencyKey,
+        to,
+        type: resolvedPayload.type,
+        requestHash,
+        request: payload,
+      })
+      if (begin.status === 'conflict') {
+        sendError(res, 409, begin.reason)
+        return true
+      }
+      if (begin.status === 'existing') {
+        if (begin.record.status === 'pending') {
+          sendJson(res, 409, {
+            error: 'envio com a mesma chave ainda está em processamento',
+            message: begin.record,
+          })
+          return true
+        }
+        res.setHeader('x-idempotent-replay', 'true')
+        res.setHeader('x-api-message-id', begin.record.id)
+        sendJson(res, begin.record.status === 'failed' ? 500 : 200, begin.record.response ?? begin.record)
+        return true
+      }
+
+      sendRecordId = begin.record.id
+      res.setHeader('x-api-message-id', sendRecordId)
       const result = await sendWithOptionalOptions(sock, to, contentResult.value, optionsResult.value)
+      const messageId = extractResultMessageId(result)
+      await finishApiMessageSend({
+        id: sendRecordId,
+        connectionId,
+        messageId,
+        status: 'sent',
+        response: result ?? null,
+      })
       sendJson(res, 200, result ?? null)
     } catch (error) {
-      logger.error('falha ao enviar mensagem via API', { err: error, connectionId, to, type: payload.type })
+      if (sendRecordId) {
+        await finishApiMessageSend({
+          id: sendRecordId,
+          connectionId,
+          status: 'failed',
+          errorMessage: error instanceof Error ? error.message : String(error),
+          response: { error: 'falha ao enviar mensagem' },
+        })
+      }
+      logger.error('falha ao enviar mensagem via API', { err: error, connectionId, to, type: resolvedPayload.type })
       sendError(res, 500, 'falha ao enviar mensagem')
     }
 

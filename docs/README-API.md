@@ -13,6 +13,10 @@ WA_API_HOST=0.0.0.0
 
 # Opcional — se definido, todas as requisições exigem o header abaixo
 WA_API_KEY=sua-chave-secreta
+
+# Uploads via POST /media
+WA_API_MEDIA_DIR=data/api-media
+WA_API_MEDIA_MAX_BYTES=26214400
 ```
 
 ### Autenticação
@@ -513,24 +517,27 @@ O endpoint `POST /connections/:id/messages/send` aceita dois modos:
 
 **Resposta `200`:** objeto `WAMessage` retornado pelo Baileys.
 
+Para evitar duplicidade em retentativas do cliente, envie `clientMessageId` no body ou o header `Idempotency-Key`. A mesma chave com o mesmo payload retorna o resultado já registrado; a mesma chave com outro payload retorna `409`.
+
 **Campos-base do payload:**
 
-| Campo     | Tipo     | Obrigatório | Descrição                                                                  |
-| --------- | -------- | ----------- | -------------------------------------------------------------------------- |
-| `type`    | string   | sim         | Tipo da mensagem ou `raw`                                                  |
-| `to`      | string   | sim         | JID do destino (`@s.whatsapp.net`, `@g.us` ou `status@broadcast`)          |
-| `options` | object   | não         | Opções extras do Baileys para envio, inclusive `quoted`, `statusJidList` e `broadcast` |
+| Campo             | Tipo     | Obrigatório | Descrição                                                                  |
+| ----------------- | -------- | ----------- | -------------------------------------------------------------------------- |
+| `type`            | string   | sim         | Tipo da mensagem ou `raw`                                                  |
+| `to`              | string   | sim         | JID do destino (`@s.whatsapp.net`, `@g.us` ou `status@broadcast`)          |
+| `clientMessageId` | string   | não         | Chave idempotente do cliente para evitar envio duplicado                   |
+| `options`         | object   | não         | Opções extras do Baileys para envio, inclusive `quoted`, `statusJidList` e `broadcast` |
 
 **Campos mais usados por tipo:**
 
 | Tipo | Campos principais |
 | ---- | ----------------- |
 | `text` | `text` |
-| `image` | `url`, `caption` |
-| `video` | `url`, `caption`, `gifPlayback`, `ptv` |
-| `audio` | `url`, `ptt`, `seconds` |
-| `document` | `url`, `fileName`, `mimetype`, `caption` |
-| `sticker` | `url`, `isAnimated` |
+| `image` | `url` ou `mediaId`, `caption` |
+| `video` | `url` ou `mediaId`, `caption`, `gifPlayback`, `ptv` |
+| `audio` | `url` ou `mediaId`, `ptt`, `seconds` |
+| `document` | `url` ou `mediaId`, `fileName`, `mimetype`, `caption` |
+| `sticker` | `url` ou `mediaId`, `isAnimated` |
 | `contacts` | `contacts.displayName`, `contacts.contacts[]` |
 | `location` | `latitude`/`longitude` ou `degreesLatitude`/`degreesLongitude` |
 | `react` | `text`, `messageKey` |
@@ -562,8 +569,10 @@ O endpoint `POST /connections/:id/messages/send` aceita dois modos:
 curl -s -X POST http://localhost:3000/connections/minha-sessao/messages/send \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer sua-chave-secreta" \
+  -H "Idempotency-Key: pedido-123" \
   -d '{
     "type": "text",
+    "clientMessageId": "pedido-123",
     "to": "5511999999999@s.whatsapp.net",
     "text": "Olá! Mensagem enviada via API."
   }' | jq
@@ -596,6 +605,31 @@ curl -s -X POST http://localhost:3000/connections/minha-sessao/messages/send \
     "mimetype": "application/pdf"
   }' | jq
 ```
+
+#### Exemplo: upload de mídia e envio com `mediaId`
+
+```bash
+curl -s -X POST http://localhost:3000/media \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sua-chave-secreta" \
+  -d '{
+    "fileName": "foto.png",
+    "mimetype": "image/png",
+    "base64": "iVBORw0KGgo..."
+  }' | jq
+
+curl -s -X POST http://localhost:3000/connections/minha-sessao/messages/send \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sua-chave-secreta" \
+  -d '{
+    "type": "image",
+    "to": "5511999999999@s.whatsapp.net",
+    "mediaId": "media_xxxxx",
+    "caption": "Imagem enviada via mediaId"
+  }' | jq
+```
+
+`POST /media` aceita `base64`, `data` ou `dataUrl` (`data:<mime>;base64,<conteúdo>`). O arquivo é salvo em `WA_API_MEDIA_DIR`, limitado por `WA_API_MEDIA_MAX_BYTES`.
 
 #### Exemplo: status
 
@@ -640,6 +674,45 @@ curl -s -X POST http://localhost:3000/connections/minha-sessao/messages/send \
 | `404`  | Instância não encontrada |
 | `409`  | Instância não está `open` ou socket indisponível |
 | `500`  | Falha no envio pelo Baileys |
+
+---
+
+### Histórico e status de mensagens enviadas
+
+Lista mensagens enviadas por `POST /connections/:id/messages/send`.
+
+```bash
+curl -s "http://localhost:3000/connections/minha-sessao/messages?to=5511999999999@s.whatsapp.net&status=sent&limit=20" \
+  -H "Authorization: Bearer sua-chave-secreta" | jq
+```
+
+Filtros:
+
+| Query | Descrição |
+| ----- | --------- |
+| `to` | filtra pelo JID de destino |
+| `status` | filtra por `pending`, `sent`, `failed`, `delivered`, `read` ou `played` |
+| `limit` | quantidade máxima de registros, de 1 a 200 |
+
+Consultar uma mensagem específica por `apiMessageId`, `messageId` do WhatsApp, `clientMessageId` ou `Idempotency-Key`:
+
+```bash
+curl -s http://localhost:3000/connections/minha-sessao/messages/pedido-123 \
+  -H "Authorization: Bearer sua-chave-secreta" | jq
+```
+
+Campos principais:
+
+| Campo | Descrição |
+| ----- | --------- |
+| `id` | ID interno do registro da API |
+| `clientMessageId` | ID idempotente enviado pelo cliente |
+| `idempotencyKey` | Header `Idempotency-Key` usado no envio |
+| `messageId` | ID retornado pelo WhatsApp/Baileys |
+| `status` | estado do envio via API: `pending`, `sent` ou `failed` |
+| `messageStatus` | status persistido do Baileys quando disponível |
+| `derivedStatus` | status normalizado para consulta: `pending`, `sent`, `failed`, `delivered`, `read` ou `played` |
+| `events` | últimos eventos relacionados à mensagem, presente na consulta individual |
 
 ---
 
@@ -850,7 +923,7 @@ Quando `WA_BOOTSTRAP_CONNECTIONS_ENABLED=false`, o processo atual não gerencia 
 - `POST /connections/:id/connect`, `/disconnect`, `/restart` e endpoints de pairing retornam `409` com a mensagem `operação indisponível neste processo`.
 - Use `POST /connections/:id/webhook/start` para acionar o início de conexão via ingress de webhook, que será processado pelo processo que gerencia conexões.
 
-Endpoints que sempre funcionam independente do modo: `GET /connections`, `GET /connections/:id`, `GET /connections/:id/status`, `POST /connections`, `PATCH /connections/:id`, `DELETE /connections/:id`, `GET /system/runtime`.
+Endpoints que sempre funcionam independente do modo: `GET /connections`, `GET /connections/:id`, `GET /connections/:id/status`, `POST /connections`, `PATCH /connections/:id`, `DELETE /connections/:id`, `GET /connections/:id/messages`, `GET /connections/:id/messages/:messageId`, `POST /media`, `GET /system/runtime`.
 
 ---
 

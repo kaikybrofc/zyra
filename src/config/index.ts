@@ -326,6 +326,14 @@ export const config = {
   get apiKey() {
     return process.env.WA_API_KEY ?? null
   },
+  /** Diretório para armazenar uploads de mídia feitos via API REST (WA_API_MEDIA_DIR). */
+  get apiMediaDir() {
+    return process.env.WA_API_MEDIA_DIR ?? 'data/api-media'
+  },
+  /** Tamanho máximo de um arquivo enviado para POST /media em bytes (WA_API_MEDIA_MAX_BYTES). */
+  get apiMediaMaxBytes() {
+    return readNumber(process.env.WA_API_MEDIA_MAX_BYTES, 25 * 1024 * 1024)
+  },
   /** Timeout em ms para requisições de webhook (WA_WEBHOOK_TIMEOUT_MS). */
   get webhookTimeoutMs() {
     return readNumber(process.env.WA_WEBHOOK_TIMEOUT_MS, 10_000)

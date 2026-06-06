@@ -320,6 +320,7 @@ Campos-base:
 | ----- | ----------- | --------- |
 | `type` | sim | Tipo da mensagem ou `raw` |
 | `to` | sim | JID do destino (`@s.whatsapp.net`, `@g.us` ou `status@broadcast`) |
+| `clientMessageId` | não | Chave idempotente do cliente para evitar envio duplicado |
 | `options` | não | Opções extras do Baileys, como `quoted`, `statusJidList`, `backgroundColor`, `font` e `broadcast` |
 
 Campos principais por tipo:
@@ -327,11 +328,11 @@ Campos principais por tipo:
 | Tipo | Campos |
 | ---- | ------ |
 | `text` | `text` |
-| `image` | `url`, `caption` |
-| `video` | `url`, `caption`, `gifPlayback`, `ptv` |
-| `audio` | `url`, `ptt`, `seconds` |
-| `document` | `url`, `fileName`, `mimetype`, `caption` |
-| `sticker` | `url`, `isAnimated` |
+| `image` | `url` ou `mediaId`, `caption` |
+| `video` | `url` ou `mediaId`, `caption`, `gifPlayback`, `ptv` |
+| `audio` | `url` ou `mediaId`, `ptt`, `seconds` |
+| `document` | `url` ou `mediaId`, `fileName`, `mimetype`, `caption` |
+| `sticker` | `url` ou `mediaId`, `isAnimated` |
 | `contacts` | `contacts.displayName`, `contacts.contacts[]` |
 | `location` | `latitude`/`longitude` ou `degreesLatitude`/`degreesLongitude` |
 | `react` | `text`, `messageKey` |
@@ -347,8 +348,10 @@ Campos principais por tipo:
 Exemplo `text`:
 
 ```json
-{ "type": "text", "to": "5511999999999@s.whatsapp.net", "text": "Olá" }
+{ "type": "text", "clientMessageId": "pedido-123", "to": "5511999999999@s.whatsapp.net", "text": "Olá" }
 ```
+
+Também é possível enviar o header `Idempotency-Key: pedido-123`; repetir a mesma chave com o mesmo payload não dispara novo envio.
 
 Exemplo de mídia:
 
@@ -361,6 +364,24 @@ Exemplo de mídia:
   "mimetype": "application/pdf"
 }
 ```
+
+Para não depender de URL externa, envie a mídia antes:
+
+```json
+POST /media
+{ "fileName": "foto.png", "mimetype": "image/png", "base64": "iVBORw0KGgo..." }
+```
+
+Depois use o `mediaId` retornado no envio:
+
+```json
+{ "type": "image", "to": "5511999999999@s.whatsapp.net", "mediaId": "media_xxxxx" }
+```
+
+Histórico e status de mensagens enviadas:
+
+- `GET /connections/:id/messages?to=&status=&limit=`
+- `GET /connections/:id/messages/:messageId`
 
 Exemplo de status:
 

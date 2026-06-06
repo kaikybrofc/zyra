@@ -11,6 +11,12 @@ type FakeResponse = {
 
 const getConnectionMock = vi.fn()
 const getActiveSocketMock = vi.fn()
+const beginApiMessageSendMock = vi.fn()
+const finishApiMessageSendMock = vi.fn()
+const getApiSentMessageMock = vi.fn()
+const listApiSentMessagesMock = vi.fn()
+const saveApiMediaUploadMock = vi.fn()
+const getApiMediaUploadMock = vi.fn()
 
 const logger = {
   info: vi.fn(),
@@ -23,6 +29,16 @@ const logger = {
 vi.mock('../src/core/connection/manager.js', () => ({
   getConnection: (...args: unknown[]) => getConnectionMock(...args),
   getActiveSocket: (...args: unknown[]) => getActiveSocketMock(...args),
+}))
+
+vi.mock('../src/store/api-message-store.js', () => ({
+  beginApiMessageSend: (...args: unknown[]) => beginApiMessageSendMock(...args),
+  finishApiMessageSend: (...args: unknown[]) => finishApiMessageSendMock(...args),
+  getApiSentMessage: (...args: unknown[]) => getApiSentMessageMock(...args),
+  listApiSentMessages: (...args: unknown[]) => listApiSentMessagesMock(...args),
+  saveApiMediaUpload: (...args: unknown[]) => saveApiMediaUploadMock(...args),
+  getApiMediaUpload: (...args: unknown[]) => getApiMediaUploadMock(...args),
+  hashApiMessageRequest: (rawBody: string) => `hash:${rawBody}`,
 }))
 
 const makeInfo = (overrides: Partial<ConnectionInfo> = {}): ConnectionInfo => ({
@@ -53,10 +69,32 @@ const createResponse = (): FakeResponse => {
   return res
 }
 
-const makeReq = (method: string, url: string, body = '') => ({
+const makeApiRecord = (overrides: Record<string, unknown> = {}) => ({
+  id: 'api_msg_1',
+  connectionId: 'sess',
+  clientMessageId: null,
+  idempotencyKey: null,
+  to: '5511@s.whatsapp.net',
+  type: 'text',
+  requestHash: 'hash',
+  messageId: 'msg-id',
+  status: 'sent',
+  messageStatus: null,
+  derivedStatus: 'sent',
+  errorMessage: null,
+  request: null,
+  response: { key: { id: 'msg-id' } },
+  createdAt: 1,
+  sentAt: 2,
+  failedAt: null,
+  updatedAt: 2,
+  ...overrides,
+})
+
+const makeReq = (method: string, url: string, body = '', headers: Record<string, string> = {}) => ({
   method,
   url,
-  headers: {},
+  headers,
   on: vi.fn((event: string, cb: (chunk?: unknown) => void) => {
     if (event === 'data' && body) cb(Buffer.from(body))
     if (event === 'end') cb()
@@ -73,6 +111,30 @@ describe('handleMessagesRoutes', () => {
     vi.clearAllMocks()
     getConnectionMock.mockReturnValue(null)
     getActiveSocketMock.mockReturnValue(null)
+    beginApiMessageSendMock.mockImplementation(async (input: { connectionId: string }) => ({
+      status: 'created',
+      record: makeApiRecord({ connectionId: input.connectionId }),
+    }))
+    finishApiMessageSendMock.mockImplementation(async (input: { connectionId: string; status: string; messageId?: string | null }) =>
+      makeApiRecord({
+        connectionId: input.connectionId,
+        status: input.status,
+        messageId: input.messageId ?? 'msg-id',
+        derivedStatus: input.status,
+      })
+    )
+    getApiSentMessageMock.mockResolvedValue(null)
+    listApiSentMessagesMock.mockResolvedValue([])
+    saveApiMediaUploadMock.mockResolvedValue({
+      id: 'media_1',
+      fileName: 'foto.png',
+      mimeType: 'image/png',
+      fileLength: 3,
+      sha256: 'abc',
+      localPath: 'data/api-media/media_1.png',
+      createdAt: 1,
+    })
+    getApiMediaUploadMock.mockResolvedValue(null)
   })
 
   it('retorna false para rotas não reconhecidas', async () => {
@@ -117,6 +179,8 @@ describe('handleMessagesRoutes', () => {
     await handleMessagesRoutes(makeReq('POST', '/connections/sess-txt/messages/send', body) as never, res as never, '/connections/sess-txt/messages/send', logger as never)
     expect(res.statusCode).toBe(200)
     expect(sock.sendMessage).toHaveBeenCalledWith('5511@s.whatsapp.net', { text: 'Olá!' })
+    expect(beginApiMessageSendMock).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'sess-txt', to: '5511@s.whatsapp.net', type: 'text' }))
+    expect(finishApiMessageSendMock).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'sess-txt', messageId: 'msg-id', status: 'sent' }))
   })
 
   it('envia imagem com URL e retorna resultado do Baileys', async () => {
@@ -483,6 +547,129 @@ describe('handleMessagesRoutes', () => {
     const body = JSON.stringify({ type: 'text', to: '5511@s.whatsapp.net', text: 'test' })
     await handleMessagesRoutes(makeReq('POST', '/connections/sess/messages/send', body) as never, res as never, '/connections/sess/messages/send', logger as never)
     expect(res.statusCode).toBe(500)
+    expect(finishApiMessageSendMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed' }))
     expect(logger.error).toHaveBeenCalled()
+  })
+
+  it('reaproveita envio existente com Idempotency-Key sem reenviar', async () => {
+    const sock = makeSock()
+    const existingResponse = { key: { id: 'already-sent' } }
+    beginApiMessageSendMock.mockResolvedValueOnce({
+      status: 'existing',
+      record: makeApiRecord({
+        id: 'api_msg_existing',
+        idempotencyKey: 'idem-1',
+        response: existingResponse,
+      }),
+    })
+    getConnectionMock.mockReturnValue(makeInfo())
+    getActiveSocketMock.mockReturnValue(sock)
+    const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
+    const res = createResponse()
+    const body = JSON.stringify({ type: 'text', to: '5511@s.whatsapp.net', text: 'oi' })
+
+    await handleMessagesRoutes(makeReq('POST', '/connections/sess/messages/send', body, { 'idempotency-key': 'idem-1' }) as never, res as never, '/connections/sess/messages/send', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(JSON.parse(res.body)).toEqual(existingResponse)
+    expect(res.headers['x-idempotent-replay']).toBe('true')
+    expect(sock.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('retorna 409 quando clientMessageId conflita com outro payload', async () => {
+    beginApiMessageSendMock.mockResolvedValueOnce({
+      status: 'conflict',
+      reason: 'clientMessageId ou Idempotency-Key já usado com outro payload',
+    })
+    getConnectionMock.mockReturnValue(makeInfo())
+    getActiveSocketMock.mockReturnValue(makeSock())
+    const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
+    const res = createResponse()
+    const body = JSON.stringify({ type: 'text', to: '5511@s.whatsapp.net', text: 'oi', clientMessageId: 'cli-1' })
+
+    await handleMessagesRoutes(makeReq('POST', '/connections/sess/messages/send', body) as never, res as never, '/connections/sess/messages/send', logger as never)
+
+    expect(res.statusCode).toBe(409)
+  })
+
+  it('lista histórico de mensagens enviadas pela API', async () => {
+    listApiSentMessagesMock.mockResolvedValueOnce([makeApiRecord({ id: 'api_msg_1' })])
+    const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
+    const res = createResponse()
+
+    await handleMessagesRoutes(makeReq('GET', '/connections/sess/messages?to=5511@s.whatsapp.net&status=sent&limit=10') as never, res as never, '/connections/sess/messages', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(listApiSentMessagesMock).toHaveBeenCalledWith({
+      connectionId: 'sess',
+      to: '5511@s.whatsapp.net',
+      status: 'sent',
+      limit: 10,
+    })
+    expect(JSON.parse(res.body)).toMatchObject({ connectionId: 'sess', count: 1 })
+  })
+
+  it('busca status de mensagem enviada pela API', async () => {
+    getApiSentMessageMock.mockResolvedValueOnce(makeApiRecord({ id: 'api_msg_1', messageId: 'msg-id' }))
+    const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
+    const res = createResponse()
+
+    await handleMessagesRoutes(makeReq('GET', '/connections/sess/messages/msg-id') as never, res as never, '/connections/sess/messages/msg-id', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(getApiSentMessageMock).toHaveBeenCalledWith('sess', 'msg-id')
+    expect(JSON.parse(res.body)).toMatchObject({ messageId: 'msg-id', derivedStatus: 'sent' })
+  })
+
+  it('retorna 404 para status de mensagem inexistente', async () => {
+    getApiSentMessageMock.mockResolvedValueOnce(null)
+    const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
+    const res = createResponse()
+
+    await handleMessagesRoutes(makeReq('GET', '/connections/sess/messages/missing') as never, res as never, '/connections/sess/messages/missing', logger as never)
+
+    expect(res.statusCode).toBe(404)
+  })
+
+  it('faz upload de mídia via JSON/base64', async () => {
+    const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
+    const res = createResponse()
+    const body = JSON.stringify({
+      fileName: 'foto.png',
+      mimetype: 'image/png',
+      base64: Buffer.from('abc').toString('base64'),
+    })
+
+    await handleMessagesRoutes(makeReq('POST', '/media', body) as never, res as never, '/media', logger as never)
+
+    expect(res.statusCode).toBe(201)
+    expect(saveApiMediaUploadMock).toHaveBeenCalledWith(expect.objectContaining({ fileName: 'foto.png', mimeType: 'image/png' }))
+    expect(JSON.parse(res.body)).toMatchObject({ id: 'media_1' })
+  })
+
+  it('envia mídia usando mediaId', async () => {
+    const sock = makeSock()
+    getApiMediaUploadMock.mockResolvedValueOnce({
+      id: 'media_1',
+      fileName: 'foto.png',
+      mimeType: 'image/png',
+      fileLength: 3,
+      sha256: 'abc',
+      localPath: 'data/api-media/media_1.png',
+      createdAt: 1,
+    })
+    getConnectionMock.mockReturnValue(makeInfo())
+    getActiveSocketMock.mockReturnValue(sock)
+    const { handleMessagesRoutes } = await import('../src/api/routes/messages.ts')
+    const res = createResponse()
+    const body = JSON.stringify({ type: 'image', to: '5511@s.whatsapp.net', mediaId: 'media_1', caption: 'foto' })
+
+    await handleMessagesRoutes(makeReq('POST', '/connections/sess/messages/send', body) as never, res as never, '/connections/sess/messages/send', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(sock.sendMessage).toHaveBeenCalledWith('5511@s.whatsapp.net', {
+      image: { url: 'data/api-media/media_1.png' },
+      caption: 'foto',
+    })
   })
 })

@@ -235,6 +235,8 @@ Variáveis centrais:
 - `WA_API_ENABLED`: habilita o servidor HTTP da API REST
 - `WA_API_HOST` e `WA_API_PORT`: host/porta de bind da API
 - `WA_API_KEY`: exige `Authorization: Bearer <chave>` quando definida
+- `WA_API_MEDIA_DIR`: diretório local para arquivos enviados via `POST /media`
+- `WA_API_MEDIA_MAX_BYTES`: tamanho máximo por upload em bytes
 - `WA_BOOTSTRAP_CONNECTIONS_ENABLED`: define se este processo também gerencia sockets/conexões
 - `WA_WEBHOOK_SHARED_SECRET`: ativa autenticação HMAC do ingress `POST /webhooks/connections` e permite `POST /connections/:id/webhook/start`
 - `WA_WEBHOOK_ALLOWED_TARGETS`: lista CSV de URLs permitidas para webhooks de saída; a URL cadastrada precisa existir exatamente nessa lista
@@ -388,6 +390,9 @@ Exceções:
 | `GET`  | `/connections/:id/qr`                                  | Ler QR atual                                                                |
 | `GET`  | `/connections/:id/status`                              | Estado resumido (`created`, `connecting`, `qr`, `open`, `closed`, `error`)  |
 | `POST` | `/connections/:id/messages/send`                       | Enviar texto, mídia ou payload Baileys bruto                                |
+| `GET`  | `/connections/:id/messages`                            | Histórico de mensagens enviadas pela API                                    |
+| `GET`  | `/connections/:id/messages/:messageId`                 | Status de mensagem enviada pela API                                         |
+| `POST` | `/media`                                               | Upload de mídia para reutilizar no envio via `mediaId`                      |
 | `GET`  | `/connections/:id/groups`                              | Listar grupos da instância                                                  |
 | `POST` | `/connections/:id/groups/:groupJid/admin`              | Ações administrativas em grupo                                              |
 | `POST` | `/connections/:id/webhooks`                            | Criar webhook específico da instância                                       |
@@ -422,14 +427,51 @@ O QR pode ser lido pela API ou pelo dashboard. Depois que a conexão ficar `open
 curl -s -X POST "$BASE/connections/$ID/messages/send" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
+  -H "Idempotency-Key: pedido-123" \
   -d '{
     "type": "text",
+    "clientMessageId": "pedido-123",
     "to": "5511999999999@s.whatsapp.net",
     "text": "Olá! Mensagem enviada pela API."
   }'
 ```
 
+O envio aceita `clientMessageId` no body ou `Idempotency-Key` no header. Repetir a mesma chave com o mesmo payload retorna o resultado já registrado e evita envio duplicado.
+
+Consulte histórico e status:
+
+```bash
+curl -s "$BASE/connections/$ID/messages?to=5511999999999@s.whatsapp.net&status=sent&limit=20" \
+  -H "Authorization: Bearer $TOKEN"
+
+curl -s "$BASE/connections/$ID/messages/pedido-123" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
 O endpoint de envio aceita atalhos (`text`, `image`, `video`, `audio`, `document`, `sticker`, `contacts`, `location`, `react`, `poll`, `event`, `forward`, `delete`, entre outros) e também `type: "raw"` para payloads nativos do Baileys. Use JIDs no formato `5511999999999@s.whatsapp.net` para contatos, `120363000000000000@g.us` para grupos e `status@broadcast` para status.
+
+Para enviar mídia sem depender de URL externa, faça upload em JSON/base64 e use o `mediaId` retornado:
+
+```bash
+curl -s -X POST "$BASE/media" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "fileName": "foto.png",
+    "mimetype": "image/png",
+    "base64": "iVBORw0KGgo..."
+  }'
+
+curl -s -X POST "$BASE/connections/$ID/messages/send" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "type": "image",
+    "to": "5511999999999@s.whatsapp.net",
+    "mediaId": "media_xxxxx",
+    "caption": "Arquivo enviado via POST /media"
+  }'
+```
 
 ### Webhooks de saída
 
