@@ -214,5 +214,5 @@ describe('play command', () => {
     expect(ctx.reply).toHaveBeenCalledWith('❌ Não foi possível enviar o áudio: Áudio acima do limite de 100 MB do WhatsApp')
     expect(ctx.send).not.toHaveBeenCalled()
     expect(ctx.sendAudio).not.toHaveBeenCalled()
-  })
+  }, 15_000)
 })

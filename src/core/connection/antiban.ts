@@ -191,7 +191,7 @@ export function createAntiBanConfig(logger: AppLogger, connectionId: string): An
   }
 }
 
-const attachAntiBanRuntimeExtensions = (sock: SocketWithAntiBan, logger: AppLogger, connectionId: string): void => {
+const attachAntiBanRuntimeExtensions = (sock: SocketWithAntiBan, _logger: AppLogger, _connectionId: string): void => {
   const antiban = sock.antiban as
     | {
         rateLimiter?: { config?: Record<string, unknown> }
