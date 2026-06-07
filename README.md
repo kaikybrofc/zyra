@@ -285,6 +285,24 @@ npm run dev
 
 Com `WA_API_ENABLED=true`, o mesmo processo expõe a API e o dashboard em `http://localhost:<WA_API_PORT>`. Com `WA_BOOTSTRAP_CONNECTIONS_ENABLED=true`, ele também gerencia os sockets WhatsApp em memória.
 
+### Somente API e webhook
+
+Para subir apenas o plano HTTP, dashboard e workers de webhook, sem bootstrap local de conexões:
+
+```bash
+npm run build
+npm run start:api-webhook
+```
+
+Esse launcher aplica por padrão:
+
+```env
+WA_API_ENABLED=true
+WA_BOOTSTRAP_CONNECTIONS_ENABLED=false
+WA_WEBHOOK_RETRY_ENABLED=true
+WA_WEBHOOK_OUTBOX_ENABLED=true
+```
+
 ### Execução simples sem watch
 
 ```bash
@@ -640,7 +658,8 @@ Se a alteração for ampla, esse é o melhor smoke test local.
 
 O repositório inclui `Dockerfile` multi-stage e `docker-compose.yml` com:
 
-- `zyra` — aplicação principal
+- `zyra` — processo de conexões/sockets
+- `api-webhook` — API REST, dashboard e workers de webhook, sem bootstrap de sockets
 - `backfill` — worker de backfill
 - `mysql` — MySQL 8
 - `redis` — Redis 7
@@ -664,6 +683,7 @@ docker compose up -d --build
 ```bash
 docker compose ps
 docker compose logs -f zyra
+docker compose logs -f api-webhook
 docker compose logs -f backfill
 ```
 
@@ -677,9 +697,10 @@ Observações:
 
 - sessões e mídias são persistidas no volume `zyra-data`
 - as métricas do antiban ficam expostas na porta `9108`
+- a API e o dashboard ficam expostos pelo serviço `api-webhook` em `http://localhost:3000`
 - o serviço `zyra` pode subir uma única sessão com `WA_CONNECTION_ID` ou várias sessões com `WA_CONNECTION_IDS`
 - sem `WA_CONNECTION_IDS`, a stack pode descobrir conexões já persistidas em `auth_creds` quando `MYSQL_URL` estiver configurado
-- para expor a API REST via Docker, habilite `WA_API_ENABLED=true` e publique a porta `3000:3000`
+- o serviço `api-webhook` sobe com `WA_BOOTSTRAP_CONNECTIONS_ENABLED=false`, então ele atende API/webhooks sem depender de bootstrap local de conexão
 
 ## Produção com PM2
 

@@ -36,6 +36,9 @@
     "build": "tsc -p tsconfig.json && cp src/api/dashboard.html dist/api/dashboard.html",
     "start": "tsx src/index.ts",
     "start:prod": "node dist/index.js",
+    "start:connections": "node scripts/start-runtime.mjs connections-only",
+    "start:api-webhook": "node scripts/start-runtime.mjs api-webhook",
+    "start:stateless": "node scripts/start-runtime.mjs stateless",
     "pm2:start": "npm run build && pm2 startOrRestart ecosystem.config.cjs --env production",
     "pm2:restart": "npm run build && pm2 restart ecosystem.config.cjs --env production",
     "pm2:stop": "pm2 stop zyra zyra-api-webhook zyra-backfill",
@@ -71,7 +74,9 @@
     "mysql2": "^3.20.0",
     "pm2": "^7.0.1",
     "qrcode-terminal": "^0.12.0",
-    "redis": "^4.6.13"
+    "redis": "^4.6.13",
+    "winston": "^3.19.0",
+    "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
@@ -83,9 +88,7 @@
     "tsx": "^4.22.4",
     "typescript": "^5.6.3",
     "typescript-eslint": "^8.0.0",
-    "vitest": "^4.1.8",
-    "winston": "^3.18.3",
-    "winston-daily-rotate-file": "^5.0.0"
+    "vitest": "^4.1.8"
   },
   "overrides": {
     "vite": "8.0.16",

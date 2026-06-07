@@ -30,6 +30,8 @@ RUN apk add --no-cache \
 WORKDIR /app
 
 COPY package*.json ./
+COPY scripts/ ./scripts/
+COPY docs/ ./docs/
 COPY --from=builder /build/node_modules ./node_modules/
 COPY --from=builder /build/dist ./dist/
 
@@ -40,8 +42,8 @@ USER zyra
 
 VOLUME ["/app/data"]
 
-# Prometheus antiban metrics
-EXPOSE 9108
+# API, Prometheus antiban metrics, health
+EXPOSE 3000 9108 9109
 
 ENV NODE_ENV=production \
     WA_AUTH_DIR=data/auth \

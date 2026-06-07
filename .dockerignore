@@ -9,3 +9,5 @@ docs/
 tests/
 .github/
 .vscode/
+!docs/
+!docs/exemplodbmodel.md

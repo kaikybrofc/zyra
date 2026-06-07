@@ -2,6 +2,7 @@ services:
   zyra:
     build: .
     restart: unless-stopped
+    command: ['npm', 'run', 'start:connections']
     volumes:
       - zyra-data:/app/data
     environment:
@@ -12,10 +13,37 @@ services:
       # Sem WA_CONNECTION_IDS, o bootstrap ainda pode descobrir conexões em auth_creds.
       WA_REDIS_URL: redis://redis:6379
       MYSQL_URL: mysql://zyra:zyra@mysql:3306/zyra
+      WA_API_ENABLED: 'false'
+      WA_WEBHOOK_RETRY_ENABLED: 'false'
+      WA_WEBHOOK_OUTBOX_ENABLED: 'false'
       WA_ANTIBAN_ENABLED: 'true'
       WA_ANTIBAN_METRICS_ENABLED: 'true'
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+
+  api-webhook:
+    build: .
+    restart: unless-stopped
+    command: ['npm', 'run', 'start:api-webhook']
+    volumes:
+      - zyra-data:/app/data
+    environment:
+      WA_CONNECTION_ID: default
+      WA_REDIS_URL: redis://redis:6379
+      MYSQL_URL: mysql://zyra:zyra@mysql:3306/zyra
+      WA_API_ENABLED: 'true'
+      WA_BOOTSTRAP_CONNECTIONS_ENABLED: 'false'
+      WA_WEBHOOK_RETRY_ENABLED: 'true'
+      WA_WEBHOOK_OUTBOX_ENABLED: 'true'
+      WA_API_HOST: 0.0.0.0
+      WA_API_PORT: '3000'
     ports:
-      - '9108:9108' # Prometheus metrics
+      - '3000:3000'
     depends_on:
       mysql:
         condition: service_healthy
