@@ -38,6 +38,15 @@ type SocketWithCredsFlush = WASocket & {
 }
 
 /**
+ * Extensão opcional injetada pelo baileys-antiban no socket.
+ */
+type SocketWithAntiBan = WASocket & {
+  antiban?: {
+    onDeliveryReceipt?: (messageId: string) => void
+  }
+}
+
+/**
  * Metadados de uma Newsletter (Canal).
  */
 type NewsletterMetadata = {
@@ -112,6 +121,8 @@ type EventHandler<K extends keyof BaileysEventMap> = (data: BaileysEventMap[K]) 
 export function registerEvents({ sock, logger, reconnect, connectionId, onQrCode, onConnectionOpen, onConnectionClose }: RegisterOptions): void {
   /** Socket com capability opcional de flush imediato de credenciais. */
   const socketWithCredsFlush = sock as SocketWithCredsFlush
+  /** Socket com capability opcional do delivery tracker do antiban. */
+  const socketWithAntiBan = sock as SocketWithAntiBan
   /** Socket com capability opcional de consulta de metadados de newsletter. */
   const socketWithNewsletterMetadata = sock as SocketWithNewsletterMetadata
   /** Store SQL usada para auditoria, eventos e persistências complementares. */
@@ -136,6 +147,12 @@ export function registerEvents({ sock, logger, reconnect, connectionId, onQrCode
   const NEWSLETTER_MEDIA_RETRY_BASE_MS = config.newsletterMediaRetryBaseMs
   /** Máximo de tentativas para refresh de mídia de newsletter por mensagem. */
   const NEWSLETTER_MEDIA_RETRY_MAX_ATTEMPTS = config.newsletterMediaRetryMaxAttempts
+
+  const recordAntiBanDeliveryReceipt = (key: { id?: string | null; fromMe?: boolean | null } | null | undefined) => {
+    if (!key?.id) return
+    if (key.fromMe === false) return
+    socketWithAntiBan.antiban?.onDeliveryReceipt?.(key.id)
+  }
   /** Limite de entries do estado de retry para conter memória em alto throughput. */
   const MAX_NEWSLETTER_MEDIA_RETRY_ENTRIES = 5_000
 
@@ -711,6 +728,10 @@ export function registerEvents({ sock, logger, reconnect, connectionId, onQrCode
         const chatJid = messageKey.chatJid
         const groupJid = toGroupJid(chatJid)
         const actorJid = key.fromMe ? selfJid : (key.participant ?? (groupJid ? null : chatJid))
+        const status = (update as { status?: number | string | null }).status
+        if (status === 3 || status === 4 || status === '3' || status === '4') {
+          recordAntiBanDeliveryReceipt(key)
+        }
         recordEvent('messages.update', { update }, { chatJid, groupJid, messageKey, actorJid })
       }
     },
@@ -824,6 +845,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId, onQrCode
         const chatJid = messageKey.chatJid
         const groupJid = toGroupJid(chatJid)
         const actorJid = updateAny.participant ?? updateAny.key?.participant ?? null
+        recordAntiBanDeliveryReceipt(key)
         recordEvent('message-receipt.update', { receipt: updateAny.receipt ?? null }, { chatJid, groupJid, messageKey, actorJid })
       }
     },

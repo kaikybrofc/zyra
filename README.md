@@ -238,6 +238,10 @@ Variáveis centrais:
 - `WA_AUTH_DIR`: diretório local de fallback para sessão
 - `WA_COMMAND_PREFIX`: prefixo de comandos
 - `WA_ANTIBAN_ENABLED`: ativa proteção antiban
+- `WA_ANTIBAN_PRESET`: preset base da lib (`conservative`, `moderate`, `aggressive`, `high-volume`)
+- `WA_ANTIBAN_GROUP_OP_GUARD_ENABLED`: limita operações sensíveis de grupo, como add/remove/create/invite
+- `WA_ANTIBAN_LEGITIMACY_SIGNALS_ENABLED`: ativa sinais humanos da lib, como pausas e variações de envio
+- `WA_ANTIBAN_INSTANCE_COORDINATOR_ENABLED`: coordena limites agregados em multi-conexões/processos
 - `WA_MEDIA_AUTO_DOWNLOAD`: baixa mídias recebidas para disco
 - `WA_API_ENABLED`: habilita o servidor HTTP da API REST
 - `WA_API_HOST` e `WA_API_PORT`: host/porta de bind da API

@@ -1,5 +1,19 @@
 import path from 'node:path'
-import { FileStateAdapter, JidCanonicalizer, LidResolver, wrapSocket, type AntiBanConfig, type WarmUpState, type WrappedSocket } from 'baileys-antiban'
+import {
+  FileStateAdapter,
+  JidCanonicalizer,
+  LidResolver,
+  wrapSocket,
+  type AntiBanConfig,
+  type GroupOperation,
+  type GroupOperationGuardConfig,
+  type HealthStatus,
+  type LegitimacySignalInjectorConfig,
+  type TimelockState,
+  type WarmUpState,
+  type WrappedSocket,
+  type WrapSocketOptions,
+} from 'baileys-antiban'
 import { config } from '../../config/index.js'
 import type { AppLogger } from '../../observability/logger.js'
 import { assertValidConnectionId } from './connection-id.js'
@@ -14,7 +28,16 @@ type SocketWithAntiBan = {
     exportWarmUpState: () => WarmUpState
     /** Obtém estatísticas internas de uso. */
     getStats: () => unknown
+    /** Libera timers internos da lib ao descartar o socket. */
+    destroy?: () => void
   }
+}
+
+const DEFAULT_GROUP_OPERATION_LIMITS: Record<GroupOperation, { max: number; windowMs: number }> = {
+  add: { max: 3, windowMs: 10 * 60_000 },
+  remove: { max: 5, windowMs: 10 * 60_000 },
+  create: { max: 2, windowMs: 10 * 60_000 },
+  invite: { max: 10, windowMs: 10 * 60_000 },
 }
 
 const buildRateLimiterConfig = () => ({
@@ -39,6 +62,11 @@ const buildWarmUpConfig = () => ({
   ...(config.antibanInactivityThresholdHours !== undefined ? { inactivityThresholdHours: config.antibanInactivityThresholdHours } : {}),
 })
 
+const buildGroupProfileConfig = () => ({
+  groupProfiles: config.antibanGroupProfilesEnabled,
+  ...(config.antibanGroupMultiplier !== undefined ? { groupMultiplier: config.antibanGroupMultiplier } : {}),
+})
+
 const buildDeafSessionConfig = (logger: AppLogger, connectionId: string) => {
   if (!config.antibanDeafSessionEnabled) return undefined
   return {
@@ -57,7 +85,46 @@ const buildDeafSessionConfig = (logger: AppLogger, connectionId: string) => {
   }
 }
 
+const buildGroupOperationGuardConfig = (): GroupOperationGuardConfig | false => {
+  if (!config.antibanGroupOperationGuardEnabled) return false
+
+  const limits: GroupOperationGuardConfig['limits'] = {}
+  const addLimit = (operation: GroupOperation, max: number | undefined, windowMs: number | undefined) => {
+    if (max === undefined && windowMs === undefined) return
+    const fallback = DEFAULT_GROUP_OPERATION_LIMITS[operation]
+    limits[operation] = {
+      max: max ?? fallback.max,
+      windowMs: windowMs ?? fallback.windowMs,
+    }
+  }
+
+  addLimit('add', config.antibanGroupAddMax, config.antibanGroupAddWindowMs)
+  addLimit('remove', config.antibanGroupRemoveMax, config.antibanGroupRemoveWindowMs)
+  addLimit('create', config.antibanGroupCreateMax, config.antibanGroupCreateWindowMs)
+  addLimit('invite', config.antibanGroupInviteMax, config.antibanGroupInviteWindowMs)
+
+  return Object.keys(limits).length ? { limits } : {}
+}
+
+const buildLegitimacySignalsConfig = (): LegitimacySignalInjectorConfig | false => {
+  if (!config.antibanLegitimacySignalsEnabled) return false
+  return {
+    enableTypos: config.antibanLegitimacyTyposEnabled,
+    ...(config.antibanLegitimacyTypoProbability !== undefined ? { typoProbability: config.antibanLegitimacyTypoProbability } : {}),
+    enableReadGaps: config.antibanLegitimacyReadGapsEnabled,
+    enableTypingPauses: config.antibanLegitimacyTypingPausesEnabled,
+  }
+}
+
+const buildWrapOptions = (logger: AppLogger, connectionId: string): WrapSocketOptions => ({
+  deafSession: buildDeafSessionConfig(logger, connectionId),
+  groupOpGuard: buildGroupOperationGuardConfig(),
+  legitimacySignals: buildLegitimacySignalsConfig(),
+})
+
 export const resolveAntiBanStateDir = (connectionId: string): string => path.resolve(process.cwd(), config.antibanStateDir, assertValidConnectionId(connectionId))
+
+export const resolveAntiBanInstanceCoordinatorPath = (): string => path.resolve(process.cwd(), config.antibanInstanceCoordinatorPath)
 
 const resolveStateAdapter = (connectionId: string): FileStateAdapter => new FileStateAdapter(resolveAntiBanStateDir(connectionId))
 
@@ -72,12 +139,55 @@ const isInvalidPersistedWarmUpStateError = (error: unknown): boolean => {
  * @param connectionId Identificador único da conexão (ex: 'main').
  * @returns Objeto de configuração compatível com a biblioteca baileys-antiban.
  */
-export function createAntiBanConfig(_logger: AppLogger, _connectionId: string): AntiBanConfig {
+export function createAntiBanConfig(logger: AppLogger, connectionId: string): AntiBanConfig {
   return {
+    ...(config.antibanPreset !== undefined ? { preset: config.antibanPreset } : {}),
     logging: config.antibanLogging,
     ...buildRateLimiterConfig(),
+    ...buildRateLimiterRuntimeOverrides(),
     ...buildWarmUpConfig(),
+    ...buildGroupProfileConfig(),
     ...(config.antibanAutoPauseAt !== undefined ? { autoPauseAt: config.antibanAutoPauseAt } : {}),
+    ...(config.antibanInstanceCoordinatorEnabled
+      ? {
+          instanceCoordinator: resolveAntiBanInstanceCoordinatorPath(),
+          ...(config.antibanInstancePoolMaxPerMinute !== undefined ? { instancePoolMaxPerMinute: config.antibanInstancePoolMaxPerMinute } : {}),
+          ...(config.antibanInstancePoolMaxPerHour !== undefined ? { instancePoolMaxPerHour: config.antibanInstancePoolMaxPerHour } : {}),
+        }
+      : {}),
+    onAtRisk: (status: HealthStatus) => {
+      logger.error('antiban atingiu risco alto para a conexão', {
+        connectionId,
+        risk: status.risk,
+        score: status.score,
+        reasons: status.reasons,
+        recommendation: status.recommendation,
+      })
+    },
+    onRiskChange: (status: HealthStatus) => {
+      logger.warn('antiban alterou o nivel de risco', {
+        connectionId,
+        risk: status.risk,
+        score: status.score,
+        reasons: status.reasons,
+        recommendation: status.recommendation,
+      })
+    },
+    onTimelockDetected: (state: TimelockState) => {
+      logger.warn('antiban detectou reachout timelock', {
+        connectionId,
+        enforcementType: state.enforcementType ?? null,
+        expiresAt: state.expiresAt?.toISOString() ?? null,
+        errorCount: state.errorCount,
+      })
+    },
+    onTimelockLifted: (state: TimelockState) => {
+      logger.info('antiban liberou o reachout timelock', {
+        connectionId,
+        enforcementType: state.enforcementType ?? null,
+        errorCount: state.errorCount,
+      })
+    },
   }
 }
 
@@ -112,38 +222,6 @@ const attachAntiBanRuntimeExtensions = (sock: SocketWithAntiBan, logger: AppLogg
       learnFromEvents: true,
       resolver: lidResolver,
     })
-  }
-
-  const healthConfig = antiban.health?.config
-  if (healthConfig) {
-    healthConfig.onRiskChange = (status: { risk: string; score: number; reasons: string[]; recommendation: string }) => {
-      logger.warn('antiban alterou o nivel de risco', {
-        connectionId,
-        risk: status.risk,
-        score: status.score,
-        reasons: status.reasons,
-        recommendation: status.recommendation,
-      })
-    }
-  }
-
-  const timelockConfig = antiban.timelock?.config
-  if (timelockConfig) {
-    timelockConfig.onTimelockDetected = (state: { enforcementType?: string; expiresAt?: Date; errorCount: number }) => {
-      logger.warn('antiban detectou reachout timelock', {
-        connectionId,
-        enforcementType: state.enforcementType ?? null,
-        expiresAt: state.expiresAt?.toISOString() ?? null,
-        errorCount: state.errorCount,
-      })
-    }
-    timelockConfig.onTimelockLifted = (state: { enforcementType?: string; errorCount: number }) => {
-      logger.info('antiban liberou o reachout timelock', {
-        connectionId,
-        enforcementType: state.enforcementType ?? null,
-        errorCount: state.errorCount,
-      })
-    }
   }
 }
 
@@ -217,8 +295,14 @@ export async function saveAntiBanWarmUpState(sock: SocketWithAntiBan, connection
  */
 export function wrapSocketWithAntiBan<T extends Record<string, unknown>>(sock: T, logger: AppLogger, connectionId: string, warmUpState?: WarmUpState): T & Partial<WrappedSocket> {
   if (!config.antibanEnabled) return sock as T & Partial<WrappedSocket>
-  const wrapped = wrapSocket(sock as unknown as Parameters<typeof wrapSocket>[0], createAntiBanConfig(logger, connectionId), warmUpState, { deafSession: buildDeafSessionConfig(logger, connectionId) })
+  const wrapped = wrapSocket(sock as unknown as Parameters<typeof wrapSocket>[0], createAntiBanConfig(logger, connectionId), warmUpState, buildWrapOptions(logger, connectionId))
   attachAntiBanRuntimeExtensions(wrapped as unknown as SocketWithAntiBan, logger, connectionId)
-  logger.info('antiban ativado no socket', { connectionId })
+  logger.info('antiban ativado no socket', {
+    connectionId,
+    preset: config.antibanPreset ?? 'conservative',
+    groupOpGuard: config.antibanGroupOperationGuardEnabled,
+    legitimacySignals: config.antibanLegitimacySignalsEnabled,
+    instanceCoordinator: config.antibanInstanceCoordinatorEnabled ? resolveAntiBanInstanceCoordinatorPath() : null,
+  })
   return wrapped as unknown as T & Partial<WrappedSocket>
 }

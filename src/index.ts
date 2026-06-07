@@ -11,6 +11,7 @@ type ValidationResult = {
 const LOG_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error', 'fatal'])
 const BOOLEAN_VALUES = new Set(['true', 'false'])
 const CONNECTION_CONTROL_MODES = new Set(['legacy', 'managed', 'hybrid'])
+const ANTIBAN_PRESETS = new Set(['conservative', 'moderate', 'aggressive', 'high-volume'])
 
 /**
  * Realiza validações básicas de ambiente e configuração antes da inicialização (boot).
@@ -98,6 +99,13 @@ const validateEnvironment = (): ValidationResult => {
   ensureBoolean('WA_ANTIBAN_JID_CANONICALIZER_ENABLED')
   ensureBoolean('WA_ANTIBAN_DEAF_SESSION_ENABLED')
   ensureBoolean('WA_ANTIBAN_DEAF_SESSION_AUTO_RECONNECT')
+  ensureBoolean('WA_ANTIBAN_GROUP_PROFILES_ENABLED')
+  ensureBoolean('WA_ANTIBAN_GROUP_OP_GUARD_ENABLED')
+  ensureBoolean('WA_ANTIBAN_LEGITIMACY_SIGNALS_ENABLED')
+  ensureBoolean('WA_ANTIBAN_LEGITIMACY_TYPOS_ENABLED')
+  ensureBoolean('WA_ANTIBAN_LEGITIMACY_READ_GAPS_ENABLED')
+  ensureBoolean('WA_ANTIBAN_LEGITIMACY_TYPING_PAUSES_ENABLED')
+  ensureBoolean('WA_ANTIBAN_INSTANCE_COORDINATOR_ENABLED')
   ensureBoolean('WA_ANTIBAN_METRICS_ENABLED')
   ensureBoolean('WA_BACKFILL_ONCE')
   ensureBoolean('WA_HEALTH_ENABLED')
@@ -129,6 +137,18 @@ const validateEnvironment = (): ValidationResult => {
   ensurePositiveNumber('WA_ANTIBAN_STATE_SAVE_MS')
   ensurePositiveNumber('WA_ANTIBAN_DEAF_SESSION_TIMEOUT_MS')
   ensurePositiveNumber('WA_ANTIBAN_DEAF_SESSION_MIN_UPTIME_MS')
+  ensurePositiveNumber('WA_ANTIBAN_GROUP_MULTIPLIER')
+  ensurePositiveNumber('WA_ANTIBAN_GROUP_ADD_MAX')
+  ensurePositiveNumber('WA_ANTIBAN_GROUP_ADD_WINDOW_MS')
+  ensurePositiveNumber('WA_ANTIBAN_GROUP_REMOVE_MAX')
+  ensurePositiveNumber('WA_ANTIBAN_GROUP_REMOVE_WINDOW_MS')
+  ensurePositiveNumber('WA_ANTIBAN_GROUP_CREATE_MAX')
+  ensurePositiveNumber('WA_ANTIBAN_GROUP_CREATE_WINDOW_MS')
+  ensurePositiveNumber('WA_ANTIBAN_GROUP_INVITE_MAX')
+  ensurePositiveNumber('WA_ANTIBAN_GROUP_INVITE_WINDOW_MS')
+  ensurePositiveNumber('WA_ANTIBAN_LEGITIMACY_TYPO_PROBABILITY')
+  ensurePositiveNumber('WA_ANTIBAN_INSTANCE_POOL_MAX_PER_MINUTE')
+  ensurePositiveNumber('WA_ANTIBAN_INSTANCE_POOL_MAX_PER_HOUR')
   ensurePositiveNumber('WA_ROUTER_MAX_PENDING_PER_QUEUE')
   ensurePositiveNumber('WA_BACKFILL_INTERVAL_MS')
   ensurePositiveNumber('WA_RECONNECT_BASE_DELAY_MS')
@@ -137,6 +157,7 @@ const validateEnvironment = (): ValidationResult => {
   ensurePositiveNumber('WA_VERSION_CACHE_TTL_MS')
   ensurePositiveNumber('WA_API_MEDIA_MAX_BYTES')
   ensureEnum('WA_CONNECTION_CONTROL_MODE', CONNECTION_CONTROL_MODES)
+  ensureEnum('WA_ANTIBAN_PRESET', ANTIBAN_PRESETS)
 
   if (config.connectionIds) {
     const hasInvalidConnectionIds = config.connectionIds.some((connectionId) => !connectionId.trim())

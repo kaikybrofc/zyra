@@ -58,7 +58,7 @@
     "@caed0/webp-conv": "^2.2.3",
     "@hapi/boom": "^10.0.1",
     "baileys": "npm:@whiskeysockets/baileys@7.0.0-rc13",
-    "baileys-antiban": "3.9.0",
+    "baileys-antiban": "^4.6.0",
     "dotenv": "^16.4.5",
     "fflate": "^0.8.2",
     "libsignal": "^6.0.0",

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mockConfig = {
   antibanEnabled: true,
   antibanLogging: false,
+  antibanPreset: undefined as 'conservative' | 'moderate' | 'aggressive' | 'high-volume' | undefined,
   antibanStateDir: 'data/antiban',
   antibanStateSaveIntervalMs: 300000,
   antibanAutoPauseAt: 'high',
@@ -19,6 +20,8 @@ const mockConfig = {
   antibanWarmUpDay1Limit: 20,
   antibanWarmUpGrowthFactor: 1.8,
   antibanInactivityThresholdHours: 72,
+  antibanGroupProfilesEnabled: true,
+  antibanGroupMultiplier: undefined as number | undefined,
   antibanJidCanonicalizerEnabled: true,
   antibanLidCanonical: 'pn',
   antibanLidMaxEntries: 10000,
@@ -26,6 +29,24 @@ const mockConfig = {
   antibanDeafSessionTimeoutMs: 300000,
   antibanDeafSessionMinUptimeMs: 120000,
   antibanDeafSessionAutoReconnect: true,
+  antibanGroupOperationGuardEnabled: true,
+  antibanGroupAddMax: undefined as number | undefined,
+  antibanGroupAddWindowMs: undefined as number | undefined,
+  antibanGroupRemoveMax: undefined as number | undefined,
+  antibanGroupRemoveWindowMs: undefined as number | undefined,
+  antibanGroupCreateMax: undefined as number | undefined,
+  antibanGroupCreateWindowMs: undefined as number | undefined,
+  antibanGroupInviteMax: undefined as number | undefined,
+  antibanGroupInviteWindowMs: undefined as number | undefined,
+  antibanLegitimacySignalsEnabled: true,
+  antibanLegitimacyTyposEnabled: true,
+  antibanLegitimacyTypoProbability: undefined as number | undefined,
+  antibanLegitimacyReadGapsEnabled: true,
+  antibanLegitimacyTypingPausesEnabled: true,
+  antibanInstanceCoordinatorEnabled: false,
+  antibanInstanceCoordinatorPath: 'data/antiban/instance-pool.json',
+  antibanInstancePoolMaxPerMinute: undefined as number | undefined,
+  antibanInstancePoolMaxPerHour: undefined as number | undefined,
 }
 
 const adapterSaveMock = vi.fn()
@@ -69,6 +90,18 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockConfig.antibanEnabled = true
   mockConfig.antibanDeafSessionEnabled = true
+  mockConfig.antibanPreset = undefined
+  mockConfig.antibanGroupProfilesEnabled = true
+  mockConfig.antibanGroupMultiplier = undefined
+  mockConfig.antibanGroupOperationGuardEnabled = true
+  mockConfig.antibanLegitimacySignalsEnabled = true
+  mockConfig.antibanLegitimacyTyposEnabled = true
+  mockConfig.antibanLegitimacyTypoProbability = undefined
+  mockConfig.antibanLegitimacyReadGapsEnabled = true
+  mockConfig.antibanLegitimacyTypingPausesEnabled = true
+  mockConfig.antibanInstanceCoordinatorEnabled = false
+  mockConfig.antibanInstancePoolMaxPerMinute = undefined
+  mockConfig.antibanInstancePoolMaxPerHour = undefined
   adapterLoadMock.mockResolvedValue({ day: 2 })
   adapterSaveMock.mockResolvedValue(undefined)
   wrapSocketMock.mockImplementation((sock) => ({
@@ -120,6 +153,13 @@ describe('antiban helper', () => {
         growthFactor: 1.8,
         inactivityThresholdHours: 72,
         autoPauseAt: 'high',
+        groupProfiles: true,
+        maxIdenticalMessages: 200,
+        identicalMessageWindowMs: 60000,
+        burstAllowance: 20,
+        onRiskChange: expect.any(Function),
+        onTimelockDetected: expect.any(Function),
+        onTimelockLifted: expect.any(Function),
       }),
       { day: 1 },
       expect.objectContaining({
@@ -128,6 +168,12 @@ describe('antiban helper', () => {
           minUptimeMs: 120000,
           autoReconnect: true,
           onDeafSession: expect.any(Function),
+        }),
+        groupOpGuard: {},
+        legitimacySignals: expect.objectContaining({
+          enableTypos: true,
+          enableReadGaps: true,
+          enableTypingPauses: true,
         }),
       })
     )
@@ -196,6 +242,9 @@ describe('antiban helper', () => {
     expect(antibanConfig.autoPauseAt).toBe('high')
     expect(antibanConfig).not.toHaveProperty('health')
     expect(antibanConfig).not.toHaveProperty('timelock')
+    expect(antibanConfig.onRiskChange).toEqual(expect.any(Function))
+    expect(antibanConfig.onTimelockDetected).toEqual(expect.any(Function))
+    expect(antibanConfig.onTimelockLifted).toEqual(expect.any(Function))
 
     const wrapped = wrapSocketWithAntiBan({ ev: { on: vi.fn() }, sendMessage: vi.fn() } as never, logger as never, 'conn-z', { day: 1 } as never)
     expect(wrapped).toHaveProperty('antiban')
@@ -208,11 +257,11 @@ describe('antiban helper', () => {
       }
     }
     const deafSession = wrapOptions?.deafSession
-    const wrappedAntiban = (wrapped as { antiban?: { health?: { config?: { onRiskChange?: (status: unknown) => void } }; timelock?: { config?: { onTimelockDetected?: (state: unknown) => void; onTimelockLifted?: (state: unknown) => void } }; rateLimiter?: { config?: Record<string, unknown> }; jidCanonicalizerModule?: unknown; lidResolverModule?: unknown } }).antiban
+    const wrappedAntiban = (wrapped as { antiban?: { rateLimiter?: { config?: Record<string, unknown> }; jidCanonicalizerModule?: unknown; lidResolverModule?: unknown } }).antiban
 
-    wrappedAntiban?.health?.config?.onRiskChange?.({ risk: 'high', score: 90, reasons: ['burst'], recommendation: 'pause' })
-    wrappedAntiban?.timelock?.config?.onTimelockDetected?.({ enforcementType: 'temporary', expiresAt: new Date('2026-05-10T00:00:00.000Z'), errorCount: 2 })
-    wrappedAntiban?.timelock?.config?.onTimelockLifted?.({ enforcementType: 'temporary', errorCount: 0 })
+    ;(antibanConfig.onRiskChange as (status: unknown) => void)({ risk: 'high', score: 90, reasons: ['burst'], recommendation: 'pause' })
+    ;(antibanConfig.onTimelockDetected as (state: unknown) => void)({ enforcementType: 'temporary', expiresAt: new Date('2026-05-10T00:00:00.000Z'), errorCount: 2 })
+    ;(antibanConfig.onTimelockLifted as (state: unknown) => void)({ enforcementType: 'temporary', errorCount: 0 })
     deafSession?.onDeafSession({
       lastMessageAt: new Date('2026-05-17T17:00:00.000Z'),
       silenceDurationMs: 1000,

@@ -5,6 +5,7 @@ import { parseUrl, sendError } from './http.js'
 import { handleConnectionsRoutes } from './routes/connections.js'
 import { handleMessagesRoutes } from './routes/messages.js'
 import { handleGroupsRoutes } from './routes/groups.js'
+import { handleDataRoutes } from './routes/data.js'
 import { handleWebhooksRoutes } from './routes/webhooks.js'
 import { handleGlobalWebhooksRoutes } from './routes/webhooks-global.js'
 import { handleConnectionWebhookRoutes } from './routes/connection-webhook.js'
@@ -61,6 +62,15 @@ type ApiServerHandle = {
  * - `POST   /media`                          — fazer upload de mídia para uso via mediaId
  * - `GET    /connections/:id/groups`         — listar grupos
  * - `POST   /connections/:id/groups/:groupJid/admin` — executar ações administrativas de grupo
+ * - `GET    /data/messages`                  — consultar mensagens persistidas
+ * - `GET    /data/chats`                     — consultar chats persistidos
+ * - `GET    /data/contacts`                  — consultar contatos persistidos
+ * - `GET    /data/groups`                    — consultar grupos persistidos
+ * - `GET    /data/events`                    — consultar eventos persistidos
+ * - `GET    /data/commands`                  — consultar comandos executados
+ * - `GET    /data/audit`                     — consultar auditoria administrativa
+ * - `GET    /data/antiban`                   — consultar estatísticas antiban por conexão
+ * - `GET    /data/antiban/:connectionId`     — consultar estatísticas antiban de uma conexão
  * - `GET    /system/runtime`                  — status operacional do processo
  * - `GET    /health/live`                    — liveness do processo
  * - `GET    /health/ready`                   — readiness (infra/control-plane)
@@ -98,6 +108,7 @@ export const startApiServer = ({ logger }: StartApiServerOptions): ApiServerHand
       if (await handleConnectionsRoutes(req, res, pathname, logger)) return
       if (await handleMessagesRoutes(req, res, pathname, logger)) return
       if (await handleGroupsRoutes(req, res, pathname, logger)) return
+      if (await handleDataRoutes(req, res, pathname, logger)) return
       if (await handleRuntimeRoutes(req, res, pathname)) return
       if (await handleGlobalWebhooksRoutes(req, res, pathname, logger)) return
       if (await handleWebhooksRoutes(req, res, pathname, logger)) return

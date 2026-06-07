@@ -44,6 +44,27 @@ function readConnectionControlMode(value: string | undefined, fallback: 'legacy'
   return fallback
 }
 
+type AntiBanPreset = 'conservative' | 'moderate' | 'aggressive' | 'high-volume'
+
+function readAntiBanPreset(value: string | undefined): AntiBanPreset | undefined {
+  if (!value) return undefined
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'conservative' || normalized === 'moderate' || normalized === 'aggressive' || normalized === 'high-volume') {
+    return normalized
+  }
+  return undefined
+}
+
+function hasMultipleConfiguredConnections(): boolean {
+  const raw = process.env.WA_CONNECTION_IDS
+  if (!raw) return false
+  const ids = raw
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+  return new Set(ids).size > 1
+}
+
 /**
  * Configurações globais da aplicação derivadas das variáveis de ambiente.
  * Centraliza o acesso a parâmetros de conexão, banco de dados, segurança e comportamento do bot.
@@ -124,6 +145,10 @@ export const config = {
   get antibanLogging() {
     return readBoolean(process.env.WA_ANTIBAN_LOGGING, false)
   },
+  /** Preset base da lib baileys-antiban (WA_ANTIBAN_PRESET). */
+  get antibanPreset() {
+    return readAntiBanPreset(process.env.WA_ANTIBAN_PRESET)
+  },
   /** Diretório para salvar o estado persistente do Anti-Ban (WA_ANTIBAN_STATE_DIR). */
   get antibanStateDir() {
     return process.env.WA_ANTIBAN_STATE_DIR ?? 'data/antiban'
@@ -188,6 +213,14 @@ export const config = {
   get antibanInactivityThresholdHours() {
     return readOptionalNumber(process.env.WA_ANTIBAN_INACTIVITY_THRESHOLD_HOURS)
   },
+  /** Se deve aplicar perfil de grupo com limites mais conservadores (WA_ANTIBAN_GROUP_PROFILES_ENABLED). */
+  get antibanGroupProfilesEnabled() {
+    return readBoolean(process.env.WA_ANTIBAN_GROUP_PROFILES_ENABLED, true)
+  },
+  /** Multiplicador de limites para envios em grupos (WA_ANTIBAN_GROUP_MULTIPLIER). */
+  get antibanGroupMultiplier() {
+    return readOptionalNumber(process.env.WA_ANTIBAN_GROUP_MULTIPLIER)
+  },
   /** Habilita mitigação LID/PN (JID canonicalizer) no antiban (WA_ANTIBAN_JID_CANONICALIZER_ENABLED). */
   get antibanJidCanonicalizerEnabled() {
     return readBoolean(process.env.WA_ANTIBAN_JID_CANONICALIZER_ENABLED, true)
@@ -215,6 +248,63 @@ export const config = {
   /** Se o detector de sessão "surda" deve forçar auto-reconnect. */
   get antibanDeafSessionAutoReconnect() {
     return readBoolean(process.env.WA_ANTIBAN_DEAF_SESSION_AUTO_RECONNECT, true)
+  },
+  /** Habilita proteção de rate limit para operações administrativas de grupo. */
+  get antibanGroupOperationGuardEnabled() {
+    return readBoolean(process.env.WA_ANTIBAN_GROUP_OP_GUARD_ENABLED, true)
+  },
+  get antibanGroupAddMax() {
+    return readOptionalNumber(process.env.WA_ANTIBAN_GROUP_ADD_MAX)
+  },
+  get antibanGroupAddWindowMs() {
+    return readOptionalNumber(process.env.WA_ANTIBAN_GROUP_ADD_WINDOW_MS)
+  },
+  get antibanGroupRemoveMax() {
+    return readOptionalNumber(process.env.WA_ANTIBAN_GROUP_REMOVE_MAX)
+  },
+  get antibanGroupRemoveWindowMs() {
+    return readOptionalNumber(process.env.WA_ANTIBAN_GROUP_REMOVE_WINDOW_MS)
+  },
+  get antibanGroupCreateMax() {
+    return readOptionalNumber(process.env.WA_ANTIBAN_GROUP_CREATE_MAX)
+  },
+  get antibanGroupCreateWindowMs() {
+    return readOptionalNumber(process.env.WA_ANTIBAN_GROUP_CREATE_WINDOW_MS)
+  },
+  get antibanGroupInviteMax() {
+    return readOptionalNumber(process.env.WA_ANTIBAN_GROUP_INVITE_MAX)
+  },
+  get antibanGroupInviteWindowMs() {
+    return readOptionalNumber(process.env.WA_ANTIBAN_GROUP_INVITE_WINDOW_MS)
+  },
+  /** Habilita sinais de legitimidade da lib (typos, pausas de digitação e read gaps). */
+  get antibanLegitimacySignalsEnabled() {
+    return readBoolean(process.env.WA_ANTIBAN_LEGITIMACY_SIGNALS_ENABLED, true)
+  },
+  get antibanLegitimacyTyposEnabled() {
+    return readBoolean(process.env.WA_ANTIBAN_LEGITIMACY_TYPOS_ENABLED, true)
+  },
+  get antibanLegitimacyTypoProbability() {
+    return readOptionalNumber(process.env.WA_ANTIBAN_LEGITIMACY_TYPO_PROBABILITY)
+  },
+  get antibanLegitimacyReadGapsEnabled() {
+    return readBoolean(process.env.WA_ANTIBAN_LEGITIMACY_READ_GAPS_ENABLED, true)
+  },
+  get antibanLegitimacyTypingPausesEnabled() {
+    return readBoolean(process.env.WA_ANTIBAN_LEGITIMACY_TYPING_PAUSES_ENABLED, true)
+  },
+  /** Coordenação de limite compartilhado entre conexões/instâncias. */
+  get antibanInstanceCoordinatorEnabled() {
+    return readBoolean(process.env.WA_ANTIBAN_INSTANCE_COORDINATOR_ENABLED, hasMultipleConfiguredConnections())
+  },
+  get antibanInstanceCoordinatorPath() {
+    return process.env.WA_ANTIBAN_INSTANCE_COORDINATOR_PATH ?? 'data/antiban/instance-pool.json'
+  },
+  get antibanInstancePoolMaxPerMinute() {
+    return readOptionalNumber(process.env.WA_ANTIBAN_INSTANCE_POOL_MAX_PER_MINUTE)
+  },
+  get antibanInstancePoolMaxPerHour() {
+    return readOptionalNumber(process.env.WA_ANTIBAN_INSTANCE_POOL_MAX_PER_HOUR)
   },
   /** Habilita endpoint Prometheus /metrics para estatísticas do Anti-Ban. */
   get antibanMetricsEnabled() {
