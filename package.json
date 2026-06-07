@@ -1,5 +1,5 @@
 {
-  "name": "zyra",
+  "name": "@kaikybrofc/zyra",
   "version": "0.2.4",
   "description": "Motor de bot para WhatsApp com Baileys, focado em performance, resiliencia e multi-instancia.",
   "private": false,
@@ -14,6 +14,9 @@
     "url": "https://github.com/kaikybrofc/zyra/issues"
   },
   "homepage": "https://github.com/kaikybrofc/zyra#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": [
     "whatsapp",
     "bot",
