@@ -4,9 +4,10 @@ on:
   release:
     types: [published]
   workflow_dispatch:
-  push:
-    tags:
-      - 'v*'
+
+concurrency:
+  group: publish-gpr-${{ github.event.release.tag_name || github.ref_name || github.sha }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -18,15 +19,57 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Use Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           registry-url: https://npm.pkg.github.com
           scope: '@kaikybrofc'
           cache: npm
+
+      - name: Resolve release version
+        id: version
+        run: |
+          set -euo pipefail
+
+          if [ "${GITHUB_EVENT_NAME}" = "release" ]; then
+            RAW_TAG="${{ github.event.release.tag_name }}"
+          elif [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            RAW_TAG="${GITHUB_REF_NAME:-}"
+          else
+            RAW_TAG=""
+          fi
+
+          if [ -z "${RAW_TAG}" ]; then
+            RAW_TAG="v$(node -p "require('./package.json').version")"
+          fi
+
+          if ! printf '%s' "$RAW_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$'; then
+            echo "Tag de release invalida: $RAW_TAG"
+            exit 1
+          fi
+
+          PACKAGE_VERSION="${RAW_TAG#v}"
+          PACKAGE_NAME="$(node -p "require('./package.json').name")"
+
+          {
+            echo "tag=$RAW_TAG"
+            echo "package_version=$PACKAGE_VERSION"
+            echo "package_name=$PACKAGE_NAME"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate release tag matches package version
+        run: |
+          set -euo pipefail
+
+          FILE_VERSION="$(node -p "require('./package.json').version")"
+
+          if [ "$FILE_VERSION" != "${{ steps.version.outputs.package_version }}" ]; then
+            echo "Versao divergente: tag=${{ steps.version.outputs.tag }} package.json=$FILE_VERSION"
+            exit 1
+          fi
 
       - name: Install dependencies
         run: npm ci
@@ -36,6 +79,20 @@ jobs:
           npm run lint
           npm run build
           npm test
+          npm pack --dry-run
+
+      - name: Check GitHub Packages version availability
+        run: |
+          set -euo pipefail
+
+          PACKAGE_REF="${{ steps.version.outputs.package_name }}@${{ steps.version.outputs.package_version }}"
+
+          if npm view "$PACKAGE_REF" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+            echo "Versao ja publicada no GitHub Packages: $PACKAGE_REF"
+            exit 1
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish package
         run: npm publish
