@@ -54,6 +54,7 @@ const readNumberEnv = (key: string, fallback: number, options: NumberEnvOptions 
 
 const BATCH_SIZE = readNumberEnv('WA_BACKFILL_BATCH_SIZE', 500)
 const WORKER_INTERVAL_MS = readNumberEnv('WA_BACKFILL_INTERVAL_MS', 30000, { min: 5000 })
+const STALLED_BACKOFF_MS = readNumberEnv('WA_BACKFILL_STALLED_BACKOFF_MS', 5 * 60_000, { min: 5000 })
 const MAX_PASSES_PER_CYCLE = readNumberEnv('WA_BACKFILL_MAX_PASSES', 20, { min: 1 })
 
 const logAffected = (label: string, result: ResultSetHeader) => {
@@ -119,10 +120,63 @@ const BACKFILL_METRICS = [
   { key: 'wa_contacts_cache.display_name', query: `SELECT COUNT(*) AS count FROM wa_contacts_cache WHERE connection_id = ? AND (display_name IS NULL OR display_name = '')` },
   { key: 'chats.display_name', query: `SELECT COUNT(*) AS count FROM chats WHERE connection_id = ? AND (display_name IS NULL OR display_name = '')` },
   { key: 'chats.unread_count', query: `SELECT COUNT(*) AS count FROM chats WHERE connection_id = ? AND unread_count IS NULL` },
-  { key: 'users.display_name', query: `SELECT COUNT(*) AS count FROM users WHERE connection_id = ? AND (display_name IS NULL OR display_name = '')` },
+  {
+    key: 'users.display_name',
+    query: `SELECT COUNT(*) AS count
+            FROM users u
+            WHERE u.connection_id = ?
+              AND (u.display_name IS NULL OR u.display_name = '')
+              AND (
+                EXISTS (
+                  SELECT 1
+                  FROM user_aliases ua
+                  WHERE ua.connection_id = u.connection_id
+                    AND ua.user_id = u.id
+                    AND TRIM(COALESCE(ua.alias_value, '')) <> ''
+                )
+                OR EXISTS (
+                  SELECT 1
+                  FROM user_identifiers ui
+                  INNER JOIN wa_contacts_cache wc
+                    ON wc.connection_id = ui.connection_id
+                   AND wc.jid = ui.id_value
+                  WHERE ui.connection_id = u.connection_id
+                    AND ui.user_id = u.id
+                    AND ui.id_type = 'jid'
+                    AND TRIM(COALESCE(wc.display_name, '')) <> ''
+                )
+                OR EXISTS (
+                  SELECT 1
+                  FROM user_identifiers ui
+                  INNER JOIN chats c
+                    ON c.connection_id = ui.connection_id
+                   AND c.jid = ui.id_value
+                  WHERE ui.connection_id = u.connection_id
+                    AND ui.user_id = u.id
+                    AND ui.id_type = 'jid'
+                    AND c.jid NOT LIKE '%@g.us'
+                    AND c.jid NOT LIKE '%@newsletter'
+                    AND TRIM(COALESCE(c.display_name, '')) <> ''
+                )
+              )`,
+  },
   { key: 'messages.sender_user_id', query: `SELECT COUNT(*) AS count FROM messages WHERE connection_id = ? AND sender_user_id IS NULL` },
-  { key: 'messages.timestamp', query: `SELECT COUNT(*) AS count FROM messages WHERE connection_id = ? AND timestamp IS NULL` },
-  { key: 'messages.is_ephemeral', query: `SELECT COUNT(*) AS count FROM messages WHERE connection_id = ? AND is_ephemeral IS NULL` },
+  {
+    key: 'messages.timestamp',
+    query: `SELECT COUNT(*) AS count
+            FROM messages
+            WHERE connection_id = ?
+              AND timestamp IS NULL
+              AND JSON_EXTRACT(data_json, '$.messageTimestamp') IS NOT NULL`,
+  },
+  {
+    key: 'messages.is_ephemeral',
+    query: `SELECT COUNT(*) AS count
+            FROM messages
+            WHERE connection_id = ?
+              AND is_ephemeral IS NULL
+              AND JSON_TYPE(JSON_EXTRACT(data_json, '$.message')) = 'OBJECT'`,
+  },
   { key: 'message_events.actor_user_id', query: `SELECT COUNT(*) AS count FROM message_events WHERE connection_id = ? AND actor_user_id IS NULL` },
   { key: 'message_events.target_user_id', query: `SELECT COUNT(*) AS count FROM message_events WHERE connection_id = ? AND target_user_id IS NULL` },
   { key: 'message_events.message_db_id', query: `SELECT COUNT(*) AS count FROM message_events WHERE connection_id = ? AND message_db_id IS NULL` },
@@ -1107,8 +1161,14 @@ async function main() {
            AND id > ?
            AND (
              sender_user_id IS NULL
-             OR timestamp IS NULL
-             OR is_ephemeral IS NULL
+             OR (
+               timestamp IS NULL
+               AND JSON_EXTRACT(data_json, '$.messageTimestamp') IS NOT NULL
+             )
+             OR (
+               is_ephemeral IS NULL
+               AND JSON_TYPE(JSON_EXTRACT(data_json, '$.message')) = 'OBJECT'
+             )
            )
          ORDER BY id ASC
          LIMIT ${BATCH_SIZE}`,
@@ -1129,8 +1189,14 @@ async function main() {
            AND id > ?
            AND (
              sender_user_id IS NULL
-             OR timestamp IS NULL
-             OR is_ephemeral IS NULL
+             OR (
+               timestamp IS NULL
+               AND JSON_EXTRACT(data_json, '$.messageTimestamp') IS NOT NULL
+             )
+             OR (
+               is_ephemeral IS NULL
+               AND JSON_TYPE(JSON_EXTRACT(data_json, '$.message')) = 'OBJECT'
+             )
            )
          LIMIT ${fallbackBatchSize}`,
         [connectionId, lastCheckpoint]
@@ -1638,7 +1704,7 @@ async function main() {
     }
   }
 
-  async function runCycle() {
+  async function runCycle(): Promise<{ pending: number; progressed: boolean; stalled: boolean }> {
     const runStep = async (stepName: string, step: () => Promise<void>) => {
       const startedAt = Date.now()
       try {
@@ -1652,6 +1718,8 @@ async function main() {
     let pass = 0
     let finalBefore: Record<string, number> | null = null
     let finalAfter: Record<string, number> | null = null
+    let lastPending = 0
+    let lastProgressed = false
 
     while (pass < MAX_PASSES_PER_CYCLE) {
       pass += 1
@@ -1689,6 +1757,8 @@ async function main() {
       finalAfter = after
       const progressed = Object.keys(after).some((key) => (before[key] ?? 0) > (after[key] ?? 0))
       const pending = Object.values(after).reduce((sum, value) => sum + value, 0)
+      lastPending = pending
+      lastProgressed = progressed
 
       logger.info('backfill passe concluido', { connectionId, pass, pending, progressed })
       if (!progressed || pending === 0) break
@@ -1698,6 +1768,7 @@ async function main() {
     const after = finalAfter ?? (await collectBackfillMetrics())
     const deltas = Object.fromEntries(Object.keys(after).map((key) => [key, { before: before[key] ?? 0, after: after[key] ?? 0, delta: (before[key] ?? 0) - (after[key] ?? 0) }]))
     logger.info('backfill ciclo concluido', { connectionId, passes: pass, deltas })
+    return { pending: lastPending, progressed: lastProgressed, stalled: lastPending > 0 && !lastProgressed }
   }
 
   if (process.env.WA_BACKFILL_ONCE === 'true') {
@@ -1709,9 +1780,17 @@ async function main() {
   // Worker Loop
   while (true) {
     const start = Date.now()
-    await runCycle()
+    const cycle = await runCycle()
     const duration = Date.now() - start
-    const wait = Math.max(1000, WORKER_INTERVAL_MS - duration)
+    const targetInterval = cycle.stalled ? Math.max(WORKER_INTERVAL_MS, STALLED_BACKOFF_MS) : WORKER_INTERVAL_MS
+    const wait = Math.max(1000, targetInterval - duration)
+    if (cycle.stalled) {
+      logger.info('backfill sem progresso, aplicando backoff', {
+        connectionId,
+        pending: cycle.pending,
+        waitMs: wait,
+      })
+    }
     await new Promise((resolve) => setTimeout(resolve, wait))
   }
 }

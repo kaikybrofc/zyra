@@ -151,6 +151,7 @@ const validateEnvironment = (): ValidationResult => {
   ensurePositiveNumber('WA_ANTIBAN_INSTANCE_POOL_MAX_PER_HOUR')
   ensurePositiveNumber('WA_ROUTER_MAX_PENDING_PER_QUEUE')
   ensurePositiveNumber('WA_BACKFILL_INTERVAL_MS')
+  ensurePositiveNumber('WA_BACKFILL_STALLED_BACKOFF_MS')
   ensurePositiveNumber('WA_RECONNECT_BASE_DELAY_MS')
   ensurePositiveNumber('WA_RECONNECT_MAX_DELAY_MS')
   ensurePositiveNumber('WA_RECONNECT_MAX_ATTEMPTS')

@@ -30,7 +30,22 @@ type WebpConvInstance = {
 type WebpConvConstructor = new (options?: { quality?: number; transparent?: string }) => WebpConvInstance
 
 const require = createRequire(import.meta.url)
-const WebpConv = require('@caed0/webp-conv') as WebpConvConstructor
+let cachedWebpConv: WebpConvConstructor | null = null
+
+const loadWebpConv = (): WebpConvConstructor => {
+  if (cachedWebpConv) return cachedWebpConv
+
+  try {
+    cachedWebpConv = require('@caed0/webp-conv') as WebpConvConstructor
+    return cachedWebpConv
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (message.includes('canvas.node') || message.includes("Cannot find module '../build/Release/canvas.node'")) {
+      throw new Error('Conversao de sticker indisponivel neste runtime: dependencia nativa canvas ausente')
+    }
+    throw error
+  }
+}
 
 /**
  * Converte um sticker WEBP em `png` ou `gif` usando arquivos temporários no sistema.
@@ -52,6 +67,7 @@ export async function convertStickerWebp(buffer: Buffer, target: StickerConversi
 
   try {
     await fs.writeFile(inputPath, buffer)
+    const WebpConv = loadWebpConv()
     const converter = new WebpConv({ quality: 90, transparent: '0x000000' })
     await converter.convertJobs({
       input: inputPath,
