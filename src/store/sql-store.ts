@@ -27,6 +27,38 @@ const getStoreLogger = () => {
   return storeLoggerRef
 }
 
+const readPositiveInteger = (key: string, fallback: number): number => {
+  const value = Number(process.env[key])
+  if (!Number.isFinite(value)) return fallback
+  return Math.max(1, Math.trunc(value))
+}
+
+const createConcurrencyLimiter = (limit: number) => {
+  let active = 0
+  const queue: Array<() => void> = []
+
+  const runNext = () => {
+    if (active >= limit) return
+    const next = queue.shift()
+    if (!next) return
+    active++
+    next()
+  }
+
+  return async <T>(task: () => Promise<T>): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+      queue.push(() => {
+        task()
+          .then(resolve, reject)
+          .finally(() => {
+            active--
+            runNext()
+          })
+      })
+      runNext()
+    })
+}
+
 const LID_PN_CONFLICT_WINDOW_MS = 10 * 60 * 1000
 const LID_PN_REISOLATE_COOLDOWN_MS = 30 * 60 * 1000
 const lidPnPairLocks = new Map<string, Promise<void>>()
@@ -261,6 +293,7 @@ export type SqlStore = {
 export function createSqlStore(connectionId?: string): SqlStore {
   let selfJid: string | null = null
   const resolvedConnectionId = connectionId ?? config.connectionId ?? 'default'
+  const runLimited = createConcurrencyLimiter(readPositiveInteger('WA_SQL_STORE_CONCURRENCY', 8))
   if (!config.mysqlUrl) {
     return {
       enabled: false,
@@ -305,12 +338,14 @@ export function createSqlStore(connectionId?: string): SqlStore {
 
   const safe = async <T>(fn: (pool: NonNullable<ReturnType<typeof getMysqlPool>>) => Promise<T>, fallback: T, options?: { ensureConnection?: boolean; action?: string }): Promise<T> => {
     try {
-      const pool = getMysqlPool()
-      if (!pool) return fallback
-      if (options?.ensureConnection) {
-        await ensureMysqlConnection(pool, resolvedConnectionId)
-      }
-      return await fn(pool)
+      return await runLimited(async () => {
+        const pool = getMysqlPool()
+        if (!pool) return fallback
+        if (options?.ensureConnection) {
+          await ensureMysqlConnection(pool, resolvedConnectionId)
+        }
+        return fn(pool)
+      })
     } catch (error) {
       if (options?.action) {
         getStoreLogger().error('falha na persistencia sql', {

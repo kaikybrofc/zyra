@@ -92,11 +92,13 @@
   "overrides": {
     "vite": "8.0.16",
     "basic-ftp": "5.3.1",
+    "js-yaml": "4.2.0",
+    "protobufjs": "7.6.4",
     "baileys": {
       "libsignal": "$libsignal"
     },
     "pm2": {
-      "ws": "8.20.1",
+      "ws": "8.21.0",
       "@pm2/js-api": {
         "ws": "7.5.11"
       }

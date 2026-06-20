@@ -611,8 +611,8 @@ const buildQuery = (spec: DataSpec, url: URL, options: DataQueryOptions): { sql:
   const orderColumn = spec.orderColumns[options.orderBy] ?? spec.orderColumns[spec.defaultOrderBy] ?? Object.values(spec.orderColumns)[0]
   const limitPlusOne = options.limit + 1
   return {
-    sql: `${spec.select(options.includeData)} ${where} ORDER BY ${orderColumn} ${options.order} LIMIT ? OFFSET ?`,
-    params: [...parts.params, limitPlusOne, options.offset],
+    sql: `${spec.select(options.includeData)} ${where} ORDER BY ${orderColumn} ${options.order} LIMIT ${limitPlusOne} OFFSET ${options.offset}`,
+    params: parts.params,
   }
 }
 
