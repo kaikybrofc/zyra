@@ -61,7 +61,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@caed0/webp-conv": "^2.2.3",
     "@hapi/boom": "^10.0.1",
     "baileys": "npm:@whiskeysockets/baileys@7.0.0-rc13",
     "baileys-antiban": "^4.6.0",
