@@ -6,6 +6,8 @@ export type HistorySyncPolicy = {
 }
 
 const ALLOWED_HISTORY_SYNC_TYPES = new Set<proto.Message.HistorySyncType | null | undefined>([
+  null,
+  undefined,
   proto.Message.HistorySyncType.INITIAL_BOOTSTRAP,
   proto.Message.HistorySyncType.INITIAL_STATUS_V3,
   proto.Message.HistorySyncType.RECENT,
@@ -26,12 +28,13 @@ export const createHistorySyncPolicy = (creds: AuthenticationCreds): HistorySync
       allowHistorySyncOnce = true
     },
     shouldSyncHistoryMessage: (msg) => {
+      if (!allowHistorySyncOnce) {
+        return false
+      }
       if (!ALLOWED_HISTORY_SYNC_TYPES.has(msg.syncType)) {
         return false
       }
-      if (msg.syncType === proto.Message.HistorySyncType.RECENT && allowHistorySyncOnce) {
-        allowHistorySyncOnce = false
-      }
+      allowHistorySyncOnce = false
       return true
     },
   }
