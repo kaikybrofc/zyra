@@ -33,11 +33,11 @@ const createLogger = () => ({
   trace: vi.fn(),
 })
 
-const createMessage = (text: string, options: { chatId?: string; participant?: string } = {}) =>
+const createMessage = (text: string, options: { chatId?: string; participant?: string; fromMe?: boolean } = {}) =>
   ({
     key: {
       remoteJid: options.chatId ?? 'chat@s.whatsapp.net',
-      fromMe: false,
+      fromMe: options.fromMe ?? false,
       id: 'msg-1',
       participant: options.participant ?? 'user@s.whatsapp.net',
     },
@@ -292,6 +292,36 @@ describe('CommandProcessor', () => {
     await processor.process(sock as never, createMessage('ola') as never)
 
     expect(sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('permite comando enviado pelo proprio numero, mas ignora mensagem propria sem comando', async () => {
+    const logger = createLogger()
+    const sqlStore = {
+      enabled: false,
+      recordCommandLog: vi.fn(),
+    }
+    const sendMessage = vi.fn().mockResolvedValue(undefined)
+    const execute = vi.fn(async (ctx) => {
+      await ctx.reply('pong')
+    })
+
+    mockCommands.ping = { name: 'ping', description: 'ping', execute }
+
+    const sock = {
+      user: { id: 'bot@s.whatsapp.net' },
+      sendMessage,
+      groupMetadata: vi.fn(),
+      groupParticipantsUpdate: vi.fn(),
+    }
+
+    const { createCommandProcessor } = await import('../src/core/command-runtime/processor.ts')
+    const processor = createCommandProcessor({ logger, sqlStore: sqlStore as never })
+
+    await processor.process(sock as never, createMessage('ola', { fromMe: true }) as never)
+    await processor.process(sock as never, createMessage('!ping', { fromMe: true }) as never)
+
+    expect(execute).toHaveBeenCalledTimes(1)
+    expect(sendMessage).toHaveBeenCalledWith('chat@s.whatsapp.net', { text: 'pong' }, expect.any(Object))
   })
 
   it('suporta prefixo customizado via config', async () => {

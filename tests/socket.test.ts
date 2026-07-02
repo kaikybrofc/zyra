@@ -20,6 +20,8 @@ const mockConfig = {
   mysqlUrl: 'mysql://test',
   redisUrl: 'redis://test',
   connectionId: 'default',
+  historySyncInitialBootstrap: false,
+  historySyncOnNewLogin: false,
   antibanEnabled: false,
   antibanStateSaveIntervalMs: 300000,
 }
@@ -376,7 +378,10 @@ describe('socket', () => {
       connectionId: 'conn',
     })
     expect(createBaileysLoggerMock).toHaveBeenCalledWith(logger, { connectionId: 'conn', component: 'baileys' })
-    expect(createHistorySyncPolicyMock).toHaveBeenCalledWith(state.creds)
+    expect(createHistorySyncPolicyMock).toHaveBeenCalledWith(state.creds, {
+      allowInitialBootstrap: false,
+      allowNewLogin: false,
+    })
     expect(makeWASocketMock).toHaveBeenCalledTimes(1)
     const socketOptions = makeWASocketMock.mock.calls[0]?.[0]
     expect(socketOptions).toEqual(

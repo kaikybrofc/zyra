@@ -226,7 +226,10 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
   const { state, saveCreds } = await resolveAuthState(connectionId, logger)
   const version = await resolveBaileysVersion(logger)
 
-  const historySyncPolicy = createHistorySyncPolicy(state.creds)
+  const historySyncPolicy = createHistorySyncPolicy(state.creds, {
+    allowInitialBootstrap: config.historySyncInitialBootstrap,
+    allowNewLogin: config.historySyncOnNewLogin,
+  })
 
   const rawSock = makeWASocket({
     auth: state,

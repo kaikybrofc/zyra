@@ -633,8 +633,10 @@ export function registerEvents({ sock, logger, reconnect, connectionId, onQrCode
               logger.warn('falha ao sincronizar blocklist', { err: error })
             }
           }
-          const groupsSnapshot = await syncGroupsOnConnect()
-          await syncCommunitiesOnConnect(groupsSnapshot)
+          if (config.groupSyncOnConnect) {
+            const groupsSnapshot = await syncGroupsOnConnect()
+            await syncCommunitiesOnConnect(groupsSnapshot)
+          }
         })()
       }
     },
@@ -753,10 +755,14 @@ export function registerEvents({ sock, logger, reconnect, connectionId, onQrCode
       }
     },
     'messages.upsert': async (event) => {
-      logger.info('messages.upsert recebido', {
+      const isAppendReplay = event.type === 'append' && !config.appendMessageImportEnabled
+      logger[isAppendReplay ? 'debug' : 'info'](isAppendReplay ? 'messages.upsert append ignorado' : 'messages.upsert recebido', {
         count: event.messages.length,
         type: event.type,
       })
+      if (isAppendReplay) {
+        return
+      }
       try {
         if (event.type === 'notify') {
           await handleIncomingMessages(sock, event.messages, logger, connectionId, sqlStore)

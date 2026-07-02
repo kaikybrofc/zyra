@@ -225,7 +225,6 @@ const extractQuotedStanzaIdFromMessage = (message: proto.IWebMessageInfo): strin
  */
 export const buildIncomingCommandEnvelope = (sock: WASocket, message: proto.IWebMessageInfo): IncomingCommandEnvelope | null => {
   if (!message.message || !message.key) return null
-  if (message.key.fromMe && !config.allowOwnMessages) return null
 
   const chatId = message.key.remoteJid
   if (!chatId) return null
@@ -233,6 +232,7 @@ export const buildIncomingCommandEnvelope = (sock: WASocket, message: proto.IWeb
   const text = getMessageText(message)?.trim() ?? ''
   const prefix = config.commandPrefix || '!'
   const isCommand = text.startsWith(prefix)
+  if (message.key.fromMe && !config.allowOwnMessages && !isCommand) return null
   const commandTokens = isCommand ? text.slice(prefix.length).trim().split(/\s+/).filter(Boolean) : []
   const [commandName, ...commandArgs] = commandTokens
   const { mentionedJids, quotedSender } = extractTargetHintsFromMessage(message)

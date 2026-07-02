@@ -1,10 +1,11 @@
 import { EventEmitter } from 'node:events'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let createCacheStoreMock: ReturnType<typeof vi.fn>
 let createExtendedCacheStoreMock: ReturnType<typeof vi.fn>
 let createRedisStoreMock: ReturnType<typeof vi.fn>
 let createSqlStoreMock: ReturnType<typeof vi.fn>
+const originalHistoryImportEnabled = process.env.WA_HISTORY_IMPORT_ENABLED
 
 vi.mock('../src/store/cache-store.js', () => ({
   createCacheStore: (...args: unknown[]) => createCacheStoreMock(...args),
@@ -90,12 +91,21 @@ const createSqlStoreStub = () => ({
 beforeEach(() => {
   vi.resetModules()
   vi.clearAllMocks()
+  process.env.WA_HISTORY_IMPORT_ENABLED = 'true'
   createCacheStoreMock = vi.fn(() => createCache())
   createExtendedCacheStoreMock = vi.fn(() => createExtendedCache())
   createRedisStoreMock = vi.fn(() => createRedisStoreStub())
   createSqlStoreMock = vi.fn(() => createSqlStoreStub())
   vi.spyOn(console, 'log').mockImplementation(() => undefined)
   vi.spyOn(console, 'error').mockImplementation(() => undefined)
+})
+
+afterEach(() => {
+  if (originalHistoryImportEnabled === undefined) {
+    delete process.env.WA_HISTORY_IMPORT_ENABLED
+  } else {
+    process.env.WA_HISTORY_IMPORT_ENABLED = originalHistoryImportEnabled
+  }
 })
 
 describe('baileys-store', () => {
@@ -146,6 +156,75 @@ describe('baileys-store', () => {
     expect(await store.getGroupMetadata('group@g.us')).toEqual(expect.objectContaining({ id: 'group@g.us', subject: 'Grupo' }))
     expect(await store.lidMapping.getLidForPn('551199')).toBe('551199@lid')
     expect(await store.lidMapping.getLidForPn('999999')).toBe('999999@lid')
+  })
+
+  it('nao importa chats, contatos e mensagens do history sync quando desabilitado, mas preserva mappings', async () => {
+    process.env.WA_HISTORY_IMPORT_ENABLED = 'false'
+    vi.resetModules()
+
+    const redisStore = createRedisStoreStub()
+    const sqlStore = createSqlStoreStub()
+    createRedisStoreMock.mockReturnValue(redisStore)
+    createSqlStoreMock.mockReturnValue(sqlStore)
+
+    const { createBaileysStore } = await import('../src/store/baileys-store.ts')
+    const store = createBaileysStore('tenant')
+    const ev = new EventEmitter()
+    store.bind(ev as never)
+
+    ev.emit('messaging-history.set', {
+      chats: [{ id: 'chat@s.whatsapp.net', unreadCount: 1 }],
+      contacts: [{ id: 'user@s.whatsapp.net', name: 'User' }],
+      messages: [
+        {
+          key: {
+            remoteJid: 'chat@s.whatsapp.net',
+            id: 'msg-1',
+            fromMe: false,
+            participant: 'user@s.whatsapp.net',
+          },
+          message: { conversation: 'oi' },
+        },
+      ],
+      lidPnMappings: [{ lid: '551199@lid', pn: '551199' }],
+    })
+
+    expect(redisStore.setChat).not.toHaveBeenCalled()
+    expect(sqlStore.setContact).not.toHaveBeenCalled()
+    expect(redisStore.setMessage).not.toHaveBeenCalled()
+    expect(redisStore.setLidMapping).toHaveBeenCalledWith({ lid: '551199@lid', pn: '551199' })
+    expect(sqlStore.setLidMapping).toHaveBeenCalledWith({ lid: '551199@lid', pn: '551199' })
+    expect(await store.getMessage({ remoteJid: 'chat@s.whatsapp.net', id: 'msg-1', fromMe: false, participant: 'user@s.whatsapp.net' } as never)).toBeUndefined()
+  })
+
+  it('ignora messages.upsert append por padrao para evitar replay de historico', async () => {
+    const redisStore = createRedisStoreStub()
+    const sqlStore = createSqlStoreStub()
+    createRedisStoreMock.mockReturnValue(redisStore)
+    createSqlStoreMock.mockReturnValue(sqlStore)
+
+    const { createBaileysStore } = await import('../src/store/baileys-store.ts')
+    const store = createBaileysStore('tenant')
+    const ev = new EventEmitter()
+    store.bind(ev as never)
+
+    const message = {
+      key: {
+        remoteJid: 'chat@s.whatsapp.net',
+        id: 'append-1',
+        fromMe: false,
+      },
+      message: { conversation: 'historico' },
+    }
+
+    ev.emit('messages.upsert', {
+      type: 'append',
+      messages: [message],
+    })
+
+    expect(redisStore.setMessage).not.toHaveBeenCalled()
+    expect(sqlStore.setMessage).not.toHaveBeenCalled()
+    expect(await store.getMessage(message.key as never)).toBeUndefined()
   })
 
   it('faz fallback para redis e sql quando mensagem ou grupo nao estao em memoria', async () => {
