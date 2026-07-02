@@ -20,6 +20,11 @@ module.exports = {
         WA_API_HOST: '127.0.0.1',
         WA_API_PORT: '3021',
         WA_BOOTSTRAP_CONNECTIONS_ENABLED: 'true',
+        WA_HISTORY_SYNC_INITIAL_BOOTSTRAP: 'true',
+        WA_HISTORY_SYNC_ON_NEW_LOGIN: 'true',
+        WA_HISTORY_IMPORT_ENABLED: 'false',
+        WA_GROUP_SYNC_ON_CONNECT: 'false',
+        WA_APPEND_MESSAGE_IMPORT_ENABLED: 'false',
         WA_WEBHOOK_RETRY_ENABLED: 'false',
         WA_WEBHOOK_OUTBOX_ENABLED: 'false',
         // Para subir várias sessões fixas no mesmo processo, injete WA_CONNECTION_IDS via ambiente.

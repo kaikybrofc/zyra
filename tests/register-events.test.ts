@@ -342,5 +342,33 @@ describe('registerEvents messages.upsert', () => {
     await new Promise((resolve) => setImmediate(resolve))
 
     expect(handleIncomingMessagesMock).not.toHaveBeenCalled()
+    expect(sqlStore.recordEvent).not.toHaveBeenCalled()
+  })
+})
+
+describe('registerEvents connection.update', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('nao sincroniza snapshot de grupos no open quando WA_GROUP_SYNC_ON_CONNECT esta desabilitado', async () => {
+    createSqlStoreMock.mockReturnValue({ enabled: false })
+
+    const { registerEvents } = await import('../src/events/register.ts')
+    const sock = {
+      ev: new EventEmitter(),
+      user: { id: 'bot@s.whatsapp.net' },
+      groupFetchAllParticipating: vi.fn(async () => ({})),
+      communityFetchAllParticipating: vi.fn(async () => ({})),
+    }
+    const logger = createLogger()
+
+    registerEvents({ sock: sock as never, logger: logger as never, reconnect: vi.fn(), connectionId: 'conn' })
+
+    sock.ev.emit('connection.update', { connection: 'open' })
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(sock.groupFetchAllParticipating).not.toHaveBeenCalled()
+    expect(sock.communityFetchAllParticipating).not.toHaveBeenCalled()
   })
 })

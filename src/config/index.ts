@@ -133,6 +133,26 @@ export const config = {
   get ignoreStatusBroadcast() {
     return readBoolean(process.env.WA_IGNORE_STATUS_BROADCAST, true)
   },
+  /** Se deve permitir ao Baileys processar o sync técnico inicial necessário para mappings LID/PN (WA_HISTORY_SYNC_INITIAL_BOOTSTRAP). */
+  get historySyncInitialBootstrap() {
+    return readBoolean(process.env.WA_HISTORY_SYNC_INITIAL_BOOTSTRAP, true)
+  },
+  /** Se deve permitir ao Baileys processar o sync técnico após novo login/pareamento (WA_HISTORY_SYNC_ON_NEW_LOGIN). */
+  get historySyncOnNewLogin() {
+    return readBoolean(process.env.WA_HISTORY_SYNC_ON_NEW_LOGIN, true)
+  },
+  /** Se deve importar chats/contatos/mensagens recebidos via messaging-history.set (WA_HISTORY_IMPORT_ENABLED). */
+  get historyImportEnabled() {
+    return readBoolean(process.env.WA_HISTORY_IMPORT_ENABLED, false)
+  },
+  /** Se deve buscar e persistir snapshot de grupos assim que a conexão abre (WA_GROUP_SYNC_ON_CONNECT). */
+  get groupSyncOnConnect() {
+    return readBoolean(process.env.WA_GROUP_SYNC_ON_CONNECT, false)
+  },
+  /** Se deve persistir messages.upsert type=append, normalmente replay/histórico offline (WA_APPEND_MESSAGE_IMPORT_ENABLED). */
+  get appendMessageImportEnabled() {
+    return readBoolean(process.env.WA_APPEND_MESSAGE_IMPORT_ENABLED, false)
+  },
   /** Se deve persistir as chaves de autenticação no disco mesmo usando Redis/MySQL (WA_AUTH_PERSIST_KEYS). */
   get authPersistKeysOnDisk() {
     return readBoolean(process.env.WA_AUTH_PERSIST_KEYS, false)

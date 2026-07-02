@@ -204,32 +204,34 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
 
   const bind = (ev: BaileysEventEmitter) => {
     ev.on('messaging-history.set', ({ chats: chatList, contacts: contactList, messages: messageList, lidPnMappings }) => {
-      for (const chat of chatList) {
-        const chatId = normalizeJid(chat.id)
-        if (!chatId) continue
-        const normalizedChat = chat.id === chatId ? chat : { ...chat, id: chatId }
-        mergeById(chats, normalizedChat)
-        if (redisStore.enabled) {
-          void redisStore.setChat(chatId, normalizedChat)
+      if (config.historyImportEnabled) {
+        for (const chat of chatList) {
+          const chatId = normalizeJid(chat.id)
+          if (!chatId) continue
+          const normalizedChat = chat.id === chatId ? chat : { ...chat, id: chatId }
+          mergeById(chats, normalizedChat)
+          if (redisStore.enabled) {
+            void redisStore.setChat(chatId, normalizedChat)
+          }
+          if (sqlStore.enabled) {
+            void sqlStore.setChat(chatId, normalizedChat)
+          }
         }
-        if (sqlStore.enabled) {
-          void sqlStore.setChat(chatId, normalizedChat)
+        for (const contact of contactList) {
+          const contactId = normalizeJid(contact.id)
+          if (!contactId) continue
+          const normalizedContact = contact.id === contactId ? contact : { ...contact, id: contactId }
+          mergeById(contacts, normalizedContact)
+          if (redisStore.enabled) {
+            void redisStore.setContact(contactId, normalizedContact)
+          }
+          if (sqlStore.enabled) {
+            void sqlStore.setContact(contactId, normalizedContact)
+          }
         }
-      }
-      for (const contact of contactList) {
-        const contactId = normalizeJid(contact.id)
-        if (!contactId) continue
-        const normalizedContact = contact.id === contactId ? contact : { ...contact, id: contactId }
-        mergeById(contacts, normalizedContact)
-        if (redisStore.enabled) {
-          void redisStore.setContact(contactId, normalizedContact)
+        for (const message of messageList) {
+          upsertMessage(message)
         }
-        if (sqlStore.enabled) {
-          void sqlStore.setContact(contactId, normalizedContact)
-        }
-      }
-      for (const message of messageList) {
-        upsertMessage(message)
       }
       if (lidPnMappings?.length) {
         for (const mapping of lidPnMappings) {
@@ -456,7 +458,10 @@ export function createBaileysStore(connectionId?: string): BaileysStore {
       }
     })
 
-    ev.on('messages.upsert', ({ messages: messageList }) => {
+    ev.on('messages.upsert', ({ messages: messageList, type }) => {
+      if (type === 'append' && !config.appendMessageImportEnabled) {
+        return
+      }
       for (const message of messageList) {
         upsertMessage(message)
         if (sqlStore.enabled) {
