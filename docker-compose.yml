@@ -17,7 +17,20 @@ services:
       WA_WEBHOOK_RETRY_ENABLED: 'false'
       WA_WEBHOOK_OUTBOX_ENABLED: 'false'
       WA_ANTIBAN_ENABLED: 'true'
-      WA_ANTIBAN_METRICS_ENABLED: 'true'
+      WA_ANTIBAN_METRICS_ENABLED: 'false'
+      WA_MYSQL_CONNECTION_LIMIT: '5'
+      WA_MYSQL_MAX_IDLE: '2'
+      WA_MYSQL_QUEUE_LIMIT: '100'
+      WA_SQL_STORE_CONCURRENCY: '2'
+      WA_SQL_EVENT_LOG_ENABLED: 'false'
+      WA_SQL_MESSAGE_EVENTS_ENABLED: 'false'
+      WA_SIGNAL_KEYS_CHUNK: '100'
+      WA_AUTH_DISK_CONCURRENCY: '4'
+      WA_MEDIA_AUTO_DOWNLOAD: 'false'
+      WA_MEDIA_MAX_BYTES: '536870912'
+      WA_COMMAND_TIMEOUT_MS: '30000'
+      WA_ROUTER_MAX_PENDING_PER_QUEUE: '100'
+      WA_MAX_CACHED_MESSAGES: '1000'
     depends_on:
       mysql:
         condition: service_healthy
@@ -38,10 +51,14 @@ services:
       MYSQL_URL: mysql://zyra:zyra@mysql:3306/zyra
       WA_API_ENABLED: 'true'
       WA_BOOTSTRAP_CONNECTIONS_ENABLED: 'false'
-      WA_WEBHOOK_RETRY_ENABLED: 'true'
-      WA_WEBHOOK_OUTBOX_ENABLED: 'true'
+      WA_WEBHOOK_RETRY_ENABLED: 'false'
+      WA_WEBHOOK_OUTBOX_ENABLED: 'false'
+      WA_WEBHOOK_TIMEOUT_MS: '5000'
+      WA_WEBHOOK_MAX_ATTEMPTS: '2'
+      WA_WEBHOOK_OUTBOX_BATCH_SIZE: '10'
       WA_API_HOST: 0.0.0.0
       WA_API_PORT: '3000'
+      WA_API_MEDIA_MAX_BYTES: '5242880'
     ports:
       - '3000:3000'
     depends_on:
@@ -62,7 +79,10 @@ services:
       WA_CONNECTION_ID: default
       MYSQL_URL: mysql://zyra:zyra@mysql:3306/zyra
       WA_BACKFILL_ONCE: 'false'
-      WA_BACKFILL_INTERVAL_MS: '30000'
+      WA_BACKFILL_INTERVAL_MS: '300000'
+      WA_BACKFILL_BATCH_SIZE: '100'
+      WA_BACKFILL_MAX_PASSES: '5'
+      WA_BACKFILL_MAX_FAILURES: '3'
     depends_on:
       mysql:
         condition: service_healthy

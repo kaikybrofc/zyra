@@ -30,6 +30,12 @@ type ApiServerHandle = {
   stop: () => Promise<void>
 }
 
+const API_PORT_FALLBACK_ATTEMPTS = 20
+
+const isAddressInUseError = (error: unknown): boolean => {
+  return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === 'EADDRINUSE'
+}
+
 /**
  * Inicializa o servidor HTTP da API REST.
  *
@@ -124,9 +130,28 @@ export const startApiServer = ({ logger }: StartApiServerOptions): ApiServerHand
   })
 
   const host = config.apiHost
-  const port = config.apiPort
+  const initialPort = config.apiPort
+  let port = initialPort
+  let fallbackAttempts = 0
+  let started = false
 
   server.on('error', (error) => {
+    if (!started && isAddressInUseError(error) && fallbackAttempts < API_PORT_FALLBACK_ATTEMPTS) {
+      const occupiedPort = port
+      port += 1
+      fallbackAttempts += 1
+      logger.warn('porta da API REST ocupada; tentando próxima porta disponível', {
+        err: error,
+        host,
+        occupiedPort,
+        nextPort: port,
+        attempt: fallbackAttempts,
+        maxAttempts: API_PORT_FALLBACK_ATTEMPTS,
+      })
+      server.listen(port, host)
+      return
+    }
+
     logger.error('falha ao iniciar servidor HTTP da API REST', {
       err: error,
       host,
@@ -136,9 +161,13 @@ export const startApiServer = ({ logger }: StartApiServerOptions): ApiServerHand
   })
 
   server.listen(port, host, () => {
+    started = true
+    process.env.WA_API_PORT = String(port)
     logger.info('servidor HTTP da API REST iniciado', {
       host,
       port,
+      requestedPort: initialPort,
+      fallback: port !== initialPort,
     })
   })
 

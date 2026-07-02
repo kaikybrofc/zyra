@@ -1667,6 +1667,7 @@ export function createSqlStore(connectionId?: string): SqlStore {
     recordMessageEvent: async (event) =>
       safe(
         async (pool) => {
+          if (!config.sqlMessageEventsEnabled) return
           const chatJid = normalizeJid(event.key.chatJid)
           const messageId = normalizeMessageId(event.key.messageId)
           const eventType = normalizeEventType(event.type, MAX_LENGTHS.eventTypeShort)

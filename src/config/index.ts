@@ -102,6 +102,14 @@ export const config = {
   get mysqlRetryIntervalMs() {
     return readNumber(process.env.WA_MYSQL_RETRY_MS, 60_000)
   },
+  /** Habilita auditoria genérica de eventos Baileys na tabela events_log (WA_SQL_EVENT_LOG_ENABLED). */
+  get sqlEventLogEnabled() {
+    return readBoolean(process.env.WA_SQL_EVENT_LOG_ENABLED, true)
+  },
+  /** Habilita eventos detalhados de mensagem na tabela message_events (WA_SQL_MESSAGE_EVENTS_ENABLED). */
+  get sqlMessageEventsEnabled() {
+    return readBoolean(process.env.WA_SQL_MESSAGE_EVENTS_ENABLED, true)
+  },
   /** Lista explícita de conexões a subir no processo (WA_CONNECTION_IDS em CSV). */
   get connectionIds() {
     const raw = process.env.WA_CONNECTION_IDS

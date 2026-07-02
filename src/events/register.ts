@@ -179,6 +179,7 @@ export function registerEvents({ sock, logger, reconnect, connectionId, onQrCode
    */
   const recordEvent = (event: keyof BaileysEventMap, meta: Record<string, unknown>, context?: EventContext) => {
     if (!sqlStore.enabled) return
+    if (!config.sqlEventLogEnabled) return
     void sqlStore.recordEvent({ type: String(event), data: meta, ...context })
   }
 

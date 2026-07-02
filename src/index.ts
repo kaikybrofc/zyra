@@ -113,6 +113,8 @@ const validateEnvironment = (): ValidationResult => {
   ensureBoolean('WA_BOOTSTRAP_CONNECTIONS_ENABLED')
   ensureBoolean('WA_WEBHOOK_RETRY_ENABLED')
   ensureBoolean('WA_WEBHOOK_OUTBOX_ENABLED')
+  ensureBoolean('WA_SQL_EVENT_LOG_ENABLED')
+  ensureBoolean('WA_SQL_MESSAGE_EVENTS_ENABLED')
 
   const mysqlUrl = process.env.MYSQL_URL ?? process.env.WA_DB_URL
   ensureUrl('MYSQL_URL', mysqlUrl, {

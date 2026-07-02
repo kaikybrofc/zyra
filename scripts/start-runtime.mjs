@@ -19,8 +19,8 @@ switch (mode) {
   case 'api-webhook':
     setDefaultEnv('WA_API_ENABLED', 'true')
     setDefaultEnv('WA_BOOTSTRAP_CONNECTIONS_ENABLED', 'false')
-    setDefaultEnv('WA_WEBHOOK_RETRY_ENABLED', 'true')
-    setDefaultEnv('WA_WEBHOOK_OUTBOX_ENABLED', 'true')
+    setDefaultEnv('WA_WEBHOOK_RETRY_ENABLED', 'false')
+    setDefaultEnv('WA_WEBHOOK_OUTBOX_ENABLED', 'false')
     break
   case 'stateless':
     setDefaultEnv('WA_API_ENABLED', 'false')
