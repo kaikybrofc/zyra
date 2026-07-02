@@ -7,6 +7,7 @@ const handleIncomingMessagesMock = vi.fn()
 vi.mock('../src/config/index.js', () => ({
   config: {
     printQRInTerminal: false,
+    sqlEventLogEnabled: true,
   },
 }))
 

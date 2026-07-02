@@ -6,6 +6,8 @@ let ensureMysqlConnectionMock: ReturnType<typeof vi.fn>
 const mockConfig = {
   mysqlUrl: null as string | null,
   connectionId: 'default',
+  sqlEventLogEnabled: true,
+  sqlMessageEventsEnabled: true,
 }
 
 vi.mock('../src/config/index.js', () => ({ config: mockConfig }))
@@ -58,6 +60,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockConfig.mysqlUrl = null
   mockConfig.connectionId = 'default'
+  mockConfig.sqlEventLogEnabled = true
+  mockConfig.sqlMessageEventsEnabled = true
   getMysqlPoolMock = vi.fn(() => null)
   ensureMysqlConnectionMock = vi.fn().mockResolvedValue(undefined)
   getMessageTextMock.mockReset().mockReturnValue(null)
