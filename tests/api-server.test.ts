@@ -27,6 +27,7 @@ const mockConfig = {
 let serverHandler: RequestHandler | null = null
 const serverListenMock = vi.fn((_port: number, _host: string, cb?: () => void) => cb?.())
 const serverCloseMock = vi.fn((cb?: (error?: Error | null) => void) => cb?.(null))
+const serverOnMock = vi.fn()
 
 const handleConnectionsRoutesMock = vi.fn(async () => false)
 const handleMessagesRoutesMock = vi.fn(async () => false)
@@ -41,6 +42,7 @@ vi.mock('node:http', () => ({
   createServer: (handler: RequestHandler) => {
     serverHandler = handler
     return {
+      on: (...args: Parameters<typeof serverOnMock>) => serverOnMock(...args),
       listen: (...args: Parameters<typeof serverListenMock>) => serverListenMock(...args),
       close: (...args: Parameters<typeof serverCloseMock>) => serverCloseMock(...args),
     }

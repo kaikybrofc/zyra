@@ -326,10 +326,10 @@ npm run pm2:logs
 O `ecosystem.config.cjs` inicia:
 
 - `zyra`: processo de conexões/sockets, com API habilitada em `127.0.0.1:3021` por padrão do PM2
-- `zyra-api-webhook`: control-plane HTTP, dashboard e workers de webhook, sem gerenciar sockets locais; usa `WA_API_PORT` do `.env` ou `3000` quando não definido
+- `zyra-api-webhook`: control-plane HTTP, dashboard e workers de webhook, sem gerenciar sockets locais; usa `127.0.0.1:3020` por padrão do PM2
 - `zyra-backfill`: worker contínuo de backfill do banco
 
-Como o `.env` é carregado no boot, valores que não estiverem sobrescritos no `ecosystem.config.cjs` continuam vindo do `.env`. Mantenha o `WA_API_PORT` do `.env` diferente de `3021` se for usar o processo `zyra-api-webhook` junto com o processo `zyra`.
+Como o `.env` é carregado no boot, valores que não estiverem sobrescritos no `ecosystem.config.cjs` continuam vindo do `.env`. No PM2, as portas da API são sobrescritas para evitar conflito com serviços que já usam `3000`.
 
 Após validar a subida:
 
@@ -735,7 +735,7 @@ Notas operacionais:
 
 - o processo `zyra` pode manter múltiplas sessões ativas ao mesmo tempo
 - o processo `zyra-api-webhook` roda com `WA_BOOTSTRAP_CONNECTIONS_ENABLED=false` e atua como control-plane HTTP
-- no PM2, `zyra` força `WA_API_PORT=3021`; deixe o `WA_API_PORT` do `.env` em outra porta para o `zyra-api-webhook`, como `3000`
+- no PM2, `zyra` força `WA_API_PORT=3021` e `zyra-api-webhook` força `WA_API_PORT=3020`
 - prefira `WA_CONNECTION_IDS` quando quiser controle explícito do conjunto de sessões
 - prefira descoberta via MySQL quando `auth_creds` já for a fonte de verdade das sessões persistidas
 - para parear uma nova conta via QR no terminal, use `npm run session:pair -- --connection <id>`

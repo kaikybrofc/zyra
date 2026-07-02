@@ -1,4 +1,5 @@
 import { createServer, type Server } from 'node:http'
+import process from 'node:process'
 import { config } from '../config/index.js'
 import type { AppLogger } from '../observability/logger.js'
 import { parseUrl, sendError } from './http.js'
@@ -122,10 +123,22 @@ export const startApiServer = ({ logger }: StartApiServerOptions): ApiServerHand
     }
   })
 
-  server.listen(config.apiPort, config.apiHost, () => {
+  const host = config.apiHost
+  const port = config.apiPort
+
+  server.on('error', (error) => {
+    logger.error('falha ao iniciar servidor HTTP da API REST', {
+      err: error,
+      host,
+      port,
+    })
+    process.exit(1)
+  })
+
+  server.listen(port, host, () => {
     logger.info('servidor HTTP da API REST iniciado', {
-      host: config.apiHost,
-      port: config.apiPort,
+      host,
+      port,
     })
   })
 
