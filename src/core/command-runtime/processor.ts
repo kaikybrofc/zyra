@@ -1,4 +1,4 @@
-import { type WAMessage, type WASocket, type proto } from 'baileys'
+import { downloadContentFromMessage, type WAMessage, type WASocket, type proto } from 'baileys'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import linkify from 'linkifyjs'
@@ -10,7 +10,7 @@ import { getMessageText, getNormalizedMessage } from '../../utils/message.js'
 import { resolveStickerSourceMedia as resolveStickerSourceMediaFromMessage } from '../../utils/sticker.js'
 import { parseAntilinkDomain } from '../../utils/antilink-domain.js'
 import { createCommandAdminActions } from './admin.js'
-import { CommandContext, type CommandSendOptions } from './context.js'
+import { CommandContext, type CommandMediaSource, type CommandSendOptions } from './context.js'
 import { groupFeatureStore } from '../../store/group-feature-store.js'
 
 const ANSI_RESET = '\x1b[0m'
@@ -28,6 +28,7 @@ const INTERNAL_WHATSAPP_HOSTS = new Set(['whatsapp.net', 'cdn.whatsapp.net'])
 const PLAY_COMMAND_ANTILINK_BYPASS_COMMANDS = new Set(['play', 'playvid'])
 const PLAY_COMMAND_ANTILINK_BYPASS_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtu.be'])
 const MEDIA_TYPES = new Set(['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage', 'ptvMessage', 'contactMessage', 'contactsArrayMessage', 'locationMessage', 'liveLocationMessage'])
+const DOWNLOADABLE_COMMAND_MEDIA_TYPES = new Set(['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage'])
 
 /**
  * Envelope de comando recebido, contendo dados extraídos e normalizados da mensagem.
@@ -215,6 +216,27 @@ const extractQuotedStanzaIdFromMessage = (message: proto.IWebMessageInfo): strin
   if (!content || !type) return null
   const node = (content as Record<string, unknown>)[type] as { contextInfo?: proto.IContextInfo } | null | undefined
   return node?.contextInfo?.stanzaId ?? null
+}
+
+const downloadCommandMediaFromMessage = async (message: WAMessage): Promise<CommandMediaSource | null> => {
+  const { content, type } = getNormalizedMessage(message)
+  if (!content || !type || !DOWNLOADABLE_COMMAND_MEDIA_TYPES.has(type)) return null
+  const node = content[type] as { mimetype?: string | null; fileName?: string | null } | null | undefined
+  if (!node) return null
+  const mediaType = type === 'imageMessage' ? 'image' : type === 'videoMessage' ? 'video' : type === 'audioMessage' ? 'audio' : 'document'
+  const chunks: Buffer[] = []
+  const stream = await downloadContentFromMessage(node as never, mediaType)
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  }
+  const buffer = Buffer.concat(chunks)
+  if (!buffer.length) return null
+  return {
+    buffer,
+    type: mediaType,
+    mimeType: node.mimetype ?? null,
+    fileName: node.fileName ?? null,
+  }
 }
 
 /**
@@ -416,6 +438,15 @@ const createRuntimeContext = (context: IncomingCommandEnvelope, logger: AppLogge
       const fallbackSource = await resolveStickerSourceMediaFromMessage(fallbackMessage)
       if (fallbackSource) return fallbackSource
       return resolveStickerSourceFromLocalCache(fallbackMessage)
+    },
+    resolveMediaSource: async () => {
+      const directSource = await downloadCommandMediaFromMessage(context.message)
+      if (directSource) return directSource
+      const quotedStanzaId = extractQuotedStanzaIdFromMessage(context.message)
+      if (!quotedStanzaId) return null
+      const quotedMessage = getRecentMessageById(context.chatId, quotedStanzaId)
+      if (!quotedMessage) return null
+      return downloadCommandMediaFromMessage(quotedMessage)
     },
     saveStickerTemplate: async (templateText) => {
       if (!sqlStore.enabled) return

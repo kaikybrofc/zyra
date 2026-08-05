@@ -11,6 +11,28 @@ type GroupFeatureState = {
   antilink?: boolean
   antilinkAllowedDomains?: string[]
   antilinkAllowOwnGroupInvite?: boolean
+  welcome?: GroupWelcomeConfig
+  leave?: GroupLeaveConfig
+}
+
+export type GroupWelcomeMediaType = 'image' | 'video' | 'audio' | 'document'
+
+export type GroupWelcomeMedia = {
+  type: GroupWelcomeMediaType
+  path: string
+  mimeType?: string | null
+  fileName?: string | null
+}
+
+export type GroupWelcomeConfig = {
+  enabled?: boolean
+  text?: string
+  media?: GroupWelcomeMedia | null
+}
+
+export type GroupLeaveConfig = {
+  enabled?: boolean
+  text?: string
 }
 
 type GroupFeaturesData = Record<string, GroupFeatureState>
@@ -61,6 +83,34 @@ class GroupFeatureStore {
         ? { antilinkAllowedDomains: [...new Set(input.antilinkAllowedDomains.map((entry) => normalizeAntilinkDomain(entry)).filter((entry): entry is string => Boolean(entry)))] }
         : {}),
       ...(typeof input.antilinkAllowOwnGroupInvite === 'boolean' ? { antilinkAllowOwnGroupInvite: input.antilinkAllowOwnGroupInvite } : {}),
+      ...(input.welcome && typeof input.welcome === 'object'
+        ? {
+            welcome: {
+              ...(typeof input.welcome.enabled === 'boolean' ? { enabled: input.welcome.enabled } : {}),
+              ...(typeof input.welcome.text === 'string' ? { text: input.welcome.text } : {}),
+              ...(input.welcome.media && typeof input.welcome.media === 'object' && typeof input.welcome.media.path === 'string' && ['image', 'video', 'audio', 'document'].includes(input.welcome.media.type)
+                ? {
+                    media: {
+                      type: input.welcome.media.type,
+                      path: input.welcome.media.path,
+                      ...(typeof input.welcome.media.mimeType === 'string' ? { mimeType: input.welcome.media.mimeType } : {}),
+                      ...(typeof input.welcome.media.fileName === 'string' ? { fileName: input.welcome.media.fileName } : {}),
+                    },
+                  }
+                : input.welcome.media === null
+                  ? { media: null }
+                  : {}),
+            },
+          }
+        : {}),
+      ...(input.leave && typeof input.leave === 'object'
+        ? {
+            leave: {
+              ...(typeof input.leave.enabled === 'boolean' ? { enabled: input.leave.enabled } : {}),
+              ...(typeof input.leave.text === 'string' ? { text: input.leave.text } : {}),
+            },
+          }
+        : {}),
     }
   }
 
@@ -269,6 +319,46 @@ class GroupFeatureStore {
   async setAntilinkAllowOwnGroupInviteEnabled(groupJid: string, enabled: boolean): Promise<void> {
     const current = await this.#getState(groupJid)
     await this.#setState(groupJid, { ...current, antilinkAllowOwnGroupInvite: enabled })
+  }
+
+  async getWelcomeConfig(groupJid: string): Promise<GroupWelcomeConfig> {
+    const state = await this.#getState(groupJid)
+    return state.welcome ? { ...state.welcome, media: state.welcome.media ? { ...state.welcome.media } : (state.welcome.media ?? null) } : {}
+  }
+
+  async setWelcomeConfig(groupJid: string, welcome: GroupWelcomeConfig): Promise<void> {
+    const current = await this.#getState(groupJid)
+    await this.#setState(groupJid, { ...current, welcome })
+  }
+
+  async setWelcomeEnabled(groupJid: string, enabled: boolean): Promise<void> {
+    const current = await this.#getState(groupJid)
+    await this.#setState(groupJid, { ...current, welcome: { ...(current.welcome ?? {}), enabled } })
+  }
+
+  async setWelcomeText(groupJid: string, text: string): Promise<void> {
+    const current = await this.#getState(groupJid)
+    await this.#setState(groupJid, { ...current, welcome: { ...(current.welcome ?? {}), text } })
+  }
+
+  async setWelcomeMedia(groupJid: string, media: GroupWelcomeMedia | null): Promise<void> {
+    const current = await this.#getState(groupJid)
+    await this.#setState(groupJid, { ...current, welcome: { ...(current.welcome ?? {}), media } })
+  }
+
+  async getLeaveConfig(groupJid: string): Promise<GroupLeaveConfig> {
+    const state = await this.#getState(groupJid)
+    return state.leave ? { ...state.leave } : {}
+  }
+
+  async setLeaveEnabled(groupJid: string, enabled: boolean): Promise<void> {
+    const current = await this.#getState(groupJid)
+    await this.#setState(groupJid, { ...current, leave: { ...(current.leave ?? {}), enabled } })
+  }
+
+  async setLeaveText(groupJid: string, text: string): Promise<void> {
+    const current = await this.#getState(groupJid)
+    await this.#setState(groupJid, { ...current, leave: { ...(current.leave ?? {}), text } })
   }
 }
 

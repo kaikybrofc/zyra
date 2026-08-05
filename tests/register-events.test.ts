@@ -1,8 +1,14 @@
 import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const createSqlStoreMock = vi.fn()
-const handleIncomingMessagesMock = vi.fn()
+const { createSqlStoreMock, handleIncomingMessagesMock, mockGroupFeatureStore } = vi.hoisted(() => ({
+  createSqlStoreMock: vi.fn(),
+  handleIncomingMessagesMock: vi.fn(),
+  mockGroupFeatureStore: {
+    getWelcomeConfig: vi.fn(),
+    getLeaveConfig: vi.fn(),
+  },
+}))
 
 vi.mock('../src/config/index.js', () => ({
   config: {
@@ -17,6 +23,10 @@ vi.mock('../src/router/index.js', () => ({
 
 vi.mock('../src/store/sql-store.js', () => ({
   createSqlStore: (...args: unknown[]) => createSqlStoreMock(...args),
+}))
+
+vi.mock('../src/store/group-feature-store.js', () => ({
+  groupFeatureStore: mockGroupFeatureStore,
 }))
 
 const createLogger = () => ({
@@ -34,12 +44,15 @@ const createSqlStoreStub = () => ({
   recordNewsletterParticipant: vi.fn(),
   recordNewsletterEvent: vi.fn(),
   recordMessageFailure: vi.fn(),
+  recordGroupEvent: vi.fn(),
 })
 
 describe('registerEvents newsletter persistence', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     handleIncomingMessagesMock.mockResolvedValue(undefined)
+    mockGroupFeatureStore.getWelcomeConfig.mockResolvedValue({})
+    mockGroupFeatureStore.getLeaveConfig.mockResolvedValue({})
   })
 
   it('preenche newsletters e eventos quando chega mensagem em chat @newsletter', async () => {
@@ -204,6 +217,8 @@ describe('registerEvents newsletter persistence', () => {
 describe('registerEvents messages.upsert', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockGroupFeatureStore.getWelcomeConfig.mockResolvedValue({})
+    mockGroupFeatureStore.getLeaveConfig.mockResolvedValue({})
   })
 
   it('chama o router e grava evento apenas apos o processamento concluir', async () => {
@@ -344,6 +359,74 @@ describe('registerEvents messages.upsert', () => {
 
     expect(handleIncomingMessagesMock).not.toHaveBeenCalled()
     expect(sqlStore.recordEvent).not.toHaveBeenCalled()
+  })
+
+  it('envia welcome quando participante entra no grupo', async () => {
+    const sqlStore = createSqlStoreStub()
+    createSqlStoreMock.mockReturnValue(sqlStore)
+    mockGroupFeatureStore.getWelcomeConfig.mockResolvedValue({
+      enabled: true,
+      text: 'Bem-vindo {user} ao {group}',
+    })
+
+    const { registerEvents } = await import('../src/events/register.ts')
+    const sock = {
+      ev: new EventEmitter(),
+      user: { id: 'bot@s.whatsapp.net' },
+      sendMessage: vi.fn().mockResolvedValue(undefined),
+      groupMetadata: vi.fn().mockResolvedValue({ subject: 'Grupo Teste' }),
+    }
+    const logger = createLogger()
+
+    registerEvents({ sock: sock as never, logger: logger as never, reconnect: vi.fn(), connectionId: 'conn' })
+
+    sock.ev.emit('group-participants.update', {
+      id: 'grupo@g.us',
+      action: 'add',
+      participants: ['5511999999999@s.whatsapp.net'],
+      author: 'admin@s.whatsapp.net',
+    })
+
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(sock.sendMessage).toHaveBeenCalledWith('grupo@g.us', {
+      text: 'Bem-vindo @5511999999999 ao Grupo Teste',
+      mentions: ['5511999999999@s.whatsapp.net'],
+    })
+  })
+
+  it('envia mensagem de saida quando participante sai do grupo', async () => {
+    const sqlStore = createSqlStoreStub()
+    createSqlStoreMock.mockReturnValue(sqlStore)
+    mockGroupFeatureStore.getLeaveConfig.mockResolvedValue({
+      enabled: true,
+      text: 'Tchau {user} do {group}',
+    })
+
+    const { registerEvents } = await import('../src/events/register.ts')
+    const sock = {
+      ev: new EventEmitter(),
+      user: { id: 'bot@s.whatsapp.net' },
+      sendMessage: vi.fn().mockResolvedValue(undefined),
+      groupMetadata: vi.fn().mockResolvedValue({ subject: 'Grupo Teste' }),
+    }
+    const logger = createLogger()
+
+    registerEvents({ sock: sock as never, logger: logger as never, reconnect: vi.fn(), connectionId: 'conn' })
+
+    sock.ev.emit('group-participants.update', {
+      id: 'grupo@g.us',
+      action: 'remove',
+      participants: ['5511999999999@s.whatsapp.net'],
+      author: 'admin@s.whatsapp.net',
+    })
+
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(sock.sendMessage).toHaveBeenCalledWith('grupo@g.us', {
+      text: 'Tchau @5511999999999 do Grupo Teste',
+      mentions: ['5511999999999@s.whatsapp.net'],
+    })
   })
 })
 

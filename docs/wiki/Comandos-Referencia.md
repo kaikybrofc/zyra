@@ -126,6 +126,27 @@ Observações:
 - `allow` gerencia whitelist de domínios permitidos
 - o enforcement automático do antilink é descrito em [Comandos](Comandos)
 
+### `!welcome`
+
+Configura boas-vindas automáticas para novos participantes do grupo.
+
+Exemplos:
+
+```text
+!welcome
+!welcome on
+!welcome off
+!welcome text Bem-vindo(a), {user} ao {group}!
+!welcome media
+!welcome media remove
+```
+
+Observações:
+
+- apenas admins podem configurar
+- `media` deve ser usado respondendo uma mídia ou como legenda de imagem, vídeo, áudio ou documento
+- placeholders disponíveis: `{user}`, `{jid}` e `{group}`
+
 ### `!add`
 
 Adiciona participante(s) ao grupo.

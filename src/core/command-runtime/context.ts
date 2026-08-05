@@ -7,6 +7,13 @@ type MessageContentByKey<K extends string> = Extract<AnyMessageContent, Record<K
 /** Shape de conteúdo textual aceito pelo Baileys. */
 type TextContent = MessageContentByKey<'text'>
 
+export type CommandMediaSource = {
+  buffer: Buffer
+  type: 'image' | 'video' | 'audio' | 'document'
+  mimeType?: string | null
+  fileName?: string | null
+}
+
 export type CommandSendOptions = MiscMessageGenerationOptions & {
   /**
    * Quando true (padrão), envia citando a mensagem original do comando.
@@ -47,6 +54,8 @@ type CommandContextInit = {
   react: (emoji: string) => Promise<void>
   /** Resolve mídia (da mensagem atual ou citada) para geração de sticker. */
   resolveStickerSourceMedia: () => Promise<StickerSourceMedia | null>
+  /** Resolve mídia genérica (da mensagem atual ou citada) para comandos de configuração. */
+  resolveMediaSource: () => Promise<CommandMediaSource | null>
   /** Persiste o template de pack/autor escolhido pelo usuário para o comando de sticker. */
   saveStickerTemplate: (templateText: string) => Promise<void>
   /** Recupera o último template de pack/autor salvo pelo usuário para o comando de sticker. */
@@ -90,6 +99,7 @@ export class CommandContext {
   readonly #replyAction: CommandContextInit['reply']
   readonly #reactAction: CommandContextInit['react']
   readonly #resolveStickerSourceMediaAction: CommandContextInit['resolveStickerSourceMedia']
+  readonly #resolveMediaSourceAction: CommandContextInit['resolveMediaSource']
   readonly #saveStickerTemplateAction: CommandContextInit['saveStickerTemplate']
   readonly #loadStickerTemplateAction: CommandContextInit['loadStickerTemplate']
   readonly #recordGeneratedStickerAction: CommandContextInit['recordGeneratedSticker']
@@ -97,7 +107,7 @@ export class CommandContext {
   /**
    * @param options Dados iniciais do contexto vindos do processador.
    */
-  constructor({ chatId, sender, text, args, isGroup, commandName, messageId, pushName, mentionedJids = [], quotedSender = null, send, reply, react, resolveStickerSourceMedia, saveStickerTemplate, loadStickerTemplate, recordGeneratedSticker, admin }: CommandContextInit) {
+  constructor({ chatId, sender, text, args, isGroup, commandName, messageId, pushName, mentionedJids = [], quotedSender = null, send, reply, react, resolveStickerSourceMedia, resolveMediaSource, saveStickerTemplate, loadStickerTemplate, recordGeneratedSticker, admin }: CommandContextInit) {
     this.chatId = chatId
     this.sender = sender
     this.text = text
@@ -113,6 +123,7 @@ export class CommandContext {
     this.#replyAction = reply
     this.#reactAction = react
     this.#resolveStickerSourceMediaAction = resolveStickerSourceMedia
+    this.#resolveMediaSourceAction = resolveMediaSource
     this.#saveStickerTemplateAction = saveStickerTemplate
     this.#loadStickerTemplateAction = loadStickerTemplate
     this.#recordGeneratedStickerAction = recordGeneratedSticker
@@ -146,6 +157,13 @@ export class CommandContext {
    */
   async getStickerSourceMedia(): Promise<StickerSourceMedia | null> {
     return this.#resolveStickerSourceMediaAction()
+  }
+
+  /**
+   * Resolve mídia genérica da mensagem atual ou citada.
+   */
+  async getMediaSource(): Promise<CommandMediaSource | null> {
+    return this.#resolveMediaSourceAction()
   }
 
   /**

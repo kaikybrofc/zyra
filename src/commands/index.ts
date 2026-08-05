@@ -7,6 +7,7 @@ import { playCommand } from './play.js'
 import { playVideoCommand } from './playvid.js'
 import { stickerAliasCommand, stickerCommand, stickerSecondAliasCommand } from './sticker.js'
 import { toGifCommand, toImageCommand } from './sticker-convert.js'
+import { welcomeCommand } from './welcome.js'
 
 /**
  * Mapa de todos os comandos disponíveis no sistema.
@@ -17,6 +18,7 @@ const menuCommand = createMenuCommand(() => commandRegistry)
 
 Object.assign(commandRegistry, {
   [antilinkCommand.name]: antilinkCommand,
+  [welcomeCommand.name]: welcomeCommand,
   [menuCommand.name]: menuCommand,
   [pingCommand.name]: pingCommand,
   [playCommand.name]: playCommand,

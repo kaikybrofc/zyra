@@ -1,10 +1,13 @@
 import { DisconnectReason, jidDecode, type BaileysEventMap, type GroupMetadata, type WAMessage, type WASocket } from 'baileys'
 import { Boom } from '@hapi/boom'
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 import type { AppLogger } from '../observability/logger.js'
 import { config } from '../config/index.js'
 import { renderQrInTerminal } from './qr-terminal.js'
 import { handleIncomingMessages } from '../router/index.js'
 import { createSqlStore } from '../store/sql-store.js'
+import { groupFeatureStore, type GroupLeaveConfig, type GroupWelcomeConfig } from '../store/group-feature-store.js'
 import { getMessageText, getNormalizedMessage } from '../utils/message.js'
 import { dispatchWebhookEvent, WEBHOOK_SUPPORTED_EVENTS } from '../webhook/dispatcher.js'
 import { enqueueConnectionOutboxEvent } from '../core/webhooks/outbox-dispatcher.js'
@@ -208,6 +211,81 @@ export function registerEvents({ sock, logger, reconnect, connectionId, onQrCode
    * Normaliza JID de grupo, retornando `null` para chats que não são `@g.us`.
    */
   const toGroupJid = (jid?: string | null) => (jid && jid.endsWith('@g.us') ? jid : null)
+
+  const getParticipantJid = (participant: string | { id?: string | null }): string | null => {
+    if (typeof participant === 'string') return participant
+    return participant.id ?? null
+  }
+
+  const renderWelcomeText = (template: string | null | undefined, params: { participantJid: string; groupName: string | null }): string => {
+    const user = params.participantJid.split('@')[0] ?? params.participantJid
+    const display = user ? `@${user}` : params.participantJid
+    const text = template?.trim() || 'Bem-vindo(a), {user}!'
+    return text.replaceAll('{user}', display).replaceAll('{jid}', params.participantJid).replaceAll('{group}', params.groupName ?? 'grupo')
+  }
+
+  const renderLeaveText = (template: string | null | undefined, params: { participantJid: string; groupName: string | null }): string => {
+    const user = params.participantJid.split('@')[0] ?? params.participantJid
+    const display = user ? `@${user}` : params.participantJid
+    const text = template?.trim() || '{user} saiu do grupo.'
+    return text.replaceAll('{user}', display).replaceAll('{jid}', params.participantJid).replaceAll('{group}', params.groupName ?? 'grupo')
+  }
+
+  const createWelcomeContent = async (welcome: GroupWelcomeConfig, text: string, participantJid: string): Promise<Parameters<WASocket['sendMessage']>[1]> => {
+    const mentions = [participantJid]
+    if (!welcome.media) return { text, mentions }
+    const absolutePath = path.isAbsolute(welcome.media.path) ? welcome.media.path : path.resolve(process.cwd(), welcome.media.path)
+    const buffer = await readFile(absolutePath)
+    if (welcome.media.type === 'image') {
+      return { image: buffer, caption: text, mimetype: welcome.media.mimeType ?? undefined, mentions }
+    }
+    if (welcome.media.type === 'video') {
+      return { video: buffer, caption: text, mimetype: welcome.media.mimeType ?? undefined, mentions }
+    }
+    if (welcome.media.type === 'audio') {
+      return { audio: buffer, mimetype: welcome.media.mimeType ?? 'audio/mpeg' }
+    }
+    const fileName = welcome.media.fileName?.trim() || 'welcome'
+    return { document: buffer, fileName, caption: text, mimetype: welcome.media.mimeType ?? 'application/octet-stream', mentions }
+  }
+
+  const sendWelcomeMessage = async (groupJid: string, participantJid: string) => {
+    const welcome = await groupFeatureStore.getWelcomeConfig(groupJid)
+    if (welcome.enabled !== true) return
+    let groupName: string | null = null
+    try {
+      groupName = (await sock.groupMetadata(groupJid)).subject ?? null
+    } catch (error) {
+      logger.debug('falha ao buscar nome do grupo para welcome', { groupJid, err: error })
+    }
+    const text = renderWelcomeText(welcome.text, { participantJid, groupName })
+    try {
+      const content = await createWelcomeContent(welcome, text, participantJid)
+      await sock.sendMessage(groupJid, content)
+      if (welcome.media?.type === 'audio' && text) {
+        await sock.sendMessage(groupJid, { text, mentions: [participantJid] })
+      }
+    } catch (error) {
+      logger.warn('falha ao enviar welcome', { groupJid, participantJid, err: error })
+    }
+  }
+
+  const sendLeaveMessage = async (groupJid: string, participantJid: string) => {
+    const leave: GroupLeaveConfig = await groupFeatureStore.getLeaveConfig(groupJid)
+    if (leave.enabled !== true) return
+    let groupName: string | null = null
+    try {
+      groupName = (await sock.groupMetadata(groupJid)).subject ?? null
+    } catch (error) {
+      logger.debug('falha ao buscar nome do grupo para saida', { groupJid, err: error })
+    }
+    const text = renderLeaveText(leave.text, { participantJid, groupName })
+    try {
+      await sock.sendMessage(groupJid, { text, mentions: [participantJid] })
+    } catch (error) {
+      logger.warn('falha ao enviar saida', { groupJid, participantJid, err: error })
+    }
+  }
 
   /**
    * Persiste mapeamento de device vinculado ao usuário quando o JID contém sufixo de device.
@@ -882,15 +960,23 @@ export function registerEvents({ sock, logger, reconnect, connectionId, onQrCode
       })
       const actorJid = author ?? resolveSelfJid()
       for (const participant of participants) {
-        recordEvent('group-participants.update', { id, action, participant: participant.id }, { groupJid: id, actorJid, targetJid: participant.id })
+        const participantJid = getParticipantJid(participant)
+        if (!participantJid) continue
+        recordEvent('group-participants.update', { id, action, participant: participantJid }, { groupJid: id, actorJid, targetJid: participantJid })
         if (sqlStore.enabled) {
           void sqlStore.recordGroupEvent({
             groupJid: id,
             eventType: action,
             actorJid,
-            targetJid: participant.id,
+            targetJid: participantJid,
             data: participant,
           })
+        }
+        if (action === 'add') {
+          void sendWelcomeMessage(id, participantJid)
+        }
+        if (action === 'remove') {
+          void sendLeaveMessage(id, participantJid)
         }
       }
     },
