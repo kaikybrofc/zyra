@@ -6,4 +6,4 @@ data/
 .codex
 .vscode/
 .baileys-last-known-good-version.json
-.zyra-data/group-features.json
+.zyra-data/
