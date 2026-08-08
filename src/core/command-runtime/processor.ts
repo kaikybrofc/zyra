@@ -69,6 +69,8 @@ type CreateCommandProcessorOptions = {
 /** Aplica cor ANSI somente quando a saída suporta TTY. */
 const colorize = (value: string, color: string): string => (process.stdout.isTTY ? `${color}${value}${ANSI_RESET}` : value)
 
+const formatIncomingField = (label: string, value: string, color = ANSI_GRAY): string => `${colorize(`${label}:`, `${ANSI_BOLD}${ANSI_GRAY}`)} ${colorize(value, color)}`
+
 /**
  * Converte timestamp bruto do Baileys para número em segundos.
  * @param raw Valor bruto do timestamp.
@@ -289,9 +291,31 @@ const logIncomingMessage = async (context: IncomingCommandEnvelope, logger: AppL
   const compactText = text ? text.replace(/\s+/g, ' ').trim() : null
   const hasMedia = messageType ? MEDIA_TYPES.has(messageType) : false
   const hasLink = Boolean(context.text && hasDetectableLink(context.text))
-  const logParts = [`chatId=${context.chatId}`, `messageId=${messageKey.id ?? ''}`, `fromMe=${messageKey.fromMe ?? ''}`, `sender=${context.sender}`, `pushName=${context.message.pushName ?? ''}`, `isGroup=${context.isGroup}`, `messageType=${messageType ? colorize(messageType, ANSI_MAGENTA) : ''}`, `hasMedia=${hasMedia}`, `text=${compactText ? JSON.stringify(compactText) : ''}`, `hasLink=${colorize(String(hasLink), hasLink ? ANSI_RED : ANSI_GRAY)}`, `isCommand=${colorize(String(Boolean(context.commandName)), context.commandName ? ANSI_GREEN : ANSI_GRAY)}`, `commandName=${context.commandName ? colorize(context.commandName, ANSI_CYAN) : ''}`, `timestamp=${timestampIso ?? ''}`]
   const title = colorize('mensagem recebida', `${ANSI_BOLD}${hasLink ? ANSI_RED : ANSI_CYAN}`)
-  logger.info(`\n\n${title} | ${logParts.join(' ')}`)
+  const header = `${title}${colorize(' ─────────────────────────────────────', ANSI_GRAY)}`
+  const details = [
+    formatIncomingField('chat', context.chatId, ANSI_CYAN),
+    formatIncomingField('messageId', messageKey.id ?? ''),
+    formatIncomingField('sender', context.sender),
+    formatIncomingField('pushName', context.message.pushName ?? ''),
+    formatIncomingField('fromMe', String(messageKey.fromMe ?? '')),
+    formatIncomingField('isGroup', String(context.isGroup)),
+    formatIncomingField('messageType', messageType ? colorize(messageType, ANSI_MAGENTA) : ''),
+    formatIncomingField('hasMedia', String(hasMedia), hasMedia ? ANSI_GREEN : ANSI_GRAY),
+    formatIncomingField('hasLink', String(hasLink), hasLink ? ANSI_RED : ANSI_GRAY),
+    formatIncomingField('isCommand', String(Boolean(context.commandName)), context.commandName ? ANSI_GREEN : ANSI_GRAY),
+  ]
+  if (context.commandName) {
+    details.push(formatIncomingField('commandName', context.commandName, ANSI_CYAN))
+  }
+  if (timestampIso) {
+    details.push(formatIncomingField('timestamp', timestampIso))
+  }
+  if (compactText) {
+    details.push(formatIncomingField('text', JSON.stringify(compactText), ANSI_GRAY))
+  }
+
+  logger.info(`\n${header}\n${details.join('\n')}\n`)
 }
 
 /**
