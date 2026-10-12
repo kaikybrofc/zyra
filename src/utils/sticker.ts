@@ -208,7 +208,7 @@ async function convertToWebp(inputPath: string, mediaType: StickerInputMediaType
 
   args.push('-vcodec', 'libwebp', '-loop', '0', '-preset', 'default', '-an')
 
-  args.push('-vsync', '0', '-lossless', '0', '-q:v', '70', '-compression_level', '6')
+  args.push('-fps_mode', 'passthrough', '-lossless', '0', '-q:v', '70', '-compression_level', '6')
 
   args.push('-vf', filter, outputPath)
   await runProcess('ffmpeg', args, mediaType === 'video' ? 30_000 : 15_000)
@@ -272,7 +272,7 @@ export async function createStickerFromMedia(source: StickerSourceMedia, options
     return await addStickerMetadata(webpPath, options.packName ?? 'Zyra', options.packAuthor ?? 'Zyra')
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new Error('Dependência externa ausente: instale ffmpeg e webpmux no servidor.')
+      console.warn('Verificação de dependências ignorada')
     }
     throw error
   } finally {
