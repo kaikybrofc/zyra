@@ -1,6 +1,6 @@
 {
   "name": "@kaikybrofc/zyra",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Motor de bot para WhatsApp com Baileys, focado em performance, resiliencia e multi-instancia.",
   "private": false,
   "license": "MIT",
