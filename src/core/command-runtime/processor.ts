@@ -6,7 +6,7 @@ import { commands } from '../../commands/index.js'
 import type { AppLogger } from '../../observability/logger.js'
 import type { SqlStore } from '../../store/sql-store.js'
 import { config } from '../../config/index.js'
-import { getMessageText, getNormalizedMessage } from '../../utils/message.js'
+import { getMessageText, getNormalizedMessage, isViewOnceMessage } from '../../utils/message.js'
 import { resolveStickerSourceMedia as resolveStickerSourceMediaFromMessage } from '../../utils/sticker.js'
 import { parseAntilinkDomain } from '../../utils/antilink-domain.js'
 import { createCommandAdminActions } from './admin.js'
@@ -424,6 +424,7 @@ const createRuntimeContext = (context: IncomingCommandEnvelope, logger: AppLogge
     text: context.text,
     args: context.commandArgs,
     isGroup: context.isGroup,
+    isViewOnce: isViewOnceMessage(context.message),
     commandName: context.commandName ?? '',
     messageId: context.message.key.id ?? null,
     pushName: context.message.pushName ?? null,

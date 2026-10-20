@@ -36,6 +36,8 @@ type CommandContextInit = {
   args: string[]
   /** Indica se a mensagem foi enviada em um grupo. */
   isGroup: boolean
+  /** Indica se a mensagem original recebida era de visualização única (ViewOnce). */
+  isViewOnce?: boolean
   /** Nome do comando invocado. */
   commandName: string
   /** ID único da mensagem original. */
@@ -82,6 +84,8 @@ export class CommandContext {
   public readonly args: string[]
   /** Indica se o chat atual é um grupo. */
   public readonly isGroup: boolean
+  /** Indica se a mensagem original que disparou o comando é de visualização única (ViewOnce). */
+  public readonly isViewOnce: boolean
   /** Nome do comando que disparou esta execução. */
   public readonly commandName: string
   /** ID único da mensagem que originou o comando. */
@@ -107,12 +111,13 @@ export class CommandContext {
   /**
    * @param options Dados iniciais do contexto vindos do processador.
    */
-  constructor({ chatId, sender, text, args, isGroup, commandName, messageId, pushName, mentionedJids = [], quotedSender = null, send, reply, react, resolveStickerSourceMedia, resolveMediaSource, saveStickerTemplate, loadStickerTemplate, recordGeneratedSticker, admin }: CommandContextInit) {
+  constructor({ chatId, sender, text, args, isGroup, isViewOnce = false, commandName, messageId, pushName, mentionedJids = [], quotedSender = null, send, reply, react, resolveStickerSourceMedia, resolveMediaSource, saveStickerTemplate, loadStickerTemplate, recordGeneratedSticker, admin }: CommandContextInit) {
     this.chatId = chatId
     this.sender = sender
     this.text = text
     this.args = args
     this.isGroup = isGroup
+    this.isViewOnce = Boolean(isViewOnce)
     this.commandName = commandName
     this.messageId = messageId
     this.pushName = pushName

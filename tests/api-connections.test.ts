@@ -21,6 +21,7 @@ const resumeMock = vi.fn(async () => undefined)
 const restartMock = vi.fn(async () => undefined)
 const deleteConnectionMock = vi.fn(async () => undefined)
 const hardDeleteConnectionMock = vi.fn(async () => undefined)
+const getActiveSocketMock = vi.fn()
 const startPairingMock = vi.fn(async () => ({
   connectionId: 'test-id',
   status: 'pending',
@@ -93,6 +94,7 @@ vi.mock('../src/core/connection/manager.js', () => ({
   restart: (...args: unknown[]) => restartMock(...args),
   deleteConnection: (...args: unknown[]) => deleteConnectionMock(...args),
   hardDeleteConnection: (...args: unknown[]) => hardDeleteConnectionMock(...args),
+  getActiveSocket: (...args: unknown[]) => getActiveSocketMock(...args),
 }))
 vi.mock('../src/core/connection/pairing-service.js', () => ({
   startPairing: (...args: unknown[]) => startPairingMock(...args),
@@ -579,6 +581,59 @@ describe('handleConnectionsRoutes', () => {
     expect(JSON.parse(res.body)).toMatchObject({
       error: expect.stringContaining('WA_WEBHOOK_SHARED_SECRET'),
     })
+  })
+
+  it('GET /connections/:id/profile-picture retorna 400 sem jid', async () => {
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('GET', '/connections/test-id/profile-picture') as never, res as never, '/connections/test-id/profile-picture', logger as never)
+
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toMatchObject({ error: expect.stringContaining('jid') })
+  })
+
+  it('GET /connections/:id/profile-picture retorna 409 quando socket está offline', async () => {
+    getActiveSocketMock.mockReturnValue(null)
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('GET', '/connections/test-id/profile-picture?jid=551199999999@s.whatsapp.net') as never, res as never, '/connections/test-id/profile-picture', logger as never)
+
+    expect(res.statusCode).toBe(409)
+    expect(JSON.parse(res.body)).toMatchObject({ error: expect.stringContaining('sem socket ativo') })
+  })
+
+  it('GET /connections/:id/profile-picture retorna 200 com URL quando encontrada', async () => {
+    const mockSock = {
+      profilePictureUrl: vi.fn(async () => 'https://pps.whatsapp.net/v/photo.jpg'),
+    }
+    getActiveSocketMock.mockReturnValue(mockSock)
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('GET', '/connections/test-id/profile-picture?jid=551199999999@s.whatsapp.net&type=image') as never, res as never, '/connections/test-id/profile-picture', logger as never)
+
+    expect(res.statusCode).toBe(200)
+    expect(mockSock.profilePictureUrl).toHaveBeenCalledWith('551199999999@s.whatsapp.net', 'image')
+    expect(JSON.parse(res.body)).toMatchObject({
+      connectionId: 'test-id',
+      jid: '551199999999@s.whatsapp.net',
+      type: 'image',
+      url: 'https://pps.whatsapp.net/v/photo.jpg',
+    })
+  })
+
+  it('GET /connections/:id/profile-picture retorna 404 quando Baileys falha por privacidade', async () => {
+    const mockSock = {
+      profilePictureUrl: vi.fn(async () => {
+        throw new Error('item-not-found')
+      }),
+    }
+    getActiveSocketMock.mockReturnValue(mockSock)
+    const { handleConnectionsRoutes } = await import('../src/api/routes/connections.ts')
+    const res = createResponse()
+    await handleConnectionsRoutes(makeReq('GET', '/connections/test-id/profile-picture?jid=551199999999@s.whatsapp.net') as never, res as never, '/connections/test-id/profile-picture', logger as never)
+
+    expect(res.statusCode).toBe(404)
+    expect(JSON.parse(res.body)).toMatchObject({ error: expect.stringContaining('não encontrada') })
   })
 
   it('retorna false para rota não reconhecida', async () => {

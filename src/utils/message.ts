@@ -113,3 +113,12 @@ export function getMessageText(message: proto.IWebMessageInfo): string | null {
     }
   }
 }
+
+/**
+ * Detecta se a mensagem original contém envelope de visualização única (ViewOnce).
+ */
+export function isViewOnceMessage(message: proto.IWebMessageInfo | proto.IMessage | null | undefined): boolean {
+  if (!message) return false
+  const raw = 'message' in message && message.message ? message.message : (message as proto.IMessage)
+  return Boolean(raw?.viewOnceMessage || raw?.viewOnceMessageV2 || raw?.viewOnceMessageV2Extension)
+}

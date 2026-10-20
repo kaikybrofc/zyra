@@ -46,6 +46,19 @@ function readConnectionControlMode(value: string | undefined, fallback: 'legacy'
 
 type AntiBanPreset = 'conservative' | 'moderate' | 'aggressive' | 'high-volume'
 
+export type BrowserPlatform = 'ubuntu' | 'android' | 'windows' | 'macOS' | 'baileys'
+
+function readBrowserPlatform(value: string | undefined, fallback: BrowserPlatform): BrowserPlatform {
+  if (!value) return fallback
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'android') return 'android'
+  if (normalized === 'windows') return 'windows'
+  if (normalized === 'macos' || normalized === 'mac') return 'macOS'
+  if (normalized === 'baileys') return 'baileys'
+  if (normalized === 'ubuntu' || normalized === 'linux') return 'ubuntu'
+  return fallback
+}
+
 function readAntiBanPreset(value: string | undefined): AntiBanPreset | undefined {
   if (!value) return undefined
   const normalized = value.trim().toLowerCase()
@@ -503,5 +516,13 @@ export const config = {
   /** Backoff máximo em ms para retentativas do outbox (WA_WEBHOOK_OUTBOX_RETRY_MAX_MS). */
   get webhookOutboxRetryMaxMs() {
     return readNumber(process.env.WA_WEBHOOK_OUTBOX_RETRY_MAX_MS, 300_000)
+  },
+  /** Plataforma de identificação do browser (WA_BROWSER_PLATFORM: ubuntu, android, windows, macOS, baileys). */
+  get browserPlatform(): BrowserPlatform {
+    return readBrowserPlatform(process.env.WA_BROWSER_PLATFORM, 'ubuntu')
+  },
+  /** Nome customizado para exibição do browser/dispositivo (WA_BROWSER_NAME). */
+  get browserName(): string {
+    return process.env.WA_BROWSER_NAME ?? 'Zyra System'
   },
 }

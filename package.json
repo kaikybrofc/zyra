@@ -64,7 +64,7 @@
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
-    "baileys": "npm:@whiskeysockets/baileys@7.0.0-rc13",
+    "baileys": "npm:@whiskeysockets/baileys@7.0.0-rc14",
     "baileys-antiban": "^4.6.0",
     "dotenv": "^16.4.5",
     "fflate": "^0.8.2",
@@ -109,7 +109,7 @@
     "link-preview-js": "5.0.0"
   },
   "allowScripts": {
-    "@whiskeysockets/baileys@7.0.0-rc13": true,
+    "@whiskeysockets/baileys@7.0.0-rc14": true,
     "esbuild@0.28.1": true,
     "protobufjs@7.6.5": true
   }

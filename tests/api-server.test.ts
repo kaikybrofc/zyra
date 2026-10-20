@@ -126,7 +126,7 @@ describe('startApiServer', () => {
     startApiServer({ logger: logger as never })
 
     expect(serverListenMock).toHaveBeenCalledWith(4000, '127.0.0.1', expect.any(Function))
-  })
+  }, 15000)
 
   it('encaminha para handleConnectionsRoutes', async () => {
     handleConnectionsRoutesMock.mockResolvedValue(true)

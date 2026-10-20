@@ -217,6 +217,25 @@ const registerGracefulShutdown = () => {
  * @param logger Logger da aplicação para observabilidade do ciclo de vida.
  * @returns Socket configurado e pronto para registro de eventos.
  */
+/**
+ * Resolve a tupla de identificação de browser do Baileys de acordo com as configurações da aplicação.
+ */
+export function resolveBrowserConfig(platform = config.browserPlatform, name = config.browserName): [string, string, string] {
+  switch (platform) {
+    case 'android':
+      return Browsers.android(name)
+    case 'windows':
+      return Browsers.windows(name)
+    case 'macOS':
+      return Browsers.macOS(name)
+    case 'baileys':
+      return Browsers.baileys(name)
+    case 'ubuntu':
+    default:
+      return Browsers.ubuntu(name)
+  }
+}
+
 export async function createSocket(connectionId: string, logger: AppLogger) {
   const store = createBaileysStore(connectionId)
   const strategy = config.mysqlUrl ? 'mysql' : config.redisUrl ? 'redis' : 'disco'
@@ -234,7 +253,7 @@ export async function createSocket(connectionId: string, logger: AppLogger) {
   const rawSock = makeWASocket({
     auth: state,
     version,
-    browser: Browsers.ubuntu('Zyra System'),
+    browser: resolveBrowserConfig(),
     logger: createBaileysLogger(logger, { connectionId, component: 'baileys' }),
     emitOwnEvents: true,
     fireInitQueries: false,

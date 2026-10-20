@@ -2,7 +2,7 @@ import { createHmac, randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { config } from '../../config/index.js'
 import type { AppLogger } from '../../observability/logger.js'
-import { type ConnectionInfo, createConnection, listConnections, getConnection, setConnectionLabel, connect, disconnect, restart, deleteConnection, pause, resume, hardDeleteConnection } from '../../core/connection/manager.js'
+import { type ConnectionInfo, createConnection, listConnections, getConnection, getActiveSocket, setConnectionLabel, connect, disconnect, restart, deleteConnection, pause, resume, hardDeleteConnection } from '../../core/connection/manager.js'
 import { startPairing, getPairingState, cancelPairing } from '../../core/connection/pairing-service.js'
 import { getManagedConnection, listManagedConnections, upsertManagedConnection, listConnectionAdminEvents, listWebhookCommands, getWebhookCommand, type ManagedConnectionRecord, type ManagedConnectionPairingState, type ManagedConnectionStatus } from '../../store/connection-admin-store.js'
 import { validateConnectionId } from '../../core/connection/connection-id.js'
@@ -767,6 +767,38 @@ export async function handleConnectionsRoutes(req: IncomingMessage, res: ServerR
       return true
     }
     sendJson(res, 200, { connectionId: info.connectionId, qrCode: info.qrCode, qrCodeAt: info.qrCodeAt })
+    return true
+  }
+
+  // GET /connections/:id/profile-picture?jid=...&type=preview|image
+  const profilePicMatch = matchRoute('/connections/:id/profile-picture', pathname)
+  if (method === 'GET' && profilePicMatch) {
+    const id = parseConnectionIdOrReply(res, profilePicMatch.params['id'])
+    if (!id) return true
+
+    const searchParams = parseUrl(req).searchParams
+    const jid = searchParams.get('jid')?.trim()
+    if (!jid) {
+      sendError(res, 400, 'parâmetro query "jid" é obrigatório')
+      return true
+    }
+
+    const typeParam = searchParams.get('type')?.trim().toLowerCase()
+    const type: 'preview' | 'image' = typeParam === 'image' ? 'image' : 'preview'
+
+    const sock = getActiveSocket(id)
+    if (!sock) {
+      sendError(res, 409, 'conexão sem socket ativo ou offline')
+      return true
+    }
+
+    try {
+      const url = await sock.profilePictureUrl(jid, type)
+      sendJson(res, 200, { connectionId: id, jid, type, url: url ?? null })
+    } catch (error) {
+      logger.warn('falha ao obter foto de perfil', { connectionId: id, jid, type, err: error })
+      sendError(res, 404, 'foto de perfil não encontrada ou restrita por privacidade')
+    }
     return true
   }
 

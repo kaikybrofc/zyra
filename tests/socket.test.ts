@@ -24,6 +24,8 @@ const mockConfig = {
   historySyncOnNewLogin: false,
   antibanEnabled: false,
   antibanStateSaveIntervalMs: 300000,
+  browserPlatform: 'ubuntu',
+  browserName: 'Zyra System',
 }
 
 vi.mock('baileys', async () => {
@@ -618,5 +620,14 @@ describe('socket', () => {
     expect(exitSpy).toHaveBeenCalledWith(1)
 
     exitSpy.mockRestore()
+  })
+
+  it('resolveBrowserConfig mapeia corretamente as plataformas configuradas', async () => {
+    const { resolveBrowserConfig } = await import('../src/core/connection/socket.ts')
+    expect(resolveBrowserConfig('android', 'TestAndroid')).toEqual(['TestAndroid', 'Android', ''])
+    expect(resolveBrowserConfig('ubuntu', 'TestUbuntu')).toEqual(['Ubuntu', 'TestUbuntu', expect.any(String)])
+    expect(resolveBrowserConfig('windows', 'TestWin')).toEqual(['Windows', 'TestWin', '10.0.22631'])
+    expect(resolveBrowserConfig('macOS', 'TestMac')).toEqual(['Mac OS', 'TestMac', '14.4.1'])
+    expect(resolveBrowserConfig('baileys', 'TestBaileys')).toEqual(['Baileys', 'TestBaileys', '6.5.0'])
   })
 })
